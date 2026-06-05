@@ -1,0 +1,7 @@
+ALTER TABLE tenants
+ADD COLUMN IF NOT EXISTS default_board_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE boards
+ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL DEFAULT FALSE;
+
+DROP INDEX IF EXISTS boards_one_default_per_tenant_idx;

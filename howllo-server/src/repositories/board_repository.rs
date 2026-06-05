@@ -1,0 +1,311 @@
+use sqlx::Row;
+use uuid::Uuid;
+
+use crate::db::DbPool;
+use crate::dto::{BoardDetailDto, BoardListItemDto};
+
+pub async fn list_public_boards(
+    pool: &DbPool,
+    tenant_slug: &str,
+) -> Result<Vec<BoardListItemDto>, sqlx::Error> {
+    sqlx::query_as!(
+        BoardListItemDto,
+        r#"
+        SELECT b.id, b.slug, b.name, b.description, b.board_type, b.icon_url
+        FROM boards b
+        JOIN tenants t ON b.tenant_id = t.id
+        WHERE t.slug = $1 AND b.is_private = false
+        ORDER BY b.created_at ASC
+        "#,
+        tenant_slug
+    )
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn ensure_default_board_for_tenant_slug(
+    pool: &DbPool,
+    tenant_slug: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO boards (tenant_id, slug, name, description, board_type, is_private, is_default)
+        SELECT
+            t.id,
+            defaults.slug,
+            defaults.name,
+            defaults.description,
+            defaults.board_type,
+            FALSE,
+            TRUE
+        FROM tenants t
+        CROSS JOIN (
+            VALUES
+                ('general', 'General', 'Catch-all board for ideas, bugs, feature requests, and general product discussion.', 'general'),
+                ('feature-requests', 'Feature Requests', 'Vote on improvements, new capabilities, and product ideas.', 'feedback'),
+                ('bug-reports', 'Bug Reports', 'Report broken flows, errors, regressions, and usability problems.', 'support')
+        ) AS defaults(slug, name, description, board_type)
+        WHERE t.slug = $1
+          AND t.default_board_enabled = TRUE
+        ON CONFLICT (tenant_id, slug) DO NOTHING
+        "#,
+    )
+    .bind(tenant_slug)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn get_public_board_by_slug(
+    pool: &DbPool,
+    tenant_slug: &str,
+    board_slug: &str,
+) -> Result<Option<BoardDetailDto>, sqlx::Error> {
+    sqlx::query_as!(
+        BoardDetailDto,
+        r#"
+        SELECT b.id, b.slug, b.name, b.description, b.board_type, b.is_private, b.icon_url
+        FROM boards b
+        JOIN tenants t ON b.tenant_id = t.id
+        WHERE t.slug = $1 AND b.slug = $2
+        "#,
+        tenant_slug,
+        board_slug
+    )
+    .fetch_optional(pool)
+    .await
+}
+
+pub async fn list_admin_boards(
+    pool: &DbPool,
+    tenant_id: Uuid,
+) -> Result<Vec<BoardDetailDto>, sqlx::Error> {
+    sqlx::query_as!(
+        BoardDetailDto,
+        r#"
+        SELECT id, slug, name, description, board_type, is_private, icon_url
+        FROM boards
+        WHERE tenant_id = $1
+        ORDER BY created_at ASC
+        "#,
+        tenant_id
+    )
+    .fetch_all(pool)
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn create_board(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: Uuid,
+    slug: &str,
+    name: &str,
+    description: Option<&str>,
+    board_type: &str,
+    is_private: bool,
+    icon_url: Option<&str>,
+) -> Result<BoardDetailDto, sqlx::Error> {
+    sqlx::query_as!(
+        BoardDetailDto,
+        r#"
+        INSERT INTO boards (tenant_id, slug, name, description, board_type, is_private, icon_url)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id, slug, name, description, board_type, is_private, icon_url
+        "#,
+        tenant_id,
+        slug,
+        name,
+        description,
+        board_type,
+        is_private,
+        icon_url
+    )
+    .fetch_one(&mut **tx)
+    .await
+}
+
+pub struct PreviousBoard {
+    pub tenant_id: Uuid,
+    pub slug: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub board_type: String,
+    pub is_private: bool,
+    pub is_default: bool,
+}
+
+pub async fn get_board_for_update(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    board_id: Uuid,
+) -> Result<Option<PreviousBoard>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT tenant_id, slug, name, description, board_type, is_private, is_default FROM boards WHERE id = $1",
+    )
+    .bind(board_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    Ok(row.map(|row| PreviousBoard {
+        tenant_id: row.get("tenant_id"),
+        slug: row.get("slug"),
+        name: row.get("name"),
+        description: row.get("description"),
+        board_type: row.get("board_type"),
+        is_private: row.get("is_private"),
+        is_default: row.get("is_default"),
+    }))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn update_board(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    board_id: Uuid,
+    name: &str,
+    description: Option<&str>,
+    board_type: &str,
+    is_private: bool,
+    icon_url: Option<&str>,
+) -> Result<BoardDetailDto, sqlx::Error> {
+    sqlx::query_as!(
+        BoardDetailDto,
+        r#"
+        UPDATE boards
+        SET name = $1,
+            description = $2,
+            board_type = $3,
+            is_private = $4,
+            icon_url = $5,
+            updated_at = NOW()
+        WHERE id = $6
+        RETURNING id, slug, name, description, board_type, is_private, icon_url
+        "#,
+        name,
+        description,
+        board_type,
+        is_private,
+        icon_url,
+        board_id
+    )
+    .fetch_one(&mut **tx)
+    .await
+}
+
+pub async fn delete_board(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    board_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM boards WHERE id = $1")
+        .bind(board_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+pub async fn disable_default_board_for_tenant(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE tenants SET default_board_enabled = FALSE, updated_at = NOW() WHERE id = $1",
+    )
+    .bind(tenant_id)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn get_board_tenant(pool: &DbPool, board_id: Uuid) -> Result<Option<Uuid>, sqlx::Error> {
+    let row = sqlx::query!("SELECT tenant_id FROM boards WHERE id = $1", board_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.map(|row| row.tenant_id))
+}
+
+pub async fn get_tenant_id_by_slug(pool: &DbPool, slug: &str) -> Result<Option<Uuid>, sqlx::Error> {
+    let row = sqlx::query!("SELECT id FROM tenants WHERE slug = $1", slug)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.map(|row| row.id))
+}
+
+pub async fn get_tenant_id_by_slug_required(
+    pool: &DbPool,
+    slug: &str,
+) -> Result<Uuid, sqlx::Error> {
+    let row = sqlx::query!("SELECT id FROM tenants WHERE slug = $1", slug)
+        .fetch_one(pool)
+        .await?;
+    Ok(row.id)
+}
+
+use std::collections::HashMap;
+
+pub struct BoardSummaryData {
+    pub slug: String,
+    pub name: String,
+    pub total_posts: i64,
+    pub posts_by_status: HashMap<String, i64>,
+    pub total_votes: i64,
+    pub total_comments: i64,
+}
+
+pub async fn get_board_summary(
+    pool: &DbPool,
+    board_id: Uuid,
+) -> Result<Option<BoardSummaryData>, sqlx::Error> {
+    let board_info = sqlx::query!("SELECT slug, name FROM boards WHERE id = $1", board_id)
+        .fetch_optional(pool)
+        .await?;
+
+    let board_info = match board_info {
+        Some(b) => b,
+        None => return Ok(None),
+    };
+
+    let total_posts = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM posts WHERE board_id = $1 AND is_hidden = false AND deleted_at IS NULL",
+    )
+    .bind(board_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0);
+
+    let status_rows = sqlx::query!(
+        "SELECT status, count(*)::bigint AS cnt FROM posts WHERE board_id = $1 AND is_hidden = false AND deleted_at IS NULL GROUP BY status",
+        board_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let posts_by_status: HashMap<String, i64> = status_rows
+        .into_iter()
+        .map(|row| (row.status, row.cnt.unwrap_or(0)))
+        .collect();
+
+    let total_votes = sqlx::query_scalar::<_, i64>(
+        "SELECT coalesce(sum(vote_count), 0) FROM posts WHERE board_id = $1",
+    )
+    .bind(board_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0);
+
+    let total_comments = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM comments c JOIN posts p ON c.post_id = p.id WHERE p.board_id = $1 AND c.is_hidden = false",
+    )
+    .bind(board_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0);
+
+    Ok(Some(BoardSummaryData {
+        slug: board_info.slug,
+        name: board_info.name,
+        total_posts,
+        posts_by_status,
+        total_votes,
+        total_comments,
+    }))
+}

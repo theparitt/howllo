@@ -1,0 +1,12 @@
+{
+  "name": "howllo-landing",
+  "version": "1.0.0",
+  "description": "Howllo Landing Page",
+  "scripts": {
+    "dev": "serve -l 5114 .",
+    "start": "serve -l 5114 ."
+  },
+  "dependencies": {
+    "serve": "^14.2.0"
+  }
+}

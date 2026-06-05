@@ -1,0 +1,524 @@
+use actix_web::{delete, get, patch, post, web, HttpRequest, HttpResponse, Responder};
+use serde::Deserialize;
+
+use crate::auth::AuthenticatedUser;
+use crate::db::DbPool;
+use crate::dto::{CreateBoardRequest, UpdateBoardRequest};
+use crate::errors::AppError;
+use crate::services::board_service;
+
+#[derive(Deserialize)]
+pub struct BoardListQuery {
+    pub tenant_slug: String,
+}
+
+#[derive(Deserialize)]
+pub struct BoardDetailQuery {
+    pub tenant_slug: String,
+}
+
+#[derive(Deserialize)]
+pub struct AdminBoardListQuery {
+    pub tenant_slug: String,
+}
+
+#[get("/api/boards")]
+pub async fn list_boards(
+    pool: web::Data<DbPool>,
+    query: web::Query<BoardListQuery>,
+) -> Result<impl Responder, AppError> {
+    let boards = board_service::list_boards(pool.get_ref(), &query.tenant_slug).await?;
+    Ok(HttpResponse::Ok().json(boards))
+}
+
+#[get("/api/boards/{board_slug}")]
+pub async fn get_board_detail(
+    req: HttpRequest,
+    pool: web::Data<DbPool>,
+    path: web::Path<String>,
+    query: web::Query<BoardDetailQuery>,
+) -> Result<impl Responder, AppError> {
+    let board_slug = path.into_inner();
+    let board =
+        board_service::get_board_detail(&req, pool.get_ref(), &query.tenant_slug, &board_slug)
+            .await?;
+    Ok(HttpResponse::Ok().json(board))
+}
+
+#[get("/api/admin/boards")]
+pub async fn list_admin_boards(
+    pool: web::Data<DbPool>,
+    query: web::Query<AdminBoardListQuery>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    let boards =
+        board_service::list_admin_boards(pool.get_ref(), &query.tenant_slug, auth.0.id).await?;
+    Ok(HttpResponse::Ok().json(boards))
+}
+
+#[post("/api/admin/boards")]
+pub async fn create_board(
+    pool: web::Data<DbPool>,
+    body: web::Json<CreateBoardRequest>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    body.validate()?;
+    let board = board_service::create_board(
+        pool.get_ref(),
+        &body.tenant_slug,
+        body.slug.trim(),
+        body.name.trim(),
+        body.description.as_deref().map(str::trim),
+        body.board_type.trim(),
+        body.is_private,
+        body.icon_url.as_deref().map(str::trim).filter(|v| !v.is_empty()),
+        auth.0.id,
+    )
+    .await?;
+    Ok(HttpResponse::Created().json(board))
+}
+
+#[patch("/api/admin/boards/{board_id}")]
+pub async fn update_board(
+    pool: web::Data<DbPool>,
+    path: web::Path<uuid::Uuid>,
+    body: web::Json<UpdateBoardRequest>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    body.validate()?;
+    let board_id = path.into_inner();
+    let board = board_service::update_board(
+        pool.get_ref(),
+        board_id,
+        body.name.trim(),
+        body.description.as_deref().map(str::trim),
+        body.board_type.trim(),
+        body.is_private,
+        body.icon_url.as_deref().map(str::trim).filter(|v| !v.is_empty()),
+        auth.0.id,
+    )
+    .await?;
+    Ok(HttpResponse::Ok().json(board))
+}
+
+#[delete("/api/admin/boards/{board_id}")]
+pub async fn delete_board(
+    pool: web::Data<DbPool>,
+    path: web::Path<uuid::Uuid>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    let board_id = path.into_inner();
+    board_service::delete_board(pool.get_ref(), board_id, auth.0.id).await?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
+#[derive(Deserialize)]
+pub struct BoardSummaryQuery {
+    pub tenant_slug: String,
+}
+
+#[get("/api/admin/boards/{board_id}/summary")]
+pub async fn get_board_summary(
+    pool: web::Data<DbPool>,
+    path: web::Path<uuid::Uuid>,
+    _query: web::Query<BoardSummaryQuery>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    let board_id = path.into_inner();
+    let board = crate::repositories::board_repository::get_board_tenant(pool.get_ref(), board_id)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, board_id = %board_id, "error getting board for summary");
+            AppError::InternalServerError
+        })?
+        .ok_or(AppError::NotFound)?;
+
+    crate::auth::require_permission(
+        pool.get_ref(),
+        board,
+        auth.0.id,
+        crate::domain::permission::Permission::ManageBoards,
+    )
+    .await?;
+
+    let summary =
+        crate::repositories::board_repository::get_board_summary(pool.get_ref(), board_id)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, board_id = %board_id, "error fetching board summary");
+                AppError::InternalServerError
+            })?
+            .ok_or(AppError::NotFound)?;
+
+    Ok(HttpResponse::Ok().json(crate::dto::BoardSummaryDto {
+        board_id,
+        board_slug: summary.slug,
+        board_name: summary.name,
+        total_posts: summary.total_posts,
+        posts_by_status: summary.posts_by_status,
+        total_votes: summary.total_votes,
+        total_comments: summary.total_comments,
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use actix_web::{http::StatusCode, test, web, App};
+    use serde_json::json;
+
+    use crate::db;
+    use crate::http::test_support::{
+        bearer_for, lock_test_db, read_json, reset_db, seed_basic_tenant, test_settings,
+    };
+    use crate::startup;
+
+    #[actix_web::test]
+    async fn private_board_requires_membership() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+
+        let anonymous_request = test::TestRequest::get()
+            .uri(&format!(
+                "/api/boards/{}?tenant_slug={}",
+                seed.private_board_slug, seed.tenant_slug
+            ))
+            .to_request();
+        let anonymous_response = test::call_service(&app, anonymous_request).await;
+        assert_eq!(anonymous_response.status(), StatusCode::FORBIDDEN);
+
+        let token = bearer_for(
+            &seed.member_subject,
+            "member@example.com",
+            "Member",
+            &settings.rooiam_jwt_secret,
+        );
+        let member_request = test::TestRequest::get()
+            .uri(&format!(
+                "/api/boards/{}?tenant_slug={}",
+                seed.private_board_slug, seed.tenant_slug
+            ))
+            .insert_header(("Authorization", token))
+            .to_request();
+        let member_response = test::call_service(&app, member_request).await;
+        assert_eq!(member_response.status(), StatusCode::OK);
+    }
+
+    #[actix_web::test]
+    async fn admin_can_create_list_and_update_boards() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+
+        let token = bearer_for(
+            &seed.admin_subject,
+            "admin@example.com",
+            "Admin",
+            &settings.rooiam_jwt_secret,
+        );
+
+        let create_request = test::TestRequest::post()
+            .uri("/api/admin/boards")
+            .insert_header(("Authorization", token.clone()))
+            .set_json(json!({
+                "tenant_slug": seed.tenant_slug,
+                "slug": "release-notes",
+                "name": "Release Notes",
+                "description": "Track announcements and shipped work",
+                "board_type": "changelog",
+                "is_private": true
+            }))
+            .to_request();
+        let create_response = test::call_service(&app, create_request).await;
+        assert_eq!(create_response.status(), StatusCode::CREATED);
+        let created_body = read_json(create_response).await;
+        let board_id = created_body
+            .get("id")
+            .and_then(|value| value.as_str())
+            .unwrap();
+
+        let list_request = test::TestRequest::get()
+            .uri(&format!(
+                "/api/admin/boards?tenant_slug={}",
+                seed.tenant_slug
+            ))
+            .insert_header(("Authorization", token.clone()))
+            .to_request();
+        let list_response = test::call_service(&app, list_request).await;
+        assert_eq!(list_response.status(), StatusCode::OK);
+        let list_body = read_json(list_response).await;
+        assert!(list_body.as_array().unwrap().len() >= 3);
+
+        let update_request = test::TestRequest::patch()
+            .uri(&format!("/api/admin/boards/{board_id}"))
+            .insert_header(("Authorization", token))
+            .set_json(json!({
+                "name": "Releases",
+                "description": "Product release communication",
+                "board_type": "changelog",
+                "is_private": false
+            }))
+            .to_request();
+        let update_response = test::call_service(&app, update_request).await;
+        assert_eq!(update_response.status(), StatusCode::OK);
+    }
+
+    #[actix_web::test]
+    async fn moderator_cannot_create_board() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+
+        let token = bearer_for(
+            &seed.moderator_subject,
+            "moderator@example.com",
+            "Moderator",
+            &settings.rooiam_jwt_secret,
+        );
+
+        let create_request = test::TestRequest::post()
+            .uri("/api/admin/boards")
+            .insert_header(("Authorization", token))
+            .set_json(json!({
+                "tenant_slug": seed.tenant_slug,
+                "slug": "ops",
+                "name": "Ops",
+                "description": "Moderator should not create boards",
+                "board_type": "internal",
+                "is_private": true
+            }))
+            .to_request();
+        let create_response = test::call_service(&app, create_request).await;
+        assert_eq!(create_response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[actix_web::test]
+    async fn board_summary_counts_are_correct() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+
+        let token = bearer_for(
+            &seed.admin_subject,
+            "admin@example.com",
+            "Admin",
+            &settings.rooiam_jwt_secret,
+        );
+
+        let board_row = sqlx::query!(
+            "SELECT b.id FROM boards b JOIN posts p ON p.board_id = b.id WHERE p.id = $1",
+            seed.canonical_post_id
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let board_id = board_row.id.to_string();
+        let request = test::TestRequest::get()
+            .uri(&format!(
+                "/api/admin/boards/{board_id}/summary?tenant_slug={}",
+                seed.tenant_slug
+            ))
+            .insert_header(("Authorization", token))
+            .to_request();
+        let response = test::call_service(&app, request).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = read_json(response).await;
+        assert!(
+            body.get("total_posts")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0)
+                > 0
+        );
+        assert!(body
+            .get("posts_by_status")
+            .and_then(|v| v.as_object())
+            .is_some());
+    }
+
+    #[actix_web::test]
+    async fn listing_boards_bootstraps_default_board_set() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+
+        let tenant_id = uuid::Uuid::new_v4();
+        let tenant_slug = format!("tenant-{}", uuid::Uuid::new_v4().simple());
+        sqlx::query("INSERT INTO tenants (id, slug, name) VALUES ($1, $2, 'Tenant')")
+            .bind(tenant_id)
+            .bind(&tenant_slug)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+
+        let request = test::TestRequest::get()
+            .uri(&format!("/api/boards?tenant_slug={tenant_slug}"))
+            .to_request();
+        let response = test::call_service(&app, request).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = read_json(response).await;
+        let boards = body.as_array().unwrap();
+        assert_eq!(boards.len(), 3);
+        let slugs = boards
+            .iter()
+            .map(|board| board.get("slug").and_then(|value| value.as_str()).unwrap())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            slugs,
+            std::collections::BTreeSet::from([
+                "bug-reports",
+                "feature-requests",
+                "general",
+            ])
+        );
+    }
+
+    #[actix_web::test]
+    async fn deleting_default_board_disables_future_bootstrap() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+
+        let tenant_id = uuid::Uuid::new_v4();
+        let tenant_slug = format!("tenant-{}", uuid::Uuid::new_v4().simple());
+        let admin_user_id = uuid::Uuid::new_v4();
+        let admin_subject = format!("admin-{}", uuid::Uuid::new_v4().simple());
+
+        sqlx::query("INSERT INTO tenants (id, slug, name) VALUES ($1, $2, 'Tenant')")
+            .bind(tenant_id)
+            .bind(&tenant_slug)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO users (id, rooiam_subject, email, display_name) VALUES ($1, $2, 'admin@example.com', 'Admin')",
+        )
+        .bind(admin_user_id)
+        .bind(&admin_subject)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO memberships (tenant_id, user_id, role) VALUES ($1, $2, 'admin')")
+            .bind(tenant_id)
+            .bind(admin_user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+
+        let token = bearer_for(
+            &admin_subject,
+            "admin@example.com",
+            "Admin",
+            &settings.rooiam_jwt_secret,
+        );
+
+        let list_request = test::TestRequest::get()
+            .uri(&format!("/api/admin/boards?tenant_slug={tenant_slug}"))
+            .insert_header(("Authorization", token.clone()))
+            .to_request();
+        let list_response = test::call_service(&app, list_request).await;
+        assert_eq!(list_response.status(), StatusCode::OK);
+        let list_body = read_json(list_response).await;
+        let board_id = list_body[0]
+            .get("id")
+            .and_then(|value| value.as_str())
+            .unwrap()
+            .to_string();
+
+        let delete_request = test::TestRequest::delete()
+            .uri(&format!("/api/admin/boards/{board_id}"))
+            .insert_header(("Authorization", token.clone()))
+            .to_request();
+        let delete_response = test::call_service(&app, delete_request).await;
+        assert_eq!(delete_response.status(), StatusCode::NO_CONTENT);
+
+        let public_list_request = test::TestRequest::get()
+            .uri(&format!("/api/boards?tenant_slug={tenant_slug}"))
+            .to_request();
+        let public_list_response = test::call_service(&app, public_list_request).await;
+        assert_eq!(public_list_response.status(), StatusCode::OK);
+        let public_list_body = read_json(public_list_response).await;
+        let remaining = public_list_body.as_array().unwrap();
+        assert_eq!(remaining.len(), 2);
+        let remaining_ids = remaining
+            .iter()
+            .map(|board| board.get("id").and_then(|value| value.as_str()).unwrap())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(!remaining_ids.contains(board_id.as_str()));
+    }
+}

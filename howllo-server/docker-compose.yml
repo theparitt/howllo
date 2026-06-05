@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: howllo
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - howllo-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d howllo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  howllo-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      HOWLLO_DATABASE_URL: postgres://postgres:postgres@postgres:5432/howllo
+      HOWLLO_BIND_ADDRESS: 0.0.0.0:5110
+      HOWLLO_JWT_SECRET: dev-secret
+      HOWLLO_ADMIN_BOOTSTRAP_KEY: howllo1234
+      HOWLLO_ALLOWED_ORIGINS: http://localhost:3000
+      HOWLLO_RATE_LIMIT_ENABLED: "true"
+      HOWLLO_PUBLIC_WRITE_RATE_LIMIT: 60
+      HOWLLO_MAX_POST_BODY_CHARS: 10000
+      HOWLLO_MAX_COMMENT_BODY_CHARS: 4000
+      HOWLLO_WEBHOOK_TIMEOUT_MS: 5000
+      HOWLLO_AI_ENABLED: "false"
+      HOWLLO_AI_MODEL: gemma4
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5110:5110"
+
+volumes:
+  howllo-postgres:

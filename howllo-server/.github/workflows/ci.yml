@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: howllo_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d howllo_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # DATABASE_URL is required by the sqlx CLI / query macros.
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/howllo_test
+      HOWLLO_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/howllo_test
+      HOWLLO_JWT_SECRET: test-secret
+      SQLX_OFFLINE: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features rustls,postgres
+
+      - name: Run migrations
+        run: cargo sqlx migrate run --source db/migrations
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test
+
+      - name: SQLx prepare check
+        run: cargo sqlx prepare --check -- --all-targets

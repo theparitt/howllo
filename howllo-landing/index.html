@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Howllo | Powerful Feedback & Roadmaps</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --bg-light: #f8fafc;
+        }
+        body {
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+            color: var(--text-main);
+            background-color: white;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+        nav {
+            padding: 1.5rem 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .logo-mark {
+            width: 48px;
+            height: 48px;
+            border-radius: 16px;
+            background: rgba(255,255,255,0.95);
+            box-shadow: 0 14px 30px rgba(37, 99, 235, 0.12);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .logo-mark img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .logo-wordmark img {
+            height: 34px;
+            width: auto;
+            display: block;
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s;
+            display: inline-block;
+        }
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+        .hero {
+            padding: 6rem 0;
+            display: flex;
+            align-items: center;
+            gap: 4rem;
+        }
+        .hero-content {
+            flex: 1;
+        }
+        .hero-brand {
+            margin-bottom: 1.5rem;
+        }
+        .hero-brand img {
+            height: 54px;
+            width: auto;
+            display: block;
+        }
+        .hero-image {
+            flex: 1.2;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+            background: white;
+            min-height: 360px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .hero-image-inner {
+            width: min(560px, 100%);
+            padding: 2rem;
+        }
+        .hero-image-inner img {
+            width: 100%;
+            display: block;
+        }
+        .hero-preview {
+            margin-top: 2rem;
+            display: grid;
+            gap: 1rem;
+        }
+        .preview-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 1rem 1.1rem;
+            background: #fffaf5;
+        }
+        .preview-card .status {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.35rem 0.7rem;
+            border-radius: 999px;
+            background: rgba(37,99,235,0.12);
+            color: var(--primary-dark);
+            margin-bottom: 0.75rem;
+        }
+        h1 {
+            font-size: 4rem;
+            line-height: 1;
+            font-weight: 800;
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.04em;
+        }
+        .hero p {
+            font-size: 1.25rem;
+            color: var(--text-muted);
+            margin-bottom: 2.5rem;
+        }
+        .features {
+            padding: 5rem 0;
+            background: var(--bg-light);
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+        }
+        .feature-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+        .feature-card h3 {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+        }
+        footer {
+            padding: 4rem 0;
+            border-top: 1px solid #e2e8f0;
+            text-align: center;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav>
+            <div class="logo" aria-label="Howllo">
+                <div class="logo-mark">
+                    <img src="brand/howllo-logo.svg" alt="Howllo logo">
+                </div>
+                <div class="logo-wordmark">
+                    <img src="brand/howllo-logo-wordmark-horizontal.svg" alt="Howllo">
+                </div>
+            </div>
+            <div>
+                <a href="#" class="btn btn-primary">Sign Up Free</a>
+            </div>
+        </nav>
+
+        <section class="hero">
+            <div class="hero-content">
+                <div class="hero-brand">
+                    <img src="brand/howllo-logo-wordmark-horizontal.svg" alt="Howllo wordmark">
+                </div>
+                <h1>Capture feedback. <br/>Build the right roadmap.</h1>
+                <p>The feedback platform that helps product teams collect, organize, and prioritize feature requests with beautiful roadmaps.</p>
+                <div style="display: flex; gap: 1rem;">
+                    <a href="#" class="btn btn-primary">Get Started Now</a>
+                    <a href="#" class="btn" style="border: 1px solid #e2e8f0;">See Demo</a>
+                </div>
+            </div>
+            <div class="hero-image">
+                <div class="hero-image-inner">
+                    <img src="brand/howllo-logo-wordmark-horizontal.svg" alt="Howllo">
+                    <div class="hero-preview">
+                        <div class="preview-card">
+                            <div class="status">Planned</div>
+                            <strong>Dark mode for workspace view</strong>
+                            <p style="margin: 0.75rem 0 0; color: var(--text-muted);">Turn product requests into visible roadmap movement with one canonical signal.</p>
+                        </div>
+                        <div class="preview-card">
+                            <div class="status" style="background: rgba(22,163,74,0.12); color:#166534;">In Progress</div>
+                            <strong>Public changelog and release stream</strong>
+                            <p style="margin: 0.75rem 0 0; color: var(--text-muted);">Keep users updated from first request to shipped release without leaving the board.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <section class="features">
+        <div class="container">
+            <div style="text-align: center; margin-bottom: 4rem;">
+                <h2 style="font-size: 2.5rem; font-weight: 800; letter-spacing: -0.03em;">Built for modern product teams</h2>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h3>Signal Capture</h3>
+                    <p>Easily collect feature requests and bug reports from your users in one central place.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Transparent Roadmaps</h3>
+                    <p>Show your users what you're working on and what's coming next with automatic status updates.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>User Collaboration</h3>
+                    <p>Let users vote on signals and comment to provide more detail, so you know what matters most.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div style="display:flex; justify-content:center; margin-bottom: 1rem;">
+                <img src="brand/howllo-logo-wordmark-horizontal.svg" alt="Howllo" style="height: 28px; width: auto;">
+            </div>
+            <p>&copy; 2026 Howllo Inc. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,31 @@
+# Local infra for Howllo development.
+# App processes run on the host (cargo run / npm run dev); this file only
+# provides backing services. Build images live under infra/docker/ later.
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: howllo
+    ports:
+      - "5433:5432"
+    volumes:
+      - howllo_pg:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - howllo_minio:/data
+
+volumes:
+  howllo_pg:
+  howllo_minio:

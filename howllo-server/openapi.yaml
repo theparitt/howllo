@@ -1,0 +1,732 @@
+openapi: 3.0.3
+info:
+  title: Howllo Server API
+  description: Feedback management backend with boards, posts, roadmap, search, AI suggestions, webhooks, and API tokens.
+  version: v1
+  contact:
+    name: Howllo Team
+servers:
+  - url: http://localhost:5110/api
+    description: Local development
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Server is alive
+  /ready:
+    get:
+      summary: Readiness check (includes DB)
+      responses:
+        '200':
+          description: Server is ready
+  /boards:
+    get:
+      summary: List public boards per tenant
+      parameters:
+        - name: tenant_slug
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of boards
+  /boards/{board_slug}:
+    get:
+      summary: Board detail
+      parameters:
+        - name: board_slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tenant_slug
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Board details
+  /boards/{board_slug}/posts:
+    get:
+      summary: List posts on a board with pagination and filters
+      parameters:
+        - name: board_slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tenant_slug
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: tag
+          in: query
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [newest, top, active, most_voted, most_commented]
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Paginated posts
+    post:
+      summary: Create a post (requires member+ authentication)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenant_slug, title, body]
+              properties:
+                tenant_slug:
+                  type: string
+                title:
+                  type: string
+                  maxLength: 1000
+                body:
+                  type: string
+      responses:
+        '201':
+          description: Post created
+  /posts/{post_id}:
+    get:
+      summary: Post detail with tags, follow state, official response
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: tenant_slug
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Post detail
+    patch:
+      summary: Edit a post (author only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Post updated
+  /posts/{post_id}/comments:
+    get:
+      summary: List comments with pagination
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Comment list
+    post:
+      summary: Add comment
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Comment created
+  /posts/{post_id}/vote:
+    post:
+      summary: Vote on a post
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Vote added
+    delete:
+      summary: Remove vote
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Vote removed
+  /posts/{post_id}/follow:
+    post:
+      summary: Follow a post
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Follow added
+    delete:
+      summary: Unfollow
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Follow removed
+    get:
+      summary: Get follow state
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Follow state
+  /posts/{post_id}/activity:
+    get:
+      summary: Post activity feed (status history, official response, follower count)
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tenant_slug
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Activity feed
+  /roadmap:
+    get:
+      summary: Public roadmap (planned, in_progress, done only)
+      parameters:
+        - name: tenant_slug
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: tag
+          in: query
+          schema:
+            type: string
+        - name: board_slug
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Roadmap items
+  /roadmap/grouped:
+    get:
+      summary: Roadmap grouped by status
+      parameters:
+        - name: tenant_slug
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Grouped roadmap {planned: [], in_progress: [], done: []}
+  /search/posts:
+    get:
+      summary: Full-text search posts
+      parameters:
+        - name: tenant_slug
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: tag
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [newest, top, most_voted, most_commented, relevance]
+      responses:
+        '200':
+          description: Search results
+  /boards/{board_slug}/suggest-duplicates:
+    get:
+      summary: Suggest duplicate posts
+      parameters:
+        - name: board_slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tenant_slug
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Suggested duplicates
+  /tags:
+    get:
+      summary: List tags per tenant
+      parameters:
+        - name: tenant_slug
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tag list
+  /notifications:
+    get:
+      summary: List user notifications
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Notification list
+  /notifications/{id}/read:
+    patch:
+      summary: Mark notification read
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Marked read
+  /admin/boards:
+    get:
+      summary: List all boards (admin)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Board list
+    post:
+      summary: Create board (admin)
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Board created
+  /admin/boards/{board_id}:
+    patch:
+      summary: Update board (admin)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Board updated
+  /admin/boards/{board_id}/summary:
+    get:
+      summary: Board summary (posts by status, votes, comments)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Board summary
+  /admin/posts/{post_id}/status:
+    patch:
+      summary: Change post status
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [planned, in_progress, done, declined, under_review]
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Status changed
+  /admin/posts/{post_id}/visibility:
+    patch:
+      summary: Hide/restore post
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Visibility updated
+  /admin/posts/{post_id}/soft-delete:
+    patch:
+      summary: Soft-delete post
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Post soft-deleted
+  /admin/posts/{post_id}/restore:
+    patch:
+      summary: Restore soft-deleted post
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Post restored
+  /admin/posts/{post_id}/lock:
+    patch:
+      summary: Lock/unlock post
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Lock toggled
+  /admin/posts/{post_id}/duplicate:
+    patch:
+      summary: Mark/link duplicate
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Duplicate linked
+  /admin/posts/{post_id}/tags/{tag_id}:
+    post:
+      summary: Attach tag to post
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Tag attached
+    delete:
+      summary: Detach tag from post
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Tag detached
+  /admin/comments/{comment_id}/official:
+    patch:
+      summary: Mark/unmark comment as official response
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Official flag toggled
+  /admin/comments/{comment_id}/visibility:
+    patch:
+      summary: Hide/restore comment
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Visibility toggled
+  /admin/tags:
+    post:
+      summary: Create tag
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Tag created
+  /admin/tags/{tag_id}:
+    patch:
+      summary: Update tag
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Tag updated
+    delete:
+      summary: Delete tag
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Tag deleted
+  /admin/tags/summary:
+    get:
+      summary: Tag usage summary
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Tag usage counts
+  /admin/moderation/queue:
+    get:
+      summary: Moderation queue (hidden posts, under_review)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tenant_slug
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Moderation queue
+  /admin/members:
+    get:
+      summary: List members
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Member list
+    post:
+      summary: Add member
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Member added
+  /admin/members/{user_id}/role:
+    patch:
+      summary: Change member role
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Role changed
+  /admin/members/{user_id}:
+    delete:
+      summary: Remove member
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Member removed
+  /admin/webhooks:
+    get:
+      summary: List webhooks
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Webhook list (secrets hidden)
+    post:
+      summary: Create webhook
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Webhook created
+  /admin/webhooks/{webhook_id}/deactivate:
+    patch:
+      summary: Deactivate webhook
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Webhook deactivated
+  /admin/webhooks/deliveries:
+    get:
+      summary: Webhook delivery status
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Delivery status list
+  /admin/webhooks/deliveries/{delivery_id}/resend:
+    post:
+      summary: Resend webhook delivery
+      security:
+        - BearerAuth: []
+      responses:
+        '202':
+          description: Resend queued
+  /admin/api-tokens:
+    get:
+      summary: List API tokens
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Token list
+    post:
+      summary: Create API token
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenant_slug, name]
+              properties:
+                tenant_slug:
+                  type: string
+                name:
+                  type: string
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                    enum: [posts:read, posts:write, comments:read, comments:write, roadmap:read, webhooks:write, admin:read]
+      responses:
+        '201':
+          description: Token created (raw token returned once)
+  /admin/api-tokens/{token_id}/revoke:
+    patch:
+      summary: Revoke API token
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Token revoked
+  /admin/export/posts.json:
+    get:
+      summary: Export posts as JSON
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: JSON export
+  /admin/export/posts.csv:
+    get:
+      summary: Export posts as CSV
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: CSV download
+  /admin/audit-logs:
+    get:
+      summary: View audit logs (admin only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tenant_slug
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Paginated audit logs
+  /admin/ai/suggestions:
+    get:
+      summary: List AI suggestions
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: AI suggestions list
+  /admin/ai/suggestions/{suggestion_id}:
+    patch:
+      summary: Review (accept/reject) AI suggestion
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Suggestion reviewed
+  /admin/ai/posts/{post_id}/duplicate-suggestions:
+    post:
+      summary: Request AI duplicate suggestions
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Duplicate suggestion created
+  /admin/ai/posts/{post_id}/summary:
+    post:
+      summary: Request AI thread summary
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Summary created
+  /admin/ai/posts/{post_id}/tag-suggestions:
+    post:
+      summary: Request AI tag suggestions
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Tag suggestion created
+  /admin/ai/posts/{post_id}/moderation-suggestion:
+    post:
+      summary: Request AI moderation suggestion
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Moderation suggestion created
+  /admin/ai/posts/{post_id}/grouping-suggestion:
+    post:
+      summary: Request AI roadmap grouping suggestion
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Grouping suggestion created
+  /admin/posts/{post_id}/notes:
+    get:
+      summary: List moderation notes
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Notes list
+    post:
+      summary: Add moderation note
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Note added
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: JWT token from RooIAM, or API token starting with "howllo_"

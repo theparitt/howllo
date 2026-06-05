@@ -1,0 +1,52 @@
+
+
+
+
+
+
+
+# อันนี้คือมันจะ kill process ลูกที่หลงเหลืออยู่ด้วย  ไม่งั้นเวลา callback มันจะพัง
+reset; fuser -k 5110/tcp;reset;pkill howllo-server; SQLX_OFFLINE=true cargo run
+
+
+
+
+rm -rf .next; npm run build
+
+
+
+
+
+
+# admin
+reset; fuser -k 5111/tcp; rm -rf .next; npm run dev
+
+
+# web
+reset; fuser -k 5112/tcp; rm -rf .next; npm run dev
+
+
+
+
+
+
+
+
+npm run deploy
+
+
+# build docker
+docker compose build --no-cache jotjum-server
+
+
+
+
+# apply database 
+export DATABASE_URL="postgres://theparitt:moo1211Q@192.168.0.147:5432/jotjum"
+sqlx migrate run
+
+
+
+
+# sql database 
+psql "postgres://theparitt:moo1211Q@192.168.0.147:5432/jotjum"

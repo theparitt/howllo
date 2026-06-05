@@ -1,0 +1,22 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Permission {
+    ManageBoards,
+    ManageTags,
+    ManageMembers,
+    ManageSettings,
+    ManageWebhooks,
+    ManageApiTokens,
+    ExportData,
+    ModerateContent,
+    ChangeStatus,
+    HidePost,
+    HideComment,
+    LockPost,
+    MarkDuplicate,
+    AddModerationNote,
+    CreatePost,
+    EditOwnPost,
+    Vote,
+    Comment,
+    Follow,
+}

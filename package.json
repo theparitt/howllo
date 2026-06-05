@@ -1,0 +1,20 @@
+{
+  "name": "howllo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Howllo — multi-tenant feedback and roadmap platform (open-core).",
+  "workspaces": [
+    "howllo-web",
+    "howllo-admin",
+    "howllo-landing",
+    "howllo-docs",
+    "shared/*"
+  ],
+  "scripts": {
+    "dev:web": "npm -w howllo-web run dev",
+    "dev:admin": "npm -w howllo-admin run dev",
+    "dev:landing": "npm -w howllo-landing run dev",
+    "dev:docs": "npm -w howllo-docs run dev",
+    "dev:server": "cargo run --manifest-path howllo-server/Cargo.toml"
+  }
+}
