@@ -2,7 +2,7 @@ use crate::db::DbPool;
 use actix_web::{get, web, HttpResponse, Responder};
 
 use crate::{
-    ai, api_tokens, audit, auth, boards, comments, exports, memberships, moderation,
+    ai, api_tokens, audit, auth, boards, comments, exports, me, memberships, moderation,
     moderation_notes, notifications, platform, posts, realtime, search, subscriptions, tags,
     tenancy, votes, webhooks,
 };
@@ -33,6 +33,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(auth::local_admin::auth_state)
         .service(auth::local_admin::auth_setup)
         .service(auth::local_admin::auth_login)
+        .service(auth::create_workspace_session)
+        .service(auth::revoke_workspace_session)
         .service(platform::get_platform_status)
         .service(platform::get_build_info)
         .service(platform::get_storage_config)
@@ -47,7 +49,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(tenancy::create_admin_tenant)
         .service(tenancy::delete_admin_tenant)
         .service(tenancy::get_tenant_branding)
+        .service(tenancy::get_workspace_auth_config)
         .service(tenancy::update_tenant_branding)
+        .service(tenancy::update_workspace_auth_config)
         .service(realtime::handler::ws_connect)
         .service(boards::api::list_boards)
         .service(boards::api::get_board_detail)
@@ -59,6 +63,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(memberships::create_member)
         .service(memberships::update_member_role)
         .service(memberships::remove_member)
+        .service(me::get_me)
+        .service(me::update_me)
+        .service(me::get_me_activity)
         .service(posts::api::list_board_posts)
         .service(posts::api::get_post_detail)
         .service(posts::api::get_post_status_history)

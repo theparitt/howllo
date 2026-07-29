@@ -9,9 +9,11 @@ import { useAsync } from "../../lib/useAsync";
 import { humanizeKey } from "../../lib/format";
 import { useEscapeKey, useFocusTrap } from "../../lib/a11y";
 
-const COLUMNS: PostStatus[] = ["planned", "in_progress", "done"];
+type RoadmapStatus = "planned" | "in_progress" | "done";
 
-const STATUS_META: Record<PostStatus, { tone: "warm" | "blue" | "green"; empty: string }> = {
+const COLUMNS: RoadmapStatus[] = ["planned", "in_progress", "done"];
+
+const STATUS_META: Record<RoadmapStatus, { tone: "warm" | "blue" | "green"; empty: string }> = {
   planned: {
     tone: "warm",
     empty: "No planned items yet.",
@@ -97,7 +99,7 @@ function CreateRoadmapItem({
   }, [boards]);
 
   const [boardSlug, setBoardSlug] = useState("");
-  const [status, setStatus] = useState<PostStatus>("planned");
+  const [status, setStatus] = useState<RoadmapStatus>("planned");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
@@ -161,7 +163,7 @@ function CreateRoadmapItem({
           Initial status
           <select
             value={status}
-            onChange={(e) => setStatus(e.target.value as PostStatus)}
+            onChange={(e) => setStatus(e.target.value as RoadmapStatus)}
             disabled={busy}
           >
             {COLUMNS.map((item) => (
@@ -208,7 +210,7 @@ function RoadmapColumn({
   boards,
   onChanged,
 }: {
-  status: PostStatus;
+  status: RoadmapStatus;
   items: RoadmapItem[];
   boards: BoardDetail[];
   onChanged: () => void;
@@ -255,14 +257,17 @@ function RoadmapItemRow({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const currentIndex = COLUMNS.indexOf(item.status);
+  const itemStatus = (COLUMNS.includes(item.status as RoadmapStatus)
+    ? item.status
+    : "planned") as RoadmapStatus;
+  const currentIndex = COLUMNS.indexOf(itemStatus);
   const previousStatus = currentIndex > 0 ? COLUMNS[currentIndex - 1] : null;
   const nextStatus =
     currentIndex >= 0 && currentIndex < COLUMNS.length - 1
       ? COLUMNS[currentIndex + 1]
       : null;
 
-  const move = async (nextStatus: PostStatus) => {
+  const move = async (nextStatus: RoadmapStatus) => {
     setBusy(true);
     setError(null);
     try {
@@ -278,8 +283,8 @@ function RoadmapItemRow({
   return (
     <li className="roadmap-card">
       <div className="roadmap-card__meta">
-        <span className="badge" data-tone={STATUS_META[item.status].tone}>
-          {humanizeKey(item.status)}
+        <span className="badge" data-tone={STATUS_META[itemStatus].tone}>
+          {humanizeKey(itemStatus)}
         </span>
       </div>
       <div className="roadmap-item__body">

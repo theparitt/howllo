@@ -10,7 +10,12 @@ use crate::db::{self, DbPool};
 use crate::tenancy;
 
 static MIGRATOR: Migrator = sqlx::migrate!("./db/migrations");
-const LEGACY_RECONCILABLE_MIGRATIONS: &[i64] = &[20240101000000, 20260604093000];
+const LEGACY_RECONCILABLE_MIGRATIONS: &[i64] = &[
+    20240101000000,
+    20260604093000,
+    20260604203000,
+    20260605113000,
+];
 const MIGRATIONS_TABLE_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS _sqlx_migrations (
     version BIGINT PRIMARY KEY,
@@ -73,7 +78,10 @@ pub async fn run(settings: &Settings) -> io::Result<DbPool> {
         Level::Ok,
         "howllo",
         "ready",
-        &paint("1;32", &format!("listening on http://{}", settings.bind_address)),
+        &paint(
+            "1;32",
+            &format!("listening on http://{}", settings.bind_address),
+        ),
     );
     eprintln!();
     Ok(pool)
@@ -82,7 +90,12 @@ pub async fn run(settings: &Settings) -> io::Result<DbPool> {
 /// Print a prominent failure block for `system`, then return the error so main
 /// can abort. Makes a misconfigured dependency obvious in the logs.
 fn fail(system: &str, error: &io::Error) -> io::Error {
-    line(Level::Fail, system, "FAILED", &paint("1;31", &error.to_string()));
+    line(
+        Level::Fail,
+        system,
+        "FAILED",
+        &paint("1;31", &error.to_string()),
+    );
     eprintln!();
     eprintln!(
         "  {}  {}",
@@ -98,7 +111,10 @@ async fn check_postgres(settings: &Settings) -> io::Result<DbPool> {
         Level::Pending,
         "postgres",
         "connect",
-        &format!("connecting {}", paint("90", &sanitize_database_url(&settings.database_url))),
+        &format!(
+            "connecting {}",
+            paint("90", &sanitize_database_url(&settings.database_url))
+        ),
     );
 
     let pool = db::establish_connection(&settings.database_url)
@@ -174,12 +190,14 @@ async fn check_postgres(settings: &Settings) -> io::Result<DbPool> {
                 &format!("checksum mismatch on {version}, reconciling…"),
             );
             reconcile_migration_checksum(&pool, version).await?;
-            MIGRATOR.run(&pool).await.map_err(|error| {
-                io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("postgres migration failed after checksum repair: {error}"),
-                )
-            })?;
+            if pending_migrations > 0 {
+                MIGRATOR.run(&pool).await.map_err(|error| {
+                    io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("postgres migration failed after checksum repair: {error}"),
+                    )
+                })?;
+            }
         }
         Err(error) => {
             return Err(io::Error::new(
@@ -221,7 +239,12 @@ async fn check_ai(settings: &Settings) -> io::Result<()> {
         ));
     }
 
-    line(Level::Ok, "ai", "endpoint", &format!("reachable ({response_status})"));
+    line(
+        Level::Ok,
+        "ai",
+        "endpoint",
+        &format!("reachable ({response_status})"),
+    );
     Ok(())
 }
 
@@ -233,9 +256,12 @@ async fn check_storage(pool: &DbPool) -> io::Result<()> {
         load_platform_storage_config, test_local_storage, test_minio_storage, StorageBackend,
     };
 
-    let cfg = load_platform_storage_config(pool)
-        .await
-        .map_err(|error| io::Error::new(io::ErrorKind::Other, format!("could not load storage config: {error}")))?;
+    let cfg = load_platform_storage_config(pool).await.map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::Other,
+            format!("could not load storage config: {error}"),
+        )
+    })?;
 
     match cfg.backend {
         StorageBackend::Local => {
@@ -418,7 +444,6 @@ fn line(level: Level, system: &str, step: &str, message: &str) {
     let step = paint("90", &format!("{step:<12}"));
     eprintln!("  {tag}  {system} {step} {message}");
 }
-
 
 async fn reconcile_migration_checksum(pool: &DbPool, version: i64) -> io::Result<()> {
     let migration = MIGRATOR

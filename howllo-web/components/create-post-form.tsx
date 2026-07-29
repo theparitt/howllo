@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
 import { createPost, uploadImage } from "@/lib/api";
 import { readStoredBearerToken } from "@/components/dev-auth-panel";
+import { buildTenantPath } from "@/lib/default-tenant";
 
 type CreatePostFormProps = {
   tenantSlug: string;
@@ -25,7 +26,7 @@ export function CreatePostForm({ tenantSlug, boardSlug }: CreatePostFormProps) {
     const files = Array.from(event.target.files ?? []);
     event.target.value = "";
     if (files.length === 0) return;
-    const token = readStoredBearerToken();
+    const token = readStoredBearerToken(tenantSlug);
     if (!token) {
       setError("Sign in before attaching screenshots.");
       return;
@@ -50,10 +51,10 @@ export function CreatePostForm({ tenantSlug, boardSlug }: CreatePostFormProps) {
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const token = readStoredBearerToken();
+    const token = readStoredBearerToken(tenantSlug);
 
     if (!token) {
-      setError("Save a dev bearer token in the header before creating a post.");
+      setError("Sign in to this workspace before creating a post.");
       return;
     }
 
@@ -69,13 +70,8 @@ export function CreatePostForm({ tenantSlug, boardSlug }: CreatePostFormProps) {
         token,
       });
       const nextSearch = new URLSearchParams(searchParams.toString());
-      if (nextSearch.get("tenant")) {
-        nextSearch.set("tenant", tenantSlug);
-      } else {
-        nextSearch.delete("tenant");
-      }
-      const query = nextSearch.toString();
-      router.push(query ? `/posts/${created.id}?${query}` : `/posts/${created.id}`);
+      nextSearch.delete("tenant");
+      router.push(buildTenantPath(`/posts/${created.id}`, tenantSlug, tenantSlug, nextSearch));
     } catch (submissionError) {
       setError(
         submissionError instanceof Error
@@ -118,7 +114,7 @@ export function CreatePostForm({ tenantSlug, boardSlug }: CreatePostFormProps) {
           Screenshots (optional)
         </div>
         {attachments.length > 0 ? (
-          <div className="attachment-grid" style={{ marginBottom: "0.7rem" }}>
+          <div className="attachment-grid" style={{ marginBottom: "0.85rem" }}>
             {attachments.map((url) => (
               <div className="attachment-thumb" key={url}>
                 <img src={url} alt="attachment" />
@@ -142,21 +138,25 @@ export function CreatePostForm({ tenantSlug, boardSlug }: CreatePostFormProps) {
           hidden
           onChange={onPickFiles}
         />
-        <button
-          type="button"
-          className="ghost-button"
-          disabled={uploading}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          {uploading ? "Uploading…" : "Add screenshot"}
-        </button>
+        <div className="form-actions">
+          <div className="form-actions__aside">
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploading ? "Uploading…" : "Add screenshot"}
+            </button>
+          </div>
+          <div className="form-actions__primary">
+            <button className="button" disabled={pending || uploading} type="submit">
+              {pending ? "Creating..." : "Create post"}
+            </button>
+          </div>
+        </div>
       </div>
       {error ? <div className="notice notice--error">{error}</div> : null}
-      <div className="toolbar">
-        <button className="button" disabled={pending || uploading} type="submit">
-          {pending ? "Submitting..." : "Submit feedback"}
-        </button>
-      </div>
     </form>
   );
 }

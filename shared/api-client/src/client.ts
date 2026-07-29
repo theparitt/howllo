@@ -12,6 +12,8 @@ export type ClientOptions = {
    * (the server resolves+authorizes the tenant per request).
    */
   tenant?: string;
+  /** Optional hook invoked when the server rejects the current auth state. */
+  onUnauthorized?: () => void;
 };
 
 export class HowlloApiError extends Error {
@@ -29,11 +31,13 @@ export class HowlloClient {
   readonly baseUrl: string;
   private authorization?: string;
   readonly tenant?: string;
+  private readonly onUnauthorized?: () => void;
 
   constructor(opts: ClientOptions = {}) {
     this.baseUrl = opts.baseUrl ?? API_BASE_URL;
     this.authorization = opts.authorization;
     this.tenant = opts.tenant;
+    this.onUnauthorized = opts.onUnauthorized;
   }
 
   /** True once an Authorization value has been provided. */
@@ -76,6 +80,9 @@ export class HowlloClient {
     );
 
     if (!res.ok) {
+      if (res.status === 401) {
+        this.onUnauthorized?.();
+      }
       let code = "error";
       let message = res.statusText;
       try {

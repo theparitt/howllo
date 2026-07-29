@@ -1,4 +1,5 @@
 import {
+  useCallback,
   createContext,
   useContext,
   useEffect,
@@ -110,13 +111,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [probeError, setProbeError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const clearAuth = () => {
+  const clearAuth = useCallback(() => {
     window.localStorage.removeItem(ACCESS_TOKEN_KEY);
     window.localStorage.removeItem(USER_NAME_KEY);
     window.localStorage.removeItem(USER_EMAIL_KEY);
     setAccessToken("");
     setUser(null);
-  };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -167,8 +168,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       new HowlloClient({
         authorization: authorization || undefined,
         tenant: tenant || undefined,
+        onUnauthorized: clearAuth,
       }),
-    [authorization, tenant],
+    [authorization, clearAuth, tenant],
   );
 
   const setTenant = (value: string) => {

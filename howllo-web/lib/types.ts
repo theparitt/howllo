@@ -1,3 +1,5 @@
+export type DashboardSection = "progress" | "latest" | "top";
+
 export type Board = {
   id: string;
   slug: string;
@@ -5,6 +7,8 @@ export type Board = {
   description: string | null;
   board_type: string;
   icon_url: string | null;
+  background_color: string | null;
+  dashboard_sections: DashboardSection[];
 };
 
 export type BootstrapTenant = {
@@ -18,7 +22,17 @@ export type TenantBranding = {
   site_name: string;
   logo_url: string | null;
   accent_color: string | null;
+  background_color: string | null;
   show_powered_by: boolean;
+  show_roadmap: boolean;
+};
+
+export type WorkspaceAuthConfig = {
+  tenant_slug: string;
+  provider: string;
+  rooiam_workspace_id: string | null;
+  rooiam_client_id: string | null;
+  rooiam_widget_base_url: string | null;
 };
 
 export type PaginatedResponse<T> = {
@@ -107,4 +121,62 @@ export type ApiTokenListItem = {
   token_prefix: string;
   revoked_at: string | null;
   created_at: string;
+};
+
+export type CurrentUser = {
+  id: string;
+  rooiam_subject: string;
+  email: string;
+  display_name: string;
+  avatar_url: string | null;
+};
+
+export type MyPostActivityItem = {
+  id: string;
+  title: string;
+  status: string;
+  vote_count: number;
+  comment_count: number;
+  board_slug: string;
+  board_name: string;
+  created_at: string;
+};
+
+export type MyCommentActivityItem = {
+  id: string;
+  post_id: string;
+  post_title: string;
+  board_slug: string;
+  board_name: string;
+  body: string;
+  comment_type: string;
+  created_at: string;
+};
+
+export type MyPostReferenceActivityItem = {
+  post_id: string;
+  post_title: string;
+  board_slug: string;
+  board_name: string;
+  created_at: string;
+};
+
+export type MyStatusActivityItem = {
+  id: string;
+  post_id: string;
+  post_title: string;
+  board_slug: string;
+  board_name: string;
+  old_status: string | null;
+  new_status: string;
+  reason: string | null;
+  created_at: string;
+};
+
+export type MyActivity = {
+  posts: MyPostActivityItem[];
+  comments: MyCommentActivityItem[];
+  votes: MyPostReferenceActivityItem[];
+  follows: MyPostReferenceActivityItem[];
+  status_changes: MyStatusActivityItem[];
 };

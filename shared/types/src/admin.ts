@@ -27,3 +27,11 @@ export type MembershipItem = {
   display_name: string;
   role: string;
 };
+
+export type WorkspaceAuthConfig = {
+  tenant_slug: string;
+  provider: string;
+  rooiam_workspace_id: string | null;
+  rooiam_client_id: string | null;
+  rooiam_widget_base_url: string | null;
+};

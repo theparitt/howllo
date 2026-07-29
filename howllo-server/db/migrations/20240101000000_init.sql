@@ -37,6 +37,9 @@ CREATE TABLE boards (
     board_type VARCHAR(50) NOT NULL, -- feature-requests, bug-reports, etc
     is_private BOOLEAN NOT NULL DEFAULT FALSE,
     is_default BOOLEAN NOT NULL DEFAULT FALSE,
+    icon_url TEXT,
+    background_color VARCHAR(32),
+    dashboard_sections TEXT[] NOT NULL DEFAULT '{progress,latest,top}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(tenant_id, slug)
@@ -142,3 +145,15 @@ CREATE TABLE ai_suggestions (
 
 CREATE INDEX ai_suggestions_tenant_created_at_idx
     ON ai_suggestions (tenant_id, created_at DESC);
+
+CREATE TABLE tenant_branding (
+    tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+    site_name VARCHAR(255),
+    logo_url TEXT,
+    accent_color VARCHAR(32),
+    background_color VARCHAR(32),
+    show_powered_by BOOLEAN NOT NULL DEFAULT TRUE,
+    show_roadmap BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

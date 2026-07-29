@@ -6,11 +6,12 @@ import { createComment, followPost, votePost } from "@/lib/api";
 import { readStoredBearerToken } from "@/components/dev-auth-panel";
 
 type PostActionsProps = {
+  tenantSlug: string;
   postId: string;
   isLocked: boolean;
 };
 
-export function PostActions({ postId, isLocked }: PostActionsProps) {
+export function PostActions({ tenantSlug, postId, isLocked }: PostActionsProps) {
   const router = useRouter();
   const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -20,9 +21,9 @@ export function PostActions({ postId, isLocked }: PostActionsProps) {
     action: "vote" | "follow" | "comment",
     run: (token: string) => Promise<void>,
   ) {
-    const token = readStoredBearerToken();
+    const token = readStoredBearerToken(tenantSlug);
     if (!token) {
-      setError("Save a dev bearer token in the header before using write actions.");
+      setError("Sign in to this workspace before using write actions.");
       return;
     }
 

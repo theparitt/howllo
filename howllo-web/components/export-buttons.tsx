@@ -13,9 +13,9 @@ export function ExportButtons({ tenantSlug }: ExportButtonsProps) {
   const [error, setError] = useState<string | null>(null);
 
   async function download(kind: "json" | "csv") {
-    const token = readStoredBearerToken();
+    const token = readStoredBearerToken(tenantSlug);
     if (!token) {
-      setError("Save a dev bearer token in the header before using exports.");
+      setError("Sign in to this workspace before using exports.");
       return;
     }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { admin } from "@howllo/api-client";
 import type { Tag } from "@howllo/types";
 import { SessionRequired } from "../../components/SessionRequired";
@@ -6,6 +6,51 @@ import { useSession } from "../../lib/session";
 import { useAsync } from "../../lib/useAsync";
 import { Panel } from "../../components/Panel";
 import { StateBlock } from "../../components/StateBlock";
+
+function colorPickerValue(value: string | null | undefined, fallback: string) {
+  const trimmed = value?.trim() ?? "";
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed : fallback;
+}
+
+function ColorPreviewField({
+  label,
+  value,
+  fallback,
+  hint,
+  onChange,
+}: {
+  label: string;
+  value: string | null | undefined;
+  fallback: string;
+  hint: string;
+  onChange: (value: string) => void;
+}) {
+  const resolved = colorPickerValue(value, fallback);
+  const style = {
+    "--swatch-color": resolved,
+  } as CSSProperties;
+
+  return (
+    <div className="color-swatch-field">
+      <span className="field-label">{label}</span>
+      <label className="color-swatch color-swatch--accent" style={style}>
+        <input
+          className="color-swatch__input"
+          type="color"
+          value={resolved}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <span className="color-swatch__surface">
+          <span className="color-swatch__chip" aria-hidden="true" />
+          <span className="color-swatch__meta">
+            <strong>{resolved}</strong>
+            <small>{hint}</small>
+          </span>
+        </span>
+      </label>
+    </div>
+  );
+}
 
 export function TagsPage() {
   const { client, tenant, authorization } = useSession();
@@ -55,7 +100,7 @@ export function TagsPage() {
       <p className="muted">Workspace-scoped tags for organizing feedback.</p>
 
       <Panel title="New tag">
-        <div className="form-row">
+        <div className="form-grid">
           <label>
             Name
             <input
@@ -72,14 +117,14 @@ export function TagsPage() {
               placeholder="mobile"
             />
           </label>
-          <label>
-            Color
-            <input
-              type="color"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-            />
-          </label>
+          <ColorPreviewField
+            label="Color"
+            value={color}
+            fallback="#6c7bff"
+            hint="Click to choose the tag color"
+            onChange={setColor}
+          />
+          <div className="button-row field-span-2">
           <button
             className="primary"
             disabled={busy || !name.trim() || !slug.trim()}
@@ -87,6 +132,7 @@ export function TagsPage() {
           >
             {busy ? "Adding..." : "Add"}
           </button>
+          </div>
         </div>
         {error ? <p className="error-text">{error}</p> : null}
       </Panel>
@@ -157,7 +203,15 @@ function TagRow({ tag, onChanged }: { tag: Tag; onChanged: () => void }) {
         {tag.slug}
       </span>
       <input value={name} onChange={(e) => setName(e.target.value)} />
-      <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
+      <div className="tag-chip-row__color">
+        <ColorPreviewField
+          label="Color"
+          value={color}
+          fallback="#6c7bff"
+          hint="Click to choose the tag color"
+          onChange={setColor}
+        />
+      </div>
       <button disabled={busy || !name.trim()} onClick={save}>
         Save
       </button>

@@ -1,12 +1,14 @@
-use actix_web::{HttpRequest, HttpResponse, Responder, get, patch, post, web};
+use actix_web::{get, patch, post, web, HttpRequest, HttpResponse, Responder};
 use serde::Deserialize;
 
-use crate::auth::{AuthenticatedUser, require_optional_api_token_scope};
+use crate::auth::{require_optional_api_token_scope, AuthenticatedUser};
 use crate::db::DbPool;
 use crate::dto::{
     CreatePostRequest, PaginatedResponse, PostListItemDto, StatusHistoryItemDto, UpdatePostRequest,
 };
 use crate::errors::AppError;
+use crate::realtime::{Hub, RealtimeEvent};
+use crate::repositories::post_repository;
 use crate::services::{post_service, roadmap_service};
 
 #[derive(Deserialize)]
@@ -100,6 +102,7 @@ pub async fn get_post_status_history(
 pub async fn create_post(
     req: HttpRequest,
     pool: web::Data<DbPool>,
+    hub: web::Data<Hub>,
     path: web::Path<String>,
     body: web::Json<CreatePostRequest>,
     auth: AuthenticatedUser,
@@ -129,6 +132,23 @@ pub async fn create_post(
         user_id,
     )
     .await?;
+
+    if let Some(scope) = post_repository::find_post_access(pool.get_ref(), post.id, None)
+        .await
+        .map_err(|error| {
+            tracing::error!(error = %error, post_id = %post.id, "error loading post scope for realtime");
+            AppError::InternalServerError
+        })?
+    {
+        hub.broadcast(
+            scope.tenant_id,
+            RealtimeEvent {
+                event_type: "post.created".to_string(),
+                board_id: Some(scope.board_id),
+                post_id: Some(post.id),
+            },
+        );
+    }
 
     Ok(HttpResponse::Created().json(post))
 }
@@ -341,7 +361,7 @@ pub async fn get_post_activity(
 
 #[cfg(test)]
 mod tests {
-    use actix_web::{App, http::StatusCode, test, web};
+    use actix_web::{http::StatusCode, test, web, App};
     use serde_json::json;
 
     use crate::db;
@@ -674,13 +694,12 @@ mod tests {
 
         let body = read_json(response).await;
         assert_eq!(body.get("total").and_then(|v| v.as_i64()), Some(2));
-        assert!(
-            body.get("items")
-                .and_then(|v| v.as_array())
-                .unwrap()
-                .iter()
-                .any(|item| item.get("is_hidden").and_then(|v| v.as_bool()) == Some(true))
-        );
+        assert!(body
+            .get("items")
+            .and_then(|v| v.as_array())
+            .unwrap()
+            .iter()
+            .any(|item| item.get("is_hidden").and_then(|v| v.as_bool()) == Some(true)));
     }
 
     #[actix_web::test]
@@ -798,11 +817,9 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = read_json(response).await;
         let items = body.as_array().unwrap();
-        assert!(
-            items
-                .iter()
-                .all(|item| { item.get("status").and_then(|v| v.as_str()) == Some("planned") })
-        );
+        assert!(items
+            .iter()
+            .all(|item| { item.get("status").and_then(|v| v.as_str()) == Some("planned") }));
     }
 
     #[actix_web::test]
@@ -887,12 +904,10 @@ mod tests {
         assert_eq!(anonymous_response.status(), StatusCode::OK);
         let anonymous_json = read_json(anonymous_response).await;
         let anonymous_items = anonymous_json.as_array().unwrap();
-        assert!(
-            anonymous_items
-                .iter()
-                .all(|item| item.get("id").and_then(|v| v.as_str())
-                    != Some(seed.private_post_id.to_string().as_str()))
-        );
+        assert!(anonymous_items
+            .iter()
+            .all(|item| item.get("id").and_then(|v| v.as_str())
+                != Some(seed.private_post_id.to_string().as_str())));
 
         let token = bearer_for(
             &seed.member_subject,
@@ -909,12 +924,9 @@ mod tests {
         let member_json = read_json(member_response).await;
         let member_items = member_json.as_array().unwrap();
         let private_post_id = seed.private_post_id.to_string();
-        assert!(
-            member_items
-                .iter()
-                .any(|item| item.get("id").and_then(|v| v.as_str())
-                    == Some(private_post_id.as_str()))
-        );
+        assert!(member_items
+            .iter()
+            .any(|item| item.get("id").and_then(|v| v.as_str()) == Some(private_post_id.as_str())));
     }
 
     #[actix_web::test]
@@ -953,11 +965,9 @@ mod tests {
         let body = read_json(response).await;
         let items = body.as_array().unwrap();
         let duplicate_id = seed.duplicate_post_id.to_string();
-        assert!(
-            !items
-                .iter()
-                .any(|item| item.get("id").and_then(|v| v.as_str()) == Some(duplicate_id.as_str()))
-        );
+        assert!(!items
+            .iter()
+            .any(|item| item.get("id").and_then(|v| v.as_str()) == Some(duplicate_id.as_str())));
     }
 
     #[actix_web::test]

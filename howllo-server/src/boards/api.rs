@@ -71,7 +71,15 @@ pub async fn create_board(
         body.description.as_deref().map(str::trim),
         body.board_type.trim(),
         body.is_private,
-        body.icon_url.as_deref().map(str::trim).filter(|v| !v.is_empty()),
+        body.icon_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty()),
+        body.background_color
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty()),
+        body.dashboard_sections.clone(),
         auth.0.id,
     )
     .await?;
@@ -94,7 +102,15 @@ pub async fn update_board(
         body.description.as_deref().map(str::trim),
         body.board_type.trim(),
         body.is_private,
-        body.icon_url.as_deref().map(str::trim).filter(|v| !v.is_empty()),
+        body.icon_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty()),
+        body.background_color
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty()),
+        body.dashboard_sections.clone(),
         auth.0.id,
     )
     .await?;
@@ -252,12 +268,19 @@ mod tests {
                 "name": "Release Notes",
                 "description": "Track announcements and shipped work",
                 "board_type": "changelog",
-                "is_private": true
+                "is_private": true,
+                "background_color": "#fff1ea"
             }))
             .to_request();
         let create_response = test::call_service(&app, create_request).await;
         assert_eq!(create_response.status(), StatusCode::CREATED);
         let created_body = read_json(create_response).await;
+        assert_eq!(
+            created_body
+                .get("background_color")
+                .and_then(|value| value.as_str()),
+            Some("#fff1ea")
+        );
         let board_id = created_body
             .get("id")
             .and_then(|value| value.as_str())
@@ -282,11 +305,19 @@ mod tests {
                 "name": "Releases",
                 "description": "Product release communication",
                 "board_type": "changelog",
-                "is_private": false
+                "is_private": false,
+                "background_color": "#e8f4ff"
             }))
             .to_request();
         let update_response = test::call_service(&app, update_request).await;
         assert_eq!(update_response.status(), StatusCode::OK);
+        let update_body = read_json(update_response).await;
+        assert_eq!(
+            update_body
+                .get("background_color")
+                .and_then(|value| value.as_str()),
+            Some("#e8f4ff")
+        );
     }
 
     #[actix_web::test]
@@ -428,11 +459,7 @@ mod tests {
             .collect::<std::collections::BTreeSet<_>>();
         assert_eq!(
             slugs,
-            std::collections::BTreeSet::from([
-                "bug-reports",
-                "feature-requests",
-                "general",
-            ])
+            std::collections::BTreeSet::from(["bug-reports", "feature-requests", "general",])
         );
     }
 

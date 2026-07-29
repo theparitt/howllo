@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
-import { RooiamLoginWidget } from "@/components/rooiam-login-widget";
-import { getBootstrapTenant, getTenantBranding } from "@/lib/api";
+import { AuthControl } from "@/components/auth-control";
+import { getTenantBranding } from "@/lib/api";
 import type { TenantBranding } from "@/lib/types";
 import { buildTenantPath } from "@/lib/default-tenant";
+import { hexToRgba } from "@/lib/theme";
 
 const RESERVED_TOP_LEVEL_ROUTES = new Set([
   "",
@@ -15,6 +16,7 @@ const RESERVED_TOP_LEVEL_ROUTES = new Set([
   "posts",
   "roadmap",
   "admin",
+  "my",
 ]);
 
 const DEFAULT_BRANDING: TenantBranding = {
@@ -23,7 +25,9 @@ const DEFAULT_BRANDING: TenantBranding = {
   site_name: "Howllo",
   logo_url: null,
   accent_color: null,
+  background_color: null,
   show_powered_by: true,
+  show_roadmap: true,
 };
 
 function getTenantSlugFromPath(pathname: string): string | null {
@@ -37,20 +41,26 @@ function getTenantSlugFromPath(pathname: string): string | null {
 export function TenantShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [branding, setBranding] = useState<TenantBranding>(DEFAULT_BRANDING);
-  const [defaultTenantSlug, setDefaultTenantSlug] = useState("");
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadBranding() {
+      const pathTenantSlug = getTenantSlugFromPath(pathname);
+      const queryTenantSlug =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("tenant")?.trim() || null
+          : null;
+      const tenantSlug = pathTenantSlug ?? queryTenantSlug;
+
+      if (!tenantSlug) {
+        if (!cancelled) {
+          setBranding(DEFAULT_BRANDING);
+        }
+        return;
+      }
+
       try {
-        const bootstrap = await getBootstrapTenant();
-        if (cancelled) return;
-
-        const pathTenantSlug = getTenantSlugFromPath(pathname);
-        const tenantSlug = pathTenantSlug ?? bootstrap.default_tenant_slug;
-        setDefaultTenantSlug(bootstrap.default_tenant_slug);
-
         const nextBranding = await getTenantBranding(tenantSlug);
         if (!cancelled) {
           setBranding(nextBranding);
@@ -58,7 +68,6 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
       } catch {
         if (!cancelled) {
           setBranding(DEFAULT_BRANDING);
-          setDefaultTenantSlug("");
         }
       }
     }
@@ -70,25 +79,37 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   const shellStyle = useMemo(() => {
-    if (!branding.accent_color) return undefined;
-    return {
-      "--primary": branding.accent_color,
-      "--primary-dark": branding.accent_color,
-      "--accent": branding.accent_color,
-    } as CSSProperties;
-  }, [branding.accent_color]);
+    const style: Record<string, string> = {};
+
+    if (branding.accent_color) {
+      style["--primary"] = branding.accent_color;
+      style["--primary-dark"] = branding.accent_color;
+      style["--accent"] = branding.accent_color;
+    }
+
+    if (branding.background_color) {
+      style["--tenant-bg"] = branding.background_color;
+      style["--tenant-bg-soft"] = hexToRgba(branding.background_color, 0.52);
+      style["--tenant-glow"] = hexToRgba(branding.background_color, 0.7);
+    }
+
+    return Object.keys(style).length > 0 ? (style as CSSProperties) : undefined;
+  }, [branding.accent_color, branding.background_color]);
 
   const dashboardHref = buildTenantPath(
     "/dashboard",
     branding.tenant_slug,
-    defaultTenantSlug,
-  );
-  const roadmapHref = buildTenantPath(
-    "/roadmap",
     branding.tenant_slug,
-    defaultTenantSlug,
   );
-  const homeHref = buildTenantPath("/", branding.tenant_slug, defaultTenantSlug);
+  const roadmapHref = buildTenantPath("/roadmap", branding.tenant_slug, branding.tenant_slug);
+  const myHref = buildTenantPath(
+    "/my/account",
+    branding.tenant_slug,
+    branding.tenant_slug,
+  );
+  const homeHref = branding.tenant_slug
+    ? buildTenantPath("/", branding.tenant_slug, branding.tenant_slug)
+    : "/";
 
   return (
     <div className="app-shell app-shell--themed" style={shellStyle}>
@@ -122,10 +143,12 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
             <Link href={dashboardHref} className="nav__link">
               Dashboard
             </Link>
-            <Link href={roadmapHref} className="nav__link">
-              Roadmap
-            </Link>
-            <RooiamLoginWidget />
+            {branding.show_roadmap ? (
+              <Link href={roadmapHref} className="nav__link">
+                Roadmap
+              </Link>
+            ) : null}
+            <AuthControl myHref={myHref} />
           </nav>
         </div>
       </header>

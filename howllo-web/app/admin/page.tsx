@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { BOARD_ADMIN_BASE_URL } from "@/lib/config";
-import { resolveTenantSlug } from "@/lib/default-tenant";
+import { WorkspaceContextError, resolveTenantSlug } from "@/lib/default-tenant";
+import { WorkspaceState } from "@/components/workspace-state";
 
 type AdminPageProps = {
   searchParams: Promise<{
@@ -10,10 +11,17 @@ type AdminPageProps = {
 
 export default async function AdminPage({ searchParams }: AdminPageProps) {
   const params = await searchParams;
-  const tenant = await resolveTenantSlug(params.tenant);
-  const target = new URL(BOARD_ADMIN_BASE_URL);
+  try {
+    const tenant = await resolveTenantSlug(params.tenant);
+    const target = new URL(BOARD_ADMIN_BASE_URL);
 
-  target.searchParams.set("tenant", tenant);
+    target.searchParams.set("tenant", tenant);
 
-  redirect(target.toString());
+    redirect(target.toString());
+  } catch (error) {
+    if (error instanceof WorkspaceContextError) {
+      return <WorkspaceState kind={error.kind} workspaceSlug={error.workspaceSlug} />;
+    }
+    throw error;
+  }
 }

@@ -1,6 +1,11 @@
 import Link from "next/link";
-import { buildTenantPath, resolveTenantContext } from "@/lib/default-tenant";
+import {
+  WorkspaceContextError,
+  buildTenantPath,
+  resolveTenantContext,
+} from "@/lib/default-tenant";
 import { CreatePostForm } from "@/components/create-post-form";
+import { WorkspaceState } from "@/components/workspace-state";
 
 type CreatePostPageProps = {
   params: Promise<{
@@ -17,7 +22,17 @@ export default async function CreatePostPage({
 }: CreatePostPageProps) {
   const { boardSlug } = await params;
   const query = await searchParams;
-  const { tenantSlug: tenant, defaultTenantSlug } = await resolveTenantContext(query.tenant);
+  let tenant: string;
+  let defaultTenantSlug: string;
+
+  try {
+    ({ tenantSlug: tenant, defaultTenantSlug } = await resolveTenantContext(query.tenant));
+  } catch (error) {
+    if (error instanceof WorkspaceContextError) {
+      return <WorkspaceState kind={error.kind} workspaceSlug={error.workspaceSlug} />;
+    }
+    throw error;
+  }
 
   return (
     <div className="grid" style={{ gap: "1.25rem", maxWidth: "640px", margin: "0 auto", width: "100%" }}>
@@ -25,8 +40,8 @@ export default async function CreatePostPage({
         <Link className="back-link" href={buildTenantPath(`/boards/${boardSlug}`, tenant, defaultTenantSlug)}>
           ← Back
         </Link>
-        <h1 className="page-title">Submit feedback</h1>
-        <p className="page-lead">Share a request, problem, or idea.</p>
+        <h1 className="page-title">New post</h1>
+        <p className="page-lead">Share a request, problem, or idea with this workspace.</p>
       </section>
 
       <CreatePostForm boardSlug={boardSlug} tenantSlug={tenant} />

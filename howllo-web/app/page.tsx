@@ -1,5 +1,10 @@
 import { redirect } from "next/navigation";
-import { buildTenantPath, resolveTenantContext } from "@/lib/default-tenant";
+import {
+  WorkspaceContextError,
+  buildTenantPath,
+  resolveTenantContext,
+} from "@/lib/default-tenant";
+import { WorkspaceState } from "@/components/workspace-state";
 
 type HomePageProps = {
   searchParams: Promise<{
@@ -9,7 +14,16 @@ type HomePageProps = {
 
 export default async function HomePage({ searchParams }: HomePageProps) {
   const params = await searchParams;
-  const { tenantSlug, defaultTenantSlug } = await resolveTenantContext(params.tenant);
+  try {
+    const { tenantSlug, defaultTenantSlug } = await resolveTenantContext(params.tenant);
 
-  redirect(buildTenantPath("/dashboard", tenantSlug, defaultTenantSlug));
+    redirect(buildTenantPath("/dashboard", tenantSlug, defaultTenantSlug));
+  } catch (error) {
+    if (error instanceof WorkspaceContextError) {
+      return (
+        <WorkspaceState kind={error.kind} workspaceSlug={error.workspaceSlug} />
+      );
+    }
+    throw error;
+  }
 }

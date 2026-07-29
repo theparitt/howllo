@@ -26,6 +26,7 @@ export const posts = (client: HowlloClient) => ({
     client.request<PostCreated>(`/api/boards/${boardSlug}/posts`, {
       method: "POST",
       body: JSON.stringify({
+        tenant_slug: client.tenant,
         title: input.title,
         body: input.body,
         attachments: input.attachments ?? [],

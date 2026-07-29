@@ -81,6 +81,108 @@ textarea {
   padding: 10px 12px;
 }
 
+.color-picker {
+  width: 54px;
+  height: 38px;
+  padding: 3px;
+  cursor: pointer;
+}
+
+.color-picker::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-picker::-webkit-color-swatch {
+  border: 0;
+  border-radius: 9px;
+}
+
+.color-picker::-moz-color-swatch {
+  border: 0;
+  border-radius: 9px;
+}
+
+.color-swatch-field {
+  display: grid;
+  gap: 8px;
+}
+
+.color-swatch {
+  position: relative;
+  display: block;
+  min-height: 72px;
+  border-radius: 16px;
+  border: 1px solid var(--border-strong);
+  overflow: hidden;
+  cursor: pointer;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.58)),
+    var(--panel-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.color-swatch__input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.color-swatch__surface {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 12px 14px;
+}
+
+.color-swatch__chip {
+  flex: 0 0 46px;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  border: 1px solid rgba(58, 44, 52, 0.12);
+  background: var(--swatch-color);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 8px 18px -12px rgba(58, 44, 52, 0.4);
+}
+
+.color-swatch__meta {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.color-swatch__meta strong {
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.color-swatch__meta small {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.color-swatch--accent {
+  background:
+    radial-gradient(circle at top right, rgba(243, 105, 73, 0.18), transparent 42%),
+    linear-gradient(135deg, rgba(255, 250, 246, 0.94), rgba(255, 238, 231, 0.9));
+}
+
+.color-swatch--background {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.78), transparent 46%),
+    linear-gradient(135deg, color-mix(in srgb, var(--swatch-color) 72%, white), var(--swatch-color));
+}
+
+.color-swatch:hover {
+  border-color: rgba(243, 105, 73, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    0 10px 24px -18px rgba(102, 71, 83, 0.32);
+}
+
 input:focus,
 select:focus,
 textarea:focus {
@@ -363,6 +465,20 @@ code {
   font-weight: 700;
   font-size: 0.95rem;
   box-shadow: 0 4px 10px -4px rgba(243, 105, 73, 0.55);
+  overflow: hidden;
+}
+
+.ws-avatar--image {
+  background: #fff;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 10px -6px rgba(102, 71, 83, 0.28);
+}
+
+.ws-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 3px;
 }
 
 .ws-avatar--sm {
@@ -863,6 +979,11 @@ section > h1 + .muted {
   border: 1px solid var(--border);
 }
 
+.metric-card {
+  display: flex;
+  flex-direction: column;
+}
+
 .metric-card span {
   display: block;
   margin-bottom: 8px;
@@ -871,6 +992,16 @@ section > h1 + .muted {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  /* Reserve space for up to two lines so the number below always starts at
+     the same Y across cards, even when a label like "Total comments" wraps. */
+  line-height: 1.3;
+  min-height: calc(2 * 0.74rem * 1.3);
+}
+
+/* The "Status mix" card holds chips, not a single number — let its label
+   size to content instead of reserving two lines. */
+.metric-card.field-span-3 span {
+  min-height: 0;
 }
 
 .callout {
@@ -1003,6 +1134,123 @@ section > h1 + .muted {
   grid-column: span 3;
 }
 
+/* ---- Grouped settings sections ---- */
+.field-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  padding: 16px;
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.field-group__title {
+  padding: 0 6px;
+  margin-left: -6px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.field-group__hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.section-toggles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+/* A label that is a vertical stack (e.g. description spanning full width). */
+.field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.field-stack textarea {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+
+/* ---- Checkbox rendered as an aligned toggle field with a hint ---- */
+.toggle-field {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-strong);
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.toggle-field input {
+  width: auto;
+  margin-top: 2px;
+}
+
+.toggle-field__hint {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: nowrap;
+}
+
+/* ---- Combined color control: swatch + hex in one field ---- */
+.color-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  max-width: 320px;
+}
+
+.color-field__control {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.color-field__swatch {
+  width: 44px;
+  min-width: 44px;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.color-field__hex {
+  flex: 1;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  font-family: var(--font-mono, monospace);
+}
+
 /* ----------------------------------------------------------------- Table */
 
 .data-table {
@@ -1094,8 +1342,13 @@ section > h1 + .muted {
 .tag-chip-row {
   display: flex;
   gap: 10px;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
+}
+
+.tag-chip-row__color {
+  min-width: 220px;
+  flex: 0 1 260px;
 }
 
 .tag-chip {
@@ -1913,7 +2166,7 @@ button.danger:disabled {
 
 .board-icon-field {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
   padding-bottom: 16px;
   margin-bottom: 4px;
@@ -1932,6 +2185,10 @@ button.danger:disabled {
 
 .board-icon-field__actions .muted {
   margin: 0;
+}
+
+.board-appearance-grid {
+  align-items: start;
 }
 
 /* ---- Icon toggle button (e.g. show hidden/deleted) ---- */

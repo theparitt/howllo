@@ -13,7 +13,7 @@ pub struct ApiTokenAuth {
 
 pub async fn maybe_api_token(req: &HttpRequest) -> Result<Option<ApiTokenAuth>, AppError> {
     let raw = match bearer_token(req) {
-        Some(token) if token.starts_with("howllo_") => token,
+        Some(token) if token.starts_with("howllo_") && !token.starts_with("howllo_ws_") => token,
         _ => return Ok(None),
     };
 

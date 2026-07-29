@@ -19,6 +19,7 @@ use crate::auth::RooiamClaims;
 use crate::config::Settings;
 use crate::db::DbPool;
 use crate::errors::AppError;
+use crate::users::User;
 use actix_web::{get, post, web, HttpResponse, Responder};
 use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
@@ -26,7 +27,6 @@ use argon2::Argon2;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{encode, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
-use crate::users::User;
 
 /// Stable JWT subject + user identity for the local admin.
 const LOCAL_ADMIN_SUBJECT: &str = "local-admin";

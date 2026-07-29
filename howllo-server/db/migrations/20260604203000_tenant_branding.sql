@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS tenant_branding (
     logo_url TEXT,
     accent_color VARCHAR(32),
     show_powered_by BOOLEAN NOT NULL DEFAULT TRUE,
+    show_roadmap BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

@@ -6,6 +6,9 @@ pub struct Settings {
     pub bind_address: String,
     pub rooiam_jwt_secret: String,
     pub rooiam_hosted_userinfo_url: Option<String>,
+    pub rooiam_widget_base_url: Option<String>,
+    pub rooiam_widget_workspace_id: Option<String>,
+    pub rooiam_widget_client_id: Option<String>,
     /// One-time key gating local admin setup (first password). Until the admin
     /// is bootstrapped, the setup endpoint requires this value. Set via
     /// HOWLLO_ADMIN_BOOTSTRAP_KEY. If unset, local admin setup is disabled.
@@ -47,6 +50,18 @@ impl Settings {
             rooiam_jwt_secret: env::var("HOWLLO_JWT_SECRET")
                 .unwrap_or_else(|_| "dev-secret".to_string()),
             rooiam_hosted_userinfo_url: env::var("HOWLLO_ROOIAM_HOSTED_USERINFO_URL")
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
+            rooiam_widget_base_url: env::var("HOWLLO_ROOIAM_WIDGET_BASE_URL")
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
+            rooiam_widget_workspace_id: env::var("HOWLLO_ROOIAM_WORKSPACE_ID")
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
+            rooiam_widget_client_id: env::var("HOWLLO_ROOIAM_CLIENT_ID")
                 .ok()
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty()),

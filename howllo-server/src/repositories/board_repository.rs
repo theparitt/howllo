@@ -8,17 +8,16 @@ pub async fn list_public_boards(
     pool: &DbPool,
     tenant_slug: &str,
 ) -> Result<Vec<BoardListItemDto>, sqlx::Error> {
-    sqlx::query_as!(
-        BoardListItemDto,
+    sqlx::query_as::<_, BoardListItemDto>(
         r#"
-        SELECT b.id, b.slug, b.name, b.description, b.board_type, b.icon_url
+        SELECT b.id, b.slug, b.name, b.description, b.board_type, b.icon_url, b.background_color, b.dashboard_sections
         FROM boards b
         JOIN tenants t ON b.tenant_id = t.id
         WHERE t.slug = $1 AND b.is_private = false
         ORDER BY b.created_at ASC
         "#,
-        tenant_slug
     )
+    .bind(tenant_slug)
     .fetch_all(pool)
     .await
 }
@@ -62,17 +61,16 @@ pub async fn get_public_board_by_slug(
     tenant_slug: &str,
     board_slug: &str,
 ) -> Result<Option<BoardDetailDto>, sqlx::Error> {
-    sqlx::query_as!(
-        BoardDetailDto,
+    sqlx::query_as::<_, BoardDetailDto>(
         r#"
-        SELECT b.id, b.slug, b.name, b.description, b.board_type, b.is_private, b.icon_url
+        SELECT b.id, b.slug, b.name, b.description, b.board_type, b.is_private, b.icon_url, b.background_color, b.dashboard_sections
         FROM boards b
         JOIN tenants t ON b.tenant_id = t.id
         WHERE t.slug = $1 AND b.slug = $2
         "#,
-        tenant_slug,
-        board_slug
     )
+    .bind(tenant_slug)
+    .bind(board_slug)
     .fetch_optional(pool)
     .await
 }
@@ -81,16 +79,15 @@ pub async fn list_admin_boards(
     pool: &DbPool,
     tenant_id: Uuid,
 ) -> Result<Vec<BoardDetailDto>, sqlx::Error> {
-    sqlx::query_as!(
-        BoardDetailDto,
+    sqlx::query_as::<_, BoardDetailDto>(
         r#"
-        SELECT id, slug, name, description, board_type, is_private, icon_url
+        SELECT id, slug, name, description, board_type, is_private, icon_url, background_color, dashboard_sections
         FROM boards
         WHERE tenant_id = $1
         ORDER BY created_at ASC
         "#,
-        tenant_id
     )
+    .bind(tenant_id)
     .fetch_all(pool)
     .await
 }
@@ -105,22 +102,25 @@ pub async fn create_board(
     board_type: &str,
     is_private: bool,
     icon_url: Option<&str>,
+    background_color: Option<&str>,
+    dashboard_sections: &[String],
 ) -> Result<BoardDetailDto, sqlx::Error> {
-    sqlx::query_as!(
-        BoardDetailDto,
+    sqlx::query_as::<_, BoardDetailDto>(
         r#"
-        INSERT INTO boards (tenant_id, slug, name, description, board_type, is_private, icon_url)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING id, slug, name, description, board_type, is_private, icon_url
+        INSERT INTO boards (tenant_id, slug, name, description, board_type, is_private, icon_url, background_color, dashboard_sections)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING id, slug, name, description, board_type, is_private, icon_url, background_color, dashboard_sections
         "#,
-        tenant_id,
-        slug,
-        name,
-        description,
-        board_type,
-        is_private,
-        icon_url
     )
+    .bind(tenant_id)
+    .bind(slug)
+    .bind(name)
+    .bind(description)
+    .bind(board_type)
+    .bind(is_private)
+    .bind(icon_url)
+    .bind(background_color)
+    .bind(dashboard_sections)
     .fetch_one(&mut **tx)
     .await
 }
@@ -133,6 +133,7 @@ pub struct PreviousBoard {
     pub board_type: String,
     pub is_private: bool,
     pub is_default: bool,
+    pub background_color: Option<String>,
 }
 
 pub async fn get_board_for_update(
@@ -140,7 +141,7 @@ pub async fn get_board_for_update(
     board_id: Uuid,
 ) -> Result<Option<PreviousBoard>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT tenant_id, slug, name, description, board_type, is_private, is_default FROM boards WHERE id = $1",
+        "SELECT tenant_id, slug, name, description, board_type, is_private, is_default, background_color FROM boards WHERE id = $1",
     )
     .bind(board_id)
     .fetch_optional(&mut **tx)
@@ -154,6 +155,7 @@ pub async fn get_board_for_update(
         board_type: row.get("board_type"),
         is_private: row.get("is_private"),
         is_default: row.get("is_default"),
+        background_color: row.get("background_color"),
     }))
 }
 
@@ -166,9 +168,10 @@ pub async fn update_board(
     board_type: &str,
     is_private: bool,
     icon_url: Option<&str>,
+    background_color: Option<&str>,
+    dashboard_sections: &[String],
 ) -> Result<BoardDetailDto, sqlx::Error> {
-    sqlx::query_as!(
-        BoardDetailDto,
+    sqlx::query_as::<_, BoardDetailDto>(
         r#"
         UPDATE boards
         SET name = $1,
@@ -176,17 +179,21 @@ pub async fn update_board(
             board_type = $3,
             is_private = $4,
             icon_url = $5,
+            background_color = $6,
+            dashboard_sections = $7,
             updated_at = NOW()
-        WHERE id = $6
-        RETURNING id, slug, name, description, board_type, is_private, icon_url
+        WHERE id = $8
+        RETURNING id, slug, name, description, board_type, is_private, icon_url, background_color, dashboard_sections
         "#,
-        name,
-        description,
-        board_type,
-        is_private,
-        icon_url,
-        board_id
     )
+    .bind(name)
+    .bind(description)
+    .bind(board_type)
+    .bind(is_private)
+    .bind(icon_url)
+    .bind(background_color)
+    .bind(dashboard_sections)
+    .bind(board_id)
     .fetch_one(&mut **tx)
     .await
 }

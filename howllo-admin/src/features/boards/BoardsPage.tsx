@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { admin } from "@howllo/api-client";
 import { adminRoutes } from "@howllo/config";
-import type { BoardDetail, BoardSummary } from "@howllo/types";
+import type { BoardDetail, BoardSummary, DashboardSection } from "@howllo/types";
+import { DASHBOARD_SECTIONS } from "@howllo/types";
 import { useSession } from "../../lib/session";
 import { useAsync } from "../../lib/useAsync";
 import { Panel } from "../../components/Panel";
@@ -18,6 +19,13 @@ const BOARD_TYPES = [
   "announcements",
 ];
 
+// Public-facing labels for the dashboard sections an admin can toggle.
+const SECTION_LABELS: Record<DashboardSection, { title: string; hint: string }> = {
+  progress: { title: "Progress", hint: "Planned / in progress / done columns" },
+  latest: { title: "Latest", hint: "Most recent posts" },
+  top: { title: "Top requests", hint: "Most-voted posts" },
+};
+
 // Map a post status to a badge tone (aligns with howllo-web status colors).
 function statusTone(status: string): "green" | "blue" | "warm" | "violet" {
   const s = status.toLowerCase();
@@ -25,6 +33,52 @@ function statusTone(status: string): "green" | "blue" | "warm" | "violet" {
   if (s === "in_progress" || s === "in-progress" || s === "planned") return "blue";
   if (s === "declined" || s === "closed") return "warm";
   return "violet";
+}
+
+function colorPickerValue(value: string | null | undefined, fallback: string) {
+  const trimmed = value?.trim() ?? "";
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed : fallback;
+}
+
+function ColorPreviewField({
+  label,
+  value,
+  fallback,
+  hint,
+  onChange,
+}: {
+  label: string;
+  value: string | null | undefined;
+  fallback: string;
+  hint: string;
+  onChange: (value: string) => void;
+}) {
+  const resolved = colorPickerValue(value, fallback);
+  const style = {
+    "--swatch-color": resolved,
+  } as CSSProperties;
+
+  return (
+    <div className="color-swatch-field">
+      <span className="field-label">{label}</span>
+      <label className="color-swatch color-swatch--background" style={style}>
+        <input
+          className="color-swatch__input"
+          type="color"
+          value={resolved}
+          onChange={(event) => onChange(event.target.value)}
+          aria-label={`Pick ${label.toLowerCase()}`}
+        />
+        <span className="color-swatch__surface">
+          <span className="color-swatch__chip" aria-hidden="true" />
+          <span className="color-swatch__meta">
+            <strong>{resolved}</strong>
+            <small>{hint}</small>
+          </span>
+        </span>
+      </label>
+    </div>
+  );
 }
 
 export function BoardsPage() {
@@ -169,6 +223,7 @@ function CreateBoard({ onCreated }: { onCreated: () => void }) {
   const [boardType, setBoardType] = useState(BOARD_TYPES[0]!);
   const [isPrivate, setIsPrivate] = useState(false);
   const [iconUrl, setIconUrl] = useState<string | null>(null);
+  const [backgroundColor, setBackgroundColor] = useState("#fff1ea");
   const [iconUploading, setIconUploading] = useState(false);
   const iconInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -214,12 +269,14 @@ function CreateBoard({ onCreated }: { onCreated: () => void }) {
         board_type: boardType,
         is_private: isPrivate,
         icon_url: iconUrl,
+        background_color: backgroundColor || undefined,
       });
       setName("");
       setSlug("");
       setSlugTouched(false);
       setDescription("");
       setIconUrl(null);
+      setBackgroundColor("#fff1ea");
       onCreated();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create board");
@@ -254,69 +311,87 @@ function CreateBoard({ onCreated }: { onCreated: () => void }) {
             </div>
           </div>
         </div>
-      <div className="form-row">
-        <label>
-          Display name
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Feature Requests"
+        <div className="form-grid">
+          <label>
+            Display name
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Feature Requests"
+            />
+          </label>
+          <label>
+            Slug
+            <input
+              value={slug}
+              onChange={(e) => {
+                setSlugTouched(true);
+                setSlug(e.target.value);
+              }}
+              placeholder="feature-requests"
+            />
+          </label>
+          <label>
+            Type
+            <select
+              value={boardType}
+              onChange={(e) => setBoardType(e.target.value)}
+            >
+              {BOARD_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="checkbox toggle-field">
+            <input
+              type="checkbox"
+              checked={isPrivate}
+              onChange={(e) => setIsPrivate(e.target.checked)}
+            />
+            <span>
+              Private board
+              <span className="toggle-field__hint">Only members can view it</span>
+            </span>
+          </label>
+          <label>
+            Board background
+            <input
+              value={backgroundColor}
+              onChange={(e) => setBackgroundColor(e.target.value)}
+              placeholder="#fff1ea"
+            />
+          </label>
+          <ColorPreviewField
+            label="Background preview"
+            value={backgroundColor}
+            fallback="#fff1ea"
+            hint="Click to choose the board backdrop"
+            onChange={setBackgroundColor}
           />
-        </label>
-        <label>
-          Slug
-          <input
-            value={slug}
-            onChange={(e) => {
-              setSlugTouched(true);
-              setSlug(e.target.value);
-            }}
-            placeholder="feature-requests"
-          />
-        </label>
-        <label>
-          Type
-          <select
-            value={boardType}
-            onChange={(e) => setBoardType(e.target.value)}
+          <label className="field-stack field-span-2">
+            Description
+            <textarea
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Explain what kind of feedback belongs on this board."
+            />
+          </label>
+        </div>
+        <div className="button-row">
+          <button
+            className="primary"
+            disabled={busy || !name.trim() || !slug.trim()}
+            onClick={submit}
           >
-            {BOARD_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={isPrivate}
-            onChange={(e) => setIsPrivate(e.target.checked)}
-          />
-          Private
-        </label>
-      </div>
-      <label>
-        Description
-        <textarea
-          rows={3}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Explain what kind of feedback belongs on this board."
-        />
-      </label>
-      <div className="button-row">
-        <button
-          className="primary"
-          disabled={busy || !name.trim() || !slug.trim()}
-          onClick={submit}
-        >
-          {busy ? "Creating..." : "Create"}
-        </button>
-        <span className="muted small">
-          Slug auto-fills from the display name until you edit it manually.
-        </span>
-      </div>
+            {busy ? "Creating..." : "Create"}
+          </button>
+          <span className="muted small">
+            Slug auto-fills from the display name until you edit it manually.
+          </span>
+        </div>
       </div>
       {error ? <p className="error-text">{error}</p> : null}
     </Panel>
@@ -344,6 +419,10 @@ function EditBoard({
   const [boardType, setBoardType] = useState(board.board_type);
   const [isPrivate, setIsPrivate] = useState(board.is_private);
   const [iconUrl, setIconUrl] = useState<string | null>(board.icon_url);
+  const [backgroundColor, setBackgroundColor] = useState(board.background_color ?? "#fff1ea");
+  const [dashboardSections, setDashboardSections] = useState<DashboardSection[]>(
+    board.dashboard_sections ?? DASHBOARD_SECTIONS,
+  );
   const [iconUploading, setIconUploading] = useState(false);
   const iconInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -355,8 +434,18 @@ function EditBoard({
     setBoardType(board.board_type);
     setIsPrivate(board.is_private);
     setIconUrl(board.icon_url);
+    setBackgroundColor(board.background_color ?? "#fff1ea");
+    setDashboardSections(board.dashboard_sections ?? DASHBOARD_SECTIONS);
     setError(null);
   }, [board]);
+
+  const toggleSection = (section: DashboardSection) => {
+    setDashboardSections((current) =>
+      current.includes(section)
+        ? current.filter((s) => s !== section)
+        : DASHBOARD_SECTIONS.filter((s) => s === section || current.includes(s)),
+    );
+  };
 
   const onPickIcon = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -387,6 +476,8 @@ function EditBoard({
         board_type: boardType,
         is_private: isPrivate,
         icon_url: iconUrl,
+        background_color: backgroundColor || undefined,
+        dashboard_sections: dashboardSections,
       });
       onChanged();
     } catch (e) {
@@ -419,67 +510,54 @@ function EditBoard({
 
   return (
     <div className="detail-stack">
-      <div className="board-icon-field">
-        <BoardIcon iconUrl={iconUrl} size={64} />
-        <div className="board-icon-field__actions">
-          <span className="field-label">Board icon</span>
-          <div className="button-row">
-            <input
-              ref={iconInputRef}
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={onPickIcon}
-            />
-            <button
-              type="button"
-              disabled={iconUploading}
-              onClick={() => iconInputRef.current?.click()}
-            >
-              {iconUploading ? "Uploading..." : iconUrl ? "Replace" : "Upload icon"}
-            </button>
-            {iconUrl ? (
-              <button type="button" className="danger" onClick={() => setIconUrl(null)}>
-                Remove
-              </button>
-            ) : null}
-          </div>
-          <p className="muted small">
-            {iconUrl
-              ? "Custom icon. Remove to use the Howllo default."
-              : "Using the Howllo default icon. Upload one to override it."}
-          </p>
-        </div>
-      </div>
+      <fieldset className="field-group">
+        <legend className="field-group__title">Basics</legend>
 
-      <div className="form-grid">
-        <label>
-          Display name
-          <input value={name} onChange={(e) => setName(e.target.value)} />
-        </label>
-        <label>
-          Slug
-          <input value={board.slug} disabled />
-        </label>
-        <label>
-          Type
-          <select value={boardType} onChange={(e) => setBoardType(e.target.value)}>
-            {BOARD_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={isPrivate}
-            onChange={(e) => setIsPrivate(e.target.checked)}
-          />
-          Private board
-        </label>
-        <label className="field-span-2">
+        <div className="board-icon-field">
+          <BoardIcon iconUrl={iconUrl} size={64} />
+          <div className="board-icon-field__actions">
+            <span className="field-label">Board icon</span>
+            <div className="button-row">
+              <input
+                ref={iconInputRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={onPickIcon}
+              />
+              <button
+                type="button"
+                disabled={iconUploading}
+                onClick={() => iconInputRef.current?.click()}
+              >
+                {iconUploading ? "Uploading..." : iconUrl ? "Replace" : "Upload icon"}
+              </button>
+              {iconUrl ? (
+                <button type="button" className="danger" onClick={() => setIconUrl(null)}>
+                  Remove
+                </button>
+              ) : null}
+            </div>
+            <p className="muted small">
+              {iconUrl
+                ? "Custom icon. Remove to use the Howllo default."
+                : "Using the Howllo default icon. Upload one to override it."}
+            </p>
+          </div>
+        </div>
+
+        <div className="form-grid">
+          <label>
+            Display name
+            <input value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label>
+            Slug
+            <input value={board.slug} disabled />
+          </label>
+        </div>
+
+        <label className="field-stack">
           Description
           <textarea
             value={description}
@@ -487,7 +565,78 @@ function EditBoard({
             rows={4}
           />
         </label>
-      </div>
+      </fieldset>
+
+      <fieldset className="field-group">
+        <legend className="field-group__title">Access &amp; type</legend>
+        <div className="form-grid">
+          <label>
+            Type
+            <select value={boardType} onChange={(e) => setBoardType(e.target.value)}>
+              {BOARD_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="checkbox toggle-field">
+            <input
+              type="checkbox"
+              checked={isPrivate}
+              onChange={(e) => setIsPrivate(e.target.checked)}
+            />
+            <span>
+              Private board
+              <span className="toggle-field__hint">Only members can view it</span>
+            </span>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset className="field-group">
+        <legend className="field-group__title">Appearance</legend>
+        <div className="form-grid board-appearance-grid">
+          <label>
+            Board background
+            <input
+              value={backgroundColor}
+              onChange={(e) => setBackgroundColor(e.target.value)}
+              placeholder="#fff1ea"
+            />
+          </label>
+          <ColorPreviewField
+            label="Background preview"
+            value={backgroundColor}
+            fallback="#fff1ea"
+            hint="Click to choose the board backdrop"
+            onChange={setBackgroundColor}
+          />
+        </div>
+      </fieldset>
+
+      <fieldset className="field-group">
+        <legend className="field-group__title">Dashboard sections</legend>
+        <p className="field-group__hint">
+          Choose which blocks appear on this board&rsquo;s public dashboard. Turn off the
+          noisy ones to keep it focused.
+        </p>
+        <div className="section-toggles">
+          {DASHBOARD_SECTIONS.map((section) => (
+            <label key={section} className="checkbox toggle-field">
+              <input
+                type="checkbox"
+                checked={dashboardSections.includes(section)}
+                onChange={() => toggleSection(section)}
+              />
+              <span>
+                {SECTION_LABELS[section].title}
+                <span className="toggle-field__hint">{SECTION_LABELS[section].hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
 
       <div className="button-row">
         <button className="primary" disabled={busy || !name.trim()} onClick={save}>

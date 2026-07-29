@@ -1,14 +1,14 @@
 use std::collections::VecDeque;
-use std::future::{Ready, ready};
+use std::future::{ready, Ready};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
-use actix_web::Error;
 use actix_web::body::MessageBody;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::http::header::{HeaderName, HeaderValue};
+use actix_web::Error;
 use dashmap::DashMap;
 use futures::Future;
 use tracing::info;
@@ -196,7 +196,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use actix_web::{App, http::StatusCode, test};
+    use actix_web::{http::StatusCode, test, App};
 
     use crate::startup;
 
@@ -218,7 +218,7 @@ mod tests {
 pub mod test_support {
     use actix_web::test;
     use chrono::{Duration, Utc};
-    use jsonwebtoken::{EncodingKey, Header, encode};
+    use jsonwebtoken::{encode, EncodingKey, Header};
     use serde_json::Value;
     use sqlx::Executor;
     use std::sync::OnceLock;
@@ -253,6 +253,51 @@ pub mod test_support {
             ALTER TABLE boards
             ADD COLUMN IF NOT EXISTS icon_url TEXT;
 
+            ALTER TABLE boards
+            ADD COLUMN IF NOT EXISTS background_color VARCHAR(32);
+
+            ALTER TABLE boards
+            ADD COLUMN IF NOT EXISTS dashboard_sections TEXT[] NOT NULL DEFAULT '{progress,latest,top}';
+
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+
+            CREATE TABLE IF NOT EXISTS tenant_branding (
+                tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+                site_name VARCHAR(255),
+                logo_url TEXT,
+                accent_color VARCHAR(32),
+                background_color VARCHAR(32),
+                show_powered_by BOOLEAN NOT NULL DEFAULT TRUE,
+                show_roadmap BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+
+            ALTER TABLE tenant_branding
+                ADD COLUMN IF NOT EXISTS show_roadmap BOOLEAN NOT NULL DEFAULT TRUE;
+
+            CREATE TABLE IF NOT EXISTS workspace_auth_configs (
+                tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+                provider VARCHAR(32) NOT NULL DEFAULT 'rooiam',
+                rooiam_workspace_id TEXT,
+                rooiam_client_id TEXT,
+                rooiam_widget_base_url TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+
+            CREATE TABLE IF NOT EXISTS workspace_sessions (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                token_hash TEXT NOT NULL UNIQUE,
+                expires_at TIMESTAMPTZ NOT NULL,
+                revoked_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                last_used_at TIMESTAMPTZ
+            );
+
             ALTER TABLE posts
             ADD COLUMN IF NOT EXISTS attachments JSONB NOT NULL DEFAULT '[]'::jsonb;
 
@@ -283,7 +328,10 @@ pub mod test_support {
                 boards,
                 memberships,
                 users,
-                tenants
+                tenants,
+                tenant_branding,
+                workspace_auth_configs,
+                workspace_sessions
             RESTART IDENTITY CASCADE
             "#,
         )
@@ -424,6 +472,9 @@ pub mod test_support {
             bind_address: "127.0.0.1:0".to_string(),
             rooiam_jwt_secret: "dev-secret".to_string(),
             rooiam_hosted_userinfo_url: None,
+            rooiam_widget_base_url: Some("https://api.rooiam.com/login-widget".to_string()),
+            rooiam_widget_workspace_id: Some("workspace-dev".to_string()),
+            rooiam_widget_client_id: Some("client-dev".to_string()),
             admin_bootstrap_key: Some("test-bootstrap-key".to_string()),
             allowed_origins: vec!["http://localhost:3000".to_string()],
             rate_limit_enabled: false,

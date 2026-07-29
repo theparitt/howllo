@@ -3,27 +3,67 @@ use actix_web::{delete, get, post, web, HttpResponse, Responder};
 use crate::auth::AuthenticatedUser;
 use crate::db::DbPool;
 use crate::errors::AppError;
+use crate::realtime::{Hub, RealtimeEvent};
+use crate::repositories::post_repository;
 use crate::services::subscription_service;
 
 #[post("/api/posts/{post_id}/follow")]
 pub async fn follow_post(
     pool: web::Data<DbPool>,
+    hub: web::Data<Hub>,
     path: web::Path<uuid::Uuid>,
     auth: AuthenticatedUser,
 ) -> Result<impl Responder, AppError> {
     let post_id = path.into_inner();
     let dto = subscription_service::follow_post(pool.get_ref(), post_id, auth.0.id).await?;
+
+    if let Some(scope) = post_repository::find_post_access(pool.get_ref(), post_id, None)
+        .await
+        .map_err(|error| {
+            tracing::error!(error = %error, post_id = %post_id, "error loading follow realtime scope");
+            AppError::InternalServerError
+        })?
+    {
+        hub.broadcast(
+            scope.tenant_id,
+            RealtimeEvent {
+                event_type: "post.follow_changed".to_string(),
+                board_id: Some(scope.board_id),
+                post_id: Some(post_id),
+            },
+        );
+    }
+
     Ok(HttpResponse::Ok().json(dto))
 }
 
 #[delete("/api/posts/{post_id}/follow")]
 pub async fn unfollow_post(
     pool: web::Data<DbPool>,
+    hub: web::Data<Hub>,
     path: web::Path<uuid::Uuid>,
     auth: AuthenticatedUser,
 ) -> Result<impl Responder, AppError> {
     let post_id = path.into_inner();
     let dto = subscription_service::unfollow_post(pool.get_ref(), post_id, auth.0.id).await?;
+
+    if let Some(scope) = post_repository::find_post_access(pool.get_ref(), post_id, None)
+        .await
+        .map_err(|error| {
+            tracing::error!(error = %error, post_id = %post_id, "error loading unfollow realtime scope");
+            AppError::InternalServerError
+        })?
+    {
+        hub.broadcast(
+            scope.tenant_id,
+            RealtimeEvent {
+                event_type: "post.follow_changed".to_string(),
+                board_id: Some(scope.board_id),
+                post_id: Some(post_id),
+            },
+        );
+    }
+
     Ok(HttpResponse::Ok().json(dto))
 }
 

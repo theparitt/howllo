@@ -7,6 +7,10 @@ export type BoardType =
   | "announcements"
   | "changelog";
 
+export type DashboardSection = "progress" | "latest" | "top";
+
+export const DASHBOARD_SECTIONS: DashboardSection[] = ["progress", "latest", "top"];
+
 export type Board = {
   id: string;
   slug: string;
@@ -14,6 +18,8 @@ export type Board = {
   description: string | null;
   board_type: string;
   icon_url: string | null;
+  background_color: string | null;
+  dashboard_sections: DashboardSection[];
 };
 
 export type BoardDetail = Board & {

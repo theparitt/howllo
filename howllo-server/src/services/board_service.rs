@@ -132,9 +132,13 @@ pub async fn create_board(
     board_type: &str,
     is_private: bool,
     icon_url: Option<&str>,
+    background_color: Option<&str>,
+    dashboard_sections: Option<Vec<String>>,
     user_id: Uuid,
 ) -> Result<BoardDetailDto, AppError> {
     let tenant_id = require_admin_by_tenant_slug(pool, tenant_slug, user_id).await?;
+    validate_optional_color(background_color, "background_color")?;
+    let dashboard_sections = normalize_dashboard_sections(dashboard_sections)?;
 
     let mut tx = pool.begin().await.map_err(|e| {
         tracing::error!(error = %e, tenant_id = %tenant_id, "error starting board create transaction");
@@ -150,6 +154,8 @@ pub async fn create_board(
         board_type,
         is_private,
         icon_url,
+        background_color,
+        &dashboard_sections,
     )
     .await
     .map_err(|e| {
@@ -172,6 +178,7 @@ pub async fn create_board(
                 "description": board.description,
                 "board_type": board.board_type,
                 "is_private": board.is_private,
+                "background_color": board.background_color,
             })),
             reason: None,
         },
@@ -195,9 +202,13 @@ pub async fn update_board(
     board_type: &str,
     is_private: bool,
     icon_url: Option<&str>,
+    background_color: Option<&str>,
+    dashboard_sections: Option<Vec<String>>,
     user_id: Uuid,
 ) -> Result<BoardDetailDto, AppError> {
     require_admin_by_board_id(pool, board_id, user_id).await?;
+    validate_optional_color(background_color, "background_color")?;
+    let dashboard_sections = normalize_dashboard_sections(dashboard_sections)?;
 
     let mut tx = pool.begin().await.map_err(|e| {
         tracing::error!(error = %e, board_id = %board_id, "error starting board update transaction");
@@ -220,6 +231,8 @@ pub async fn update_board(
         board_type,
         is_private,
         icon_url,
+        background_color,
+        &dashboard_sections,
     )
     .await
     .map_err(|e| {
@@ -241,6 +254,7 @@ pub async fn update_board(
                 "description": previous.description,
                 "board_type": previous.board_type,
                 "is_private": previous.is_private,
+                "background_color": previous.background_color,
             })),
             new_value: Some(json!({
                 "slug": board.slug,
@@ -248,6 +262,7 @@ pub async fn update_board(
                 "description": board.description,
                 "board_type": board.board_type,
                 "is_private": board.is_private,
+                "background_color": board.background_color,
             })),
             reason: None,
         },
@@ -308,6 +323,7 @@ pub async fn delete_board(pool: &DbPool, board_id: Uuid, user_id: Uuid) -> Resul
                 "description": previous.description,
                 "board_type": previous.board_type,
                 "is_private": previous.is_private,
+                "background_color": previous.background_color,
             })),
             new_value: None,
             reason: None,
@@ -321,4 +337,49 @@ pub async fn delete_board(pool: &DbPool, board_id: Uuid, user_id: Uuid) -> Resul
     })?;
 
     Ok(())
+}
+
+fn validate_optional_color(value: Option<&str>, field: &str) -> Result<(), AppError> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    let bytes = value.as_bytes();
+    let is_valid = bytes.len() == 7
+        && bytes[0] == b'#'
+        && bytes[1..].iter().all(|byte| byte.is_ascii_hexdigit());
+
+    if is_valid {
+        Ok(())
+    } else {
+        Err(AppError::Validation(format!(
+            "{field} must be a hex color like #f36949"
+        )))
+    }
+}
+
+/// The dashboard sections a board can show, in canonical display order.
+const DASHBOARD_SECTIONS: [&str; 3] = ["progress", "latest", "top"];
+
+/// Validate and normalize the requested dashboard sections. `None` means "use
+/// all sections" (default). Unknown values are rejected. The result keeps the
+/// canonical order and is deduplicated, so callers/storage stay consistent.
+fn normalize_dashboard_sections(
+    requested: Option<Vec<String>>,
+) -> Result<Vec<String>, AppError> {
+    let Some(requested) = requested else {
+        return Ok(DASHBOARD_SECTIONS.iter().map(|s| s.to_string()).collect());
+    };
+    for value in &requested {
+        if !DASHBOARD_SECTIONS.contains(&value.as_str()) {
+            return Err(AppError::Validation(format!(
+                "dashboard_sections may only contain: {}",
+                DASHBOARD_SECTIONS.join(", ")
+            )));
+        }
+    }
+    Ok(DASHBOARD_SECTIONS
+        .iter()
+        .filter(|section| requested.iter().any(|r| r == *section))
+        .map(|s| s.to_string())
+        .collect())
 }

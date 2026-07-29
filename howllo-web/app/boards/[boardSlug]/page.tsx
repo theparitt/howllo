@@ -1,9 +1,16 @@
 import Link from "next/link";
 import { getBoardDetail, getBoardPosts } from "@/lib/api";
-import { buildTenantPath, resolveTenantContext } from "@/lib/default-tenant";
+import {
+  WorkspaceContextError,
+  buildTenantPath,
+  resolveTenantContext,
+} from "@/lib/default-tenant";
 import { getServerBearerToken } from "@/lib/server-auth";
 import { ApiUnavailable } from "@/components/api-unavailable";
+import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { StatusPill } from "@/components/status-pill";
+import { WorkspaceState } from "@/components/workspace-state";
+import { themedSurfaceStyle } from "@/lib/theme";
 
 type BoardPageProps = {
   params: Promise<{
@@ -20,11 +27,22 @@ type BoardPageProps = {
 export default async function BoardPage({ params, searchParams }: BoardPageProps) {
   const { boardSlug } = await params;
   const query = await searchParams;
-  const { tenantSlug: tenant, defaultTenantSlug } = await resolveTenantContext(query.tenant);
+  let tenant: string;
+  let defaultTenantSlug: string;
+
+  try {
+    ({ tenantSlug: tenant, defaultTenantSlug } = await resolveTenantContext(query.tenant));
+  } catch (error) {
+    if (error instanceof WorkspaceContextError) {
+      return <WorkspaceState kind={error.kind} workspaceSlug={error.workspaceSlug} />;
+    }
+    throw error;
+  }
+
   const sort = query.sort ?? "newest";
   const status = query.status;
   const page = Number(query.page ?? "1");
-  const token = await getServerBearerToken();
+  const token = await getServerBearerToken(tenant);
 
   try {
     const [board, posts] = await Promise.all([
@@ -50,28 +68,57 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
 
     return (
       <div className="page-stack">
-        <section className="page-head">
-          <Link className="back-link" href={buildTenantPath("/", tenant, defaultTenantSlug)}>
-            ← Boards
-          </Link>
-          <div className="eyebrow-row">
-            <span
-              className={`board-hero-icon board-hero-icon--sm${board.icon_url ? "" : " board-hero-icon--default"}`}
-            >
-              <img src={board.icon_url || "/brand/howllo-logo.svg"} alt="" />
-            </span>
-            <span className="kicker">{board.board_type}</span>
-            {board.is_private ? <span className="chip" data-tone="blue">Private</span> : null}
-          </div>
-          <h1 className="page-title">{board.name}</h1>
-          {board.description ? <p className="page-lead">{board.description}</p> : null}
-          <div className="hero__actions" style={{ marginTop: "0.4rem" }}>
-            <Link
-              className="button"
-              href={buildTenantPath(`/boards/${board.slug}/new`, tenant, defaultTenantSlug)}
-            >
-              Submit feedback
+        <RealtimeRefresh boardId={board.id} tenantSlug={tenant} />
+        <section
+          className="hero board-hero board-themed-surface"
+          style={themedSurfaceStyle(board.background_color)}
+        >
+          <div className="board-hero__topline">
+            <Link className="back-link" href={buildTenantPath("/", tenant, defaultTenantSlug)}>
+              ← Boards
             </Link>
+            <div className="board-hero__chips">
+              <span className="chip">{posts.length} posts</span>
+              {board.is_private ? <span className="chip" data-tone="blue">Private</span> : null}
+            </div>
+          </div>
+          <div className="board-hero__body">
+            <div className="board-hero__identity">
+              <span
+                className={`board-hero-icon${board.icon_url ? "" : " board-hero-icon--default"}`}
+              >
+                <img src={board.icon_url || "/brand/howllo-logo.svg"} alt="" />
+              </span>
+              <div className="stack stack--tight">
+                <div className="eyebrow-row">
+                  <span className="kicker">{board.board_type}</span>
+                </div>
+                <h1 className="page-title">{board.name}</h1>
+                {board.description ? (
+                  <p className="page-lead">{board.description}</p>
+                ) : (
+                  <p className="page-lead">
+                    Ideas, requests, and issues for this board live here.
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="board-hero__actions">
+              <Link
+                className="button button--cta"
+                href={buildTenantPath(`/boards/${board.slug}/new`, tenant, defaultTenantSlug)}
+              >
+                New post
+              </Link>
+              <Link
+                className="ghost-button"
+                href={buildTenantPath("/dashboard", tenant, defaultTenantSlug, new URLSearchParams({
+                  board: board.slug,
+                }))}
+              >
+                Board overview
+              </Link>
+            </div>
           </div>
         </section>
 
@@ -97,7 +144,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
         ) : (
           <section className="panel empty-state">
             <h2 className="empty-state__title">No requests yet</h2>
-            <p className="empty-state__copy">Be the first to submit feedback for this board.</p>
+            <p className="empty-state__copy">Be the first to create a post for this board.</p>
           </section>
         )}
       </div>

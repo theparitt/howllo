@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
-import { DEV_AUTH_COOKIE } from "@/lib/auth-cookie";
+import { getWorkspaceAuthCookieName } from "@/lib/auth-cookie";
 
-export async function getServerBearerToken() {
+export async function getServerBearerToken(tenantSlug: string) {
   const cookieStore = await cookies();
-  return cookieStore.get(DEV_AUTH_COOKIE)?.value ?? undefined;
+  return cookieStore.get(getWorkspaceAuthCookieName(tenantSlug))?.value ?? undefined;
 }

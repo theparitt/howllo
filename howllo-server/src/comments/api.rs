@@ -5,6 +5,8 @@ use crate::auth::AuthenticatedUser;
 use crate::db::DbPool;
 use crate::dto::CreateCommentRequest;
 use crate::errors::AppError;
+use crate::realtime::{Hub, RealtimeEvent};
+use crate::repositories::post_repository;
 use crate::services::comment_service;
 
 #[derive(Deserialize)]
@@ -17,6 +19,7 @@ pub struct CommentListQuery {
 pub async fn create_comment(
     req: HttpRequest,
     pool: web::Data<DbPool>,
+    hub: web::Data<Hub>,
     path: web::Path<uuid::Uuid>,
     body: web::Json<CreateCommentRequest>,
     auth: AuthenticatedUser,
@@ -37,6 +40,24 @@ pub async fn create_comment(
 
     let comment =
         comment_service::create_comment(pool.get_ref(), post_id, user_id, &body.body).await?;
+
+    if let Some(scope) = post_repository::find_post_access(pool.get_ref(), post_id, None)
+        .await
+        .map_err(|error| {
+            tracing::error!(error = %error, post_id = %post_id, "error loading comment realtime scope");
+            AppError::InternalServerError
+        })?
+    {
+        hub.broadcast(
+            scope.tenant_id,
+            RealtimeEvent {
+                event_type: "comment.created".to_string(),
+                board_id: Some(scope.board_id),
+                post_id: Some(post_id),
+            },
+        );
+    }
+
     Ok(HttpResponse::Created().json(comment))
 }
 

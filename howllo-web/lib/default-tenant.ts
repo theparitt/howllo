@@ -1,5 +1,4 @@
-import { getBootstrapTenant } from "@/lib/api";
-import { DEFAULT_TENANT } from "@/lib/config";
+import { ApiError, getTenantBranding } from "@/lib/api";
 
 export type TenantContext = {
   tenantSlug: string;
@@ -7,33 +6,52 @@ export type TenantContext = {
   isDefaultTenant: boolean;
 };
 
+export class WorkspaceContextError extends Error {
+  readonly kind: "missing" | "invalid";
+  readonly workspaceSlug?: string;
+
+  constructor(kind: "missing" | "invalid", workspaceSlug?: string) {
+    super(
+      kind === "missing"
+        ? "No workspace parameter was provided."
+        : `There is no workspace with slug or id "${workspaceSlug}".`,
+    );
+    this.name = "WorkspaceContextError";
+    this.kind = kind;
+    this.workspaceSlug = workspaceSlug;
+  }
+}
+
 export async function resolveTenantSlug(preferred?: string): Promise<string> {
   return (await resolveTenantContext(preferred)).tenantSlug;
 }
 
 export async function resolveTenantContext(preferred?: string): Promise<TenantContext> {
-  let defaultTenantSlug = DEFAULT_TENANT;
+  const tenantSlug = preferred?.trim();
+  if (!tenantSlug) {
+    throw new WorkspaceContextError("missing");
+  }
 
   try {
-    const bootstrap = await getBootstrapTenant();
-    if (bootstrap.default_tenant_slug.trim()) {
-      defaultTenantSlug = bootstrap.default_tenant_slug.trim();
+    await getTenantBranding(tenantSlug);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      throw new WorkspaceContextError("invalid", tenantSlug);
     }
-  } catch {}
-
-  const tenantSlug = preferred?.trim() || defaultTenantSlug;
+    throw error;
+  }
 
   return {
     tenantSlug,
-    defaultTenantSlug,
-    isDefaultTenant: tenantSlug === defaultTenantSlug,
+    defaultTenantSlug: tenantSlug,
+    isDefaultTenant: true,
   };
 }
 
 export function buildTenantPath(
   path: string,
   tenantSlug: string,
-  defaultTenantSlug: string,
+  _defaultTenantSlug: string,
   search?: URLSearchParams,
 ): string {
   const params = new URLSearchParams(search);
@@ -41,7 +59,6 @@ export function buildTenantPath(
 
   const query = params.toString();
   const normalizedPath = path === "/" ? "" : path;
-  const basePath =
-    tenantSlug === defaultTenantSlug ? (normalizedPath || "/") : `/${encodeURIComponent(tenantSlug)}${normalizedPath}`;
+  const basePath = `/${encodeURIComponent(tenantSlug)}${normalizedPath}`;
   return query ? `${basePath}?${query}` : basePath;
 }

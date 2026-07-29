@@ -112,9 +112,7 @@ fn pick(db_value: &str, env_key: &str, default: &str) -> String {
 
 // ── Load / Save ──────────────────────────────────────────────────────────────
 
-pub async fn load_platform_storage_config(
-    db: &PgPool,
-) -> Result<PlatformStorageConfig, AppError> {
+pub async fn load_platform_storage_config(db: &PgPool) -> Result<PlatformStorageConfig, AppError> {
     let backend_setting = get(db, "storage_backend").await;
     let local_path_setting = get(db, "storage_local_path").await;
     let public_base_setting = get(db, "storage_public_base_url").await;
@@ -148,8 +146,8 @@ pub async fn load_platform_storage_config(
     let minio_endpoint = pick(&endpoint_setting, "HOWLLO_MINIO_ENDPOINT", "");
     let minio_bucket = pick(&bucket_setting, "HOWLLO_MINIO_BUCKET", "");
     let minio_access_key = pick(&access_setting, "HOWLLO_MINIO_USER", "");
-    let secret_configured = !secret_setting.trim().is_empty()
-        || !env_value("HOWLLO_MINIO_PASSWORD").is_empty();
+    let secret_configured =
+        !secret_setting.trim().is_empty() || !env_value("HOWLLO_MINIO_PASSWORD").is_empty();
     let minio_use_ssl = if ssl_setting.trim().is_empty() {
         minio_endpoint.trim().starts_with("https://")
     } else {
@@ -328,7 +326,14 @@ pub async fn test_minio_storage(
 
     // 2. WRITE (authenticated).
     if let Err(e) = put_minio_object(
-        endpoint, bucket, &probe_key, probe_body, "text/plain", access_key, secret_key, use_ssl,
+        endpoint,
+        bucket,
+        &probe_key,
+        probe_body,
+        "text/plain",
+        access_key,
+        secret_key,
+        use_ssl,
     )
     .await
     {
@@ -346,10 +351,11 @@ pub async fn test_minio_storage(
     let read_result = client.get(&read_url).send().await;
 
     // 4. DELETE (cleanup, best-effort).
-    let delete_err =
-        delete_minio_object(endpoint, bucket, &probe_key, access_key, secret_key, use_ssl)
-            .await
-            .err();
+    let delete_err = delete_minio_object(
+        endpoint, bucket, &probe_key, access_key, secret_key, use_ssl,
+    )
+    .await
+    .err();
 
     let read_ok: Result<(), String> = match read_result {
         Ok(resp) => match resp.status().as_u16() {
@@ -481,7 +487,12 @@ pub async fn ensure_minio_bucket_exists(
             payload_hash
         );
         let auth = sign(
-            access_key, secret_key, &date_stamp, &amz_date, signed, &canonical_request,
+            access_key,
+            secret_key,
+            &date_stamp,
+            &amz_date,
+            signed,
+            &canonical_request,
         );
         let resp = client
             .put(&url)
@@ -527,7 +538,12 @@ pub async fn set_minio_bucket_public_read(
     let canonical_request =
         format!("PUT\n/{bucket}\npolicy=\n{canonical_headers}\n{signed}\n{payload_hash}");
     let auth = sign(
-        access_key, secret_key, &date_stamp, &amz_date, signed, &canonical_request,
+        access_key,
+        secret_key,
+        &date_stamp,
+        &amz_date,
+        signed,
+        &canonical_request,
     );
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
@@ -579,7 +595,12 @@ async fn put_minio_object(
     let canonical_request =
         format!("PUT\n/{bucket}/{key}\n\n{canonical_headers}\n{signed}\n{payload_hash}");
     let auth = sign(
-        access_key, secret_key, &date_stamp, &amz_date, signed, &canonical_request,
+        access_key,
+        secret_key,
+        &date_stamp,
+        &amz_date,
+        signed,
+        &canonical_request,
     );
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
@@ -599,8 +620,12 @@ async fn put_minio_object(
         .map_err(|e| format!("cannot reach host {host} ({e})"))?;
     match resp.status().as_u16() {
         200 | 201 | 204 => Ok(()),
-        403 => Err(format!("access denied (403) — check keys for bucket '{bucket}'")),
-        404 => Err(format!("bucket '{bucket}' not found (404) — create it first")),
+        403 => Err(format!(
+            "access denied (403) — check keys for bucket '{bucket}'"
+        )),
+        404 => Err(format!(
+            "bucket '{bucket}' not found (404) — create it first"
+        )),
         other => {
             let body = resp.text().await.unwrap_or_default();
             Err(format!("PUT returned {other}: {body}"))
@@ -629,7 +654,12 @@ async fn delete_minio_object(
     let canonical_request =
         format!("DELETE\n/{bucket}/{key}\n\n{canonical_headers}\n{signed}\n{payload_hash}");
     let auth = sign(
-        access_key, secret_key, &date_stamp, &amz_date, signed, &canonical_request,
+        access_key,
+        secret_key,
+        &date_stamp,
+        &amz_date,
+        signed,
+        &canonical_request,
     );
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))

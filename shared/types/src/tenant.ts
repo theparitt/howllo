@@ -14,7 +14,9 @@ export type TenantBranding = {
   site_name: string;
   logo_url: string | null;
   accent_color: string | null;
+  background_color: string | null;
   show_powered_by: boolean;
+  show_roadmap: boolean;
 };
 
 export type AdminTenantSummary = {

@@ -61,7 +61,9 @@ pub async fn upload_image(
 
     let content_type = body.content_type.trim().to_lowercase();
     if !content_type.starts_with("image/") {
-        return Err(AppError::Validation("Only image uploads are allowed.".into()));
+        return Err(AppError::Validation(
+            "Only image uploads are allowed.".into(),
+        ));
     }
 
     let bytes = base64::engine::general_purpose::STANDARD
@@ -143,7 +145,10 @@ pub async fn save_storage_config(
 ) -> Result<impl Responder, AppError> {
     ensure_platform_admin(&auth)?;
     let cfg = save_platform_storage_config(pool.get_ref(), &body).await?;
-    tracing::info!(backend = cfg.backend.as_str(), "platform storage config saved");
+    tracing::info!(
+        backend = cfg.backend.as_str(),
+        "platform storage config saved"
+    );
     Ok(HttpResponse::Ok().json(cfg))
 }
 
@@ -260,24 +265,54 @@ pub async fn get_build_info(
     let storage = load_platform_storage_config(pool.get_ref()).await?;
 
     let env = vec![
-        EnvVar { key: "HOWLLO_DATABASE_URL".into(), value: mask_url(&settings.database_url) },
-        EnvVar { key: "HOWLLO_BIND_ADDRESS".into(), value: settings.bind_address.clone() },
-        EnvVar { key: "HOWLLO_JWT_SECRET".into(), value: mask_secret(&settings.rooiam_jwt_secret) },
+        EnvVar {
+            key: "HOWLLO_DATABASE_URL".into(),
+            value: mask_url(&settings.database_url),
+        },
+        EnvVar {
+            key: "HOWLLO_BIND_ADDRESS".into(),
+            value: settings.bind_address.clone(),
+        },
+        EnvVar {
+            key: "HOWLLO_JWT_SECRET".into(),
+            value: mask_secret(&settings.rooiam_jwt_secret),
+        },
         EnvVar {
             key: "HOWLLO_ADMIN_BOOTSTRAP_KEY".into(),
             value: mask_secret(settings.admin_bootstrap_key.as_deref().unwrap_or("")),
         },
-        EnvVar { key: "HOWLLO_STORAGE_BACKEND".into(), value: storage.backend.as_str().to_string() },
-        EnvVar { key: "HOWLLO_STORAGE_PUBLIC_BASE_URL".into(), value: storage.public_base_url.clone() },
-        EnvVar { key: "HOWLLO_MINIO_ENDPOINT".into(), value: env_or("HOWLLO_MINIO_ENDPOINT", "(not set)") },
-        EnvVar { key: "HOWLLO_MINIO_BUCKET".into(), value: env_or("HOWLLO_MINIO_BUCKET", "(not set)") },
-        EnvVar { key: "HOWLLO_MINIO_USER".into(), value: env_or("HOWLLO_MINIO_USER", "(not set)") },
+        EnvVar {
+            key: "HOWLLO_STORAGE_BACKEND".into(),
+            value: storage.backend.as_str().to_string(),
+        },
+        EnvVar {
+            key: "HOWLLO_STORAGE_PUBLIC_BASE_URL".into(),
+            value: storage.public_base_url.clone(),
+        },
+        EnvVar {
+            key: "HOWLLO_MINIO_ENDPOINT".into(),
+            value: env_or("HOWLLO_MINIO_ENDPOINT", "(not set)"),
+        },
+        EnvVar {
+            key: "HOWLLO_MINIO_BUCKET".into(),
+            value: env_or("HOWLLO_MINIO_BUCKET", "(not set)"),
+        },
+        EnvVar {
+            key: "HOWLLO_MINIO_USER".into(),
+            value: env_or("HOWLLO_MINIO_USER", "(not set)"),
+        },
         EnvVar {
             key: "HOWLLO_MINIO_PASSWORD".into(),
             value: mask_secret(&env_or("HOWLLO_MINIO_PASSWORD", "")),
         },
-        EnvVar { key: "HOWLLO_ALLOWED_ORIGINS".into(), value: settings.allowed_origins.join(", ") },
-        EnvVar { key: "HOWLLO_AI_ENABLED".into(), value: settings.ai.enabled.to_string() },
+        EnvVar {
+            key: "HOWLLO_ALLOWED_ORIGINS".into(),
+            value: settings.allowed_origins.join(", "),
+        },
+        EnvVar {
+            key: "HOWLLO_AI_ENABLED".into(),
+            value: settings.ai.enabled.to_string(),
+        },
     ];
 
     Ok(HttpResponse::Ok().json(BuildInfoResponse {
@@ -305,9 +340,24 @@ pub async fn test_storage(
             }
         }
         StorageBackend::Minio => {
-            let endpoint = body.minio_endpoint.as_deref().unwrap_or("").trim().to_string();
-            let bucket = body.minio_bucket.as_deref().unwrap_or("").trim().to_string();
-            let access = body.minio_access_key.as_deref().unwrap_or("").trim().to_string();
+            let endpoint = body
+                .minio_endpoint
+                .as_deref()
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            let bucket = body
+                .minio_bucket
+                .as_deref()
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            let access = body
+                .minio_access_key
+                .as_deref()
+                .unwrap_or("")
+                .trim()
+                .to_string();
             let use_ssl = body.minio_use_ssl.unwrap_or(true);
 
             // Use the submitted secret; if blank, fall back to the stored/env one
@@ -343,7 +393,9 @@ pub async fn get_storage_usage(
     )
     .fetch_all(pool.get_ref())
     .await
-    .map_err(|e| AppError::InternalServerError.with_log(format!("list workspaces for storage usage: {e}")))?;
+    .map_err(|e| {
+        AppError::InternalServerError.with_log(format!("list workspaces for storage usage: {e}"))
+    })?;
 
     let mut size_cache: HashMap<String, u64> = HashMap::new();
     let mut items = Vec::with_capacity(workspace_rows.len());
@@ -358,7 +410,11 @@ pub async fn get_storage_usage(
             .bind(workspace_id)
             .fetch_all(pool.get_ref())
             .await
-            .map_err(|e| AppError::InternalServerError.with_log(format!("list attachments for workspace {workspace_slug}: {e}")))?;
+            .map_err(|e| {
+                AppError::InternalServerError.with_log(format!(
+                    "list attachments for workspace {workspace_slug}: {e}"
+                ))
+            })?;
 
         let mut logo_urls = HashSet::new();
         let mut attachment_urls = HashSet::new();
@@ -380,12 +436,16 @@ pub async fn get_storage_usage(
 
         let mut logo_bytes = 0_u64;
         for url in &logo_urls {
-            logo_bytes += asset_size_bytes(&cfg, url, &mut size_cache).await.unwrap_or(0);
+            logo_bytes += asset_size_bytes(&cfg, url, &mut size_cache)
+                .await
+                .unwrap_or(0);
         }
 
         let mut attachment_bytes = 0_u64;
         for url in &attachment_urls {
-            attachment_bytes += asset_size_bytes(&cfg, url, &mut size_cache).await.unwrap_or(0);
+            attachment_bytes += asset_size_bytes(&cfg, url, &mut size_cache)
+                .await
+                .unwrap_or(0);
         }
 
         let asset_count = logo_urls.len() + attachment_urls.len();
@@ -493,7 +553,10 @@ async fn asset_size_bytes(
 }
 
 async fn database_status_check(pool: &DbPool) -> PlatformStatusCheck {
-    match sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(pool).await {
+    match sqlx::query_scalar::<_, i32>("SELECT 1")
+        .fetch_one(pool)
+        .await
+    {
         Ok(_) => {
             let migration_count = sqlx::query_scalar::<_, i64>(
                 "SELECT COUNT(*) FROM _sqlx_migrations WHERE success = TRUE",
@@ -535,10 +598,7 @@ async fn storage_status_check(pool: &DbPool) -> PlatformStatusCheck {
     };
 
     let detail = match cfg.backend {
-        StorageBackend::Local => format!(
-            "Local disk at {}",
-            cfg.local_path.trim()
-        ),
+        StorageBackend::Local => format!("Local disk at {}", cfg.local_path.trim()),
         StorageBackend::Minio => format!(
             "MinIO bucket {} via {}",
             cfg.minio_bucket.trim(),
@@ -586,11 +646,17 @@ async fn ai_status_check(settings: &Settings) -> PlatformStatusCheck {
             label: "AI".to_string(),
             level: "warning".to_string(),
             message: "AI is disabled.".to_string(),
-            detail: Some("Enable HOWLLO_AI_ENABLED to test the configured model endpoint.".to_string()),
+            detail: Some(
+                "Enable HOWLLO_AI_ENABLED to test the configured model endpoint.".to_string(),
+            ),
         };
     }
 
-    match reqwest::Client::new().get(&settings.ai.base_url).send().await {
+    match reqwest::Client::new()
+        .get(&settings.ai.base_url)
+        .send()
+        .await
+    {
         Ok(response) => PlatformStatusCheck {
             key: "ai".to_string(),
             label: "AI".to_string(),
@@ -660,12 +726,11 @@ pub async fn test_database(
         .await
         .map_err(|e| AppError::Validation(format!("Cannot query the database: {e}")))?;
 
-    let migration_count = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM _sqlx_migrations WHERE success = TRUE",
-    )
-    .fetch_one(pool.get_ref())
-    .await
-    .unwrap_or(0);
+    let migration_count =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM _sqlx_migrations WHERE success = TRUE")
+            .fetch_one(pool.get_ref())
+            .await
+            .unwrap_or(0);
 
     Ok(HttpResponse::Ok().json(DatabaseInfo {
         url_masked: format!("postgres://{username}:****@{host}:{port}/{database}"),

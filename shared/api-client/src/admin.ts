@@ -9,6 +9,7 @@ import type {
   PaginatedResponse,
   Tag,
   TenantBranding,
+  WorkspaceAuthConfig,
   WebhookDelivery,
   WebhookEndpoint,
   PlatformStorageConfig,
@@ -56,6 +57,8 @@ export const admin = (client: HowlloClient) => ({
     board_type: string;
     is_private: boolean;
     icon_url?: string | null;
+    background_color?: string | null;
+    dashboard_sections?: string[];
   }) =>
     client.request<BoardDetail>(`/api/admin/boards`, {
       method: "POST",
@@ -71,6 +74,8 @@ export const admin = (client: HowlloClient) => ({
       board_type: string;
       is_private: boolean;
       icon_url?: string | null;
+      background_color?: string | null;
+      dashboard_sections?: string[];
     },
   ) =>
     client.request<BoardDetail>(`/api/admin/boards/${boardId}`, {
@@ -198,9 +203,25 @@ export const admin = (client: HowlloClient) => ({
     site_name?: string;
     logo_url?: string;
     accent_color?: string;
+    background_color?: string;
     show_powered_by: boolean;
+    show_roadmap: boolean;
   }) =>
     client.request<TenantBranding>(`/api/admin/tenant-branding`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+
+  getWorkspaceAuthConfig: () =>
+    client.request<WorkspaceAuthConfig>(`/api/workspace-auth`),
+
+  updateWorkspaceAuthConfig: (input: {
+    provider?: string;
+    rooiam_workspace_id?: string;
+    rooiam_client_id?: string;
+    rooiam_widget_base_url?: string;
+  }) =>
+    client.request<WorkspaceAuthConfig>(`/api/admin/workspace-auth`, {
       method: "PATCH",
       body: JSON.stringify(input),
     }),

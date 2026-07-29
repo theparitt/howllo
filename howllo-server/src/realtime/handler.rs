@@ -10,7 +10,10 @@ use actix_web::{get, web, HttpRequest, HttpResponse};
 use futures::StreamExt;
 use serde::Deserialize;
 
-use crate::auth::RooiamClient;
+use crate::auth::rooiam::resolve_rooiam_access_token;
+use crate::auth::workspace_session::{
+    is_workspace_session_token, resolve_workspace_session_from_token,
+};
 use crate::config::Settings;
 use crate::db::DbPool;
 use crate::errors::AppError;
@@ -34,48 +37,51 @@ pub async fn ws_connect(
     settings: web::Data<Settings>,
     hub: web::Data<Hub>,
 ) -> Result<HttpResponse, AppError> {
-    // 1. Authenticate the ticket.
-    let client = RooiamClient::new(settings.rooiam_jwt_secret.clone());
-    let claims = client
-        .validate_token(&query.ticket)
-        .map_err(|_| AppError::Unauthorized)?;
-
-    // 2. Resolve the local user (upsert mirrors the REST auth path).
-    let user = sqlx::query!(
-        r#"
-        INSERT INTO users (rooiam_subject, email, display_name)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (rooiam_subject)
-        DO UPDATE SET email = EXCLUDED.email, display_name = EXCLUDED.display_name
-        RETURNING id
-        "#,
-        claims.sub,
-        claims
-            .email
-            .unwrap_or_else(|| "no-email@example.com".to_string()),
-        claims.name.unwrap_or_else(|| "Unknown User".to_string()),
-    )
-    .fetch_one(pool.get_ref())
-    .await
-    .map_err(|e| {
-        tracing::error!(error = %e, tenant_slug = query.tenant_slug.as_str(), "ws error resolving user");
-        AppError::InternalServerError
-    })?;
-
-    // 3. Resolve tenant and verify membership before subscribing. A socket only
-    //    ever receives events for a tenant the user actually belongs to.
     let tenant_id = crate::repositories::membership_repository::resolve_tenant_id(
         pool.get_ref(),
         &query.tenant_slug,
     )
     .await?;
 
-    match memberships::check_membership(pool.get_ref(), tenant_id, user.id).await {
+    let user_id = if is_workspace_session_token(&query.ticket) {
+        let session = resolve_workspace_session_from_token(pool.get_ref(), &query.ticket)
+            .await?
+            .ok_or(AppError::Unauthorized)?;
+        if session.tenant_id != tenant_id {
+            return Err(AppError::Forbidden);
+        }
+        session.user.id
+    } else {
+        let identity = resolve_rooiam_access_token(settings.get_ref(), &query.ticket).await?;
+        let user = sqlx::query!(
+            r#"
+            INSERT INTO users (rooiam_subject, email, display_name)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (rooiam_subject)
+            DO UPDATE SET email = EXCLUDED.email, updated_at = NOW()
+            RETURNING id
+            "#,
+            identity.sub,
+            identity
+                .email
+                .unwrap_or_else(|| "no-email@example.com".to_string()),
+            identity.name.unwrap_or_else(|| "Unknown User".to_string()),
+        )
+        .fetch_one(pool.get_ref())
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, tenant_slug = query.tenant_slug.as_str(), "ws error resolving user");
+            AppError::InternalServerError
+        })?;
+        user.id
+    };
+
+    match memberships::check_membership(pool.get_ref(), tenant_id, user_id).await {
         Ok(_role) => {}
         Err(()) => return Err(AppError::Forbidden),
     }
 
-    // 4. Upgrade the connection and subscribe to the tenant channel.
+    // 2. Upgrade the connection and subscribe to the tenant channel.
     let (response, mut session, mut msg_stream) =
         actix_ws::handle(&req, body).map_err(|_| AppError::InternalServerError)?;
     let mut events = hub.subscribe(tenant_id);

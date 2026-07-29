@@ -225,6 +225,12 @@ export function WorkspaceDetailPage() {
                           </dd>
                         </div>
                         <div>
+                          <dt>Background color</dt>
+                          <dd>
+                            <code>{branding.data.background_color || "-"}</code>
+                          </dd>
+                        </div>
+                        <div>
                           <dt>Powered by Howllo</dt>
                           <dd>{branding.data.show_powered_by ? "Shown" : "Hidden"}</dd>
                         </div>
@@ -286,6 +292,7 @@ export function WorkspaceDetailPage() {
                         <th>Name</th>
                         <th>Slug</th>
                         <th>Type</th>
+                        <th>Background</th>
                         <th>Visibility</th>
                       </tr>
                     </thead>
@@ -297,6 +304,9 @@ export function WorkspaceDetailPage() {
                             <code>{board.slug}</code>
                           </td>
                           <td>{board.board_type}</td>
+                          <td>
+                            <code>{board.background_color || "-"}</code>
+                          </td>
                           <td>{board.is_private ? "Private" : "Public"}</td>
                         </tr>
                       ))}

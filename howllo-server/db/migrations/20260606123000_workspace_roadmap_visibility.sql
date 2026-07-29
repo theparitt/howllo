@@ -1,0 +1,2 @@
+ALTER TABLE tenant_branding
+    ADD COLUMN IF NOT EXISTS show_roadmap BOOLEAN NOT NULL DEFAULT TRUE;

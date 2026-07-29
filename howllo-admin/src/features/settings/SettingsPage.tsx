@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { admin } from "@howllo/api-client";
-import { BOARD_WEB_BASE_URL, publicRoutes } from "@howllo/config";
-import type { TenantBranding } from "@howllo/types";
+import type { TenantBranding, WorkspaceAuthConfig } from "@howllo/types";
 import { Panel } from "../../components/Panel";
 import { SessionRequired } from "../../components/SessionRequired";
 import { useSession } from "../../lib/session";
@@ -16,6 +15,53 @@ function downloadFile(filename: string, content: string, type: string) {
   URL.revokeObjectURL(url);
 }
 
+function colorPickerValue(value: string | null | undefined, fallback: string) {
+  const trimmed = value?.trim() ?? "";
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed : fallback;
+}
+
+function ColorPreviewField({
+  label,
+  value,
+  fallback,
+  hint,
+  tone,
+  onChange,
+}: {
+  label: string;
+  value: string | null | undefined;
+  fallback: string;
+  hint: string;
+  tone: "accent" | "background";
+  onChange: (value: string) => void;
+}) {
+  const resolved = colorPickerValue(value, fallback);
+  const style = {
+    "--swatch-color": resolved,
+  } as CSSProperties;
+
+  return (
+    <div className="color-swatch-field">
+      <span className="field-label">{label}</span>
+      <label className={`color-swatch color-swatch--${tone}`} style={style}>
+        <input
+          className="color-swatch__input"
+          type="color"
+          value={resolved}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <span className="color-swatch__surface">
+          <span className="color-swatch__chip" aria-hidden="true" />
+          <span className="color-swatch__meta">
+            <strong>{resolved}</strong>
+            <small>{hint}</small>
+          </span>
+        </span>
+      </label>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const { client, tenant, authorization } = useSession();
   const api = useMemo(() => admin(client), [client]);
@@ -24,9 +70,13 @@ export function SettingsPage() {
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [brandingBusy, setBrandingBusy] = useState(false);
   const [brandingLoaded, setBrandingLoaded] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authLoaded, setAuthLoaded] = useState(false);
   const [brandingMessage, setBrandingMessage] = useState<string | null>(null);
+  const [authMessage, setAuthMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [brandingError, setBrandingError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [branding, setBranding] = useState<TenantBranding>({
     tenant_slug: tenant,
@@ -34,7 +84,16 @@ export function SettingsPage() {
     site_name: tenant,
     logo_url: null,
     accent_color: "#f36949",
+    background_color: "#f6e7df",
     show_powered_by: true,
+    show_roadmap: true,
+  });
+  const [workspaceAuth, setWorkspaceAuth] = useState<WorkspaceAuthConfig>({
+    tenant_slug: tenant,
+    provider: "rooiam",
+    rooiam_workspace_id: null,
+    rooiam_client_id: null,
+    rooiam_widget_base_url: "https://api.rooiam.com/login-widget",
   });
 
   useEffect(() => {
@@ -69,6 +128,43 @@ export function SettingsPage() {
     }
 
     void loadBranding();
+    return () => {
+      cancelled = true;
+    };
+  }, [api, authorization, tenant]);
+
+  useEffect(() => {
+    if (!authorization) {
+      setAuthLoaded(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadWorkspaceAuth() {
+      setAuthBusy(true);
+      setAuthError(null);
+      setAuthMessage(null);
+      try {
+        const data = await api.getWorkspaceAuthConfig();
+        if (!cancelled) {
+          setWorkspaceAuth(data);
+          setAuthLoaded(true);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setAuthError(
+            e instanceof Error ? e.message : "Failed to load workspace auth configuration",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setAuthBusy(false);
+        }
+      }
+    }
+
+    void loadWorkspaceAuth();
     return () => {
       cancelled = true;
     };
@@ -148,7 +244,9 @@ export function SettingsPage() {
         site_name: branding.site_name.trim(),
         logo_url: branding.logo_url?.trim() || undefined,
         accent_color: branding.accent_color?.trim() || undefined,
+        background_color: branding.background_color?.trim() || undefined,
         show_powered_by: branding.show_powered_by,
+        show_roadmap: branding.show_roadmap,
       });
       setBranding(data);
       setBrandingLoaded(true);
@@ -159,6 +257,29 @@ export function SettingsPage() {
       );
     } finally {
       setBrandingBusy(false);
+    }
+  };
+
+  const saveWorkspaceAuth = async () => {
+    setAuthBusy(true);
+    setAuthError(null);
+    setAuthMessage(null);
+    try {
+      const data = await api.updateWorkspaceAuthConfig({
+        provider: workspaceAuth.provider.trim() || "rooiam",
+        rooiam_workspace_id: workspaceAuth.rooiam_workspace_id?.trim() || "",
+        rooiam_client_id: workspaceAuth.rooiam_client_id?.trim() || "",
+        rooiam_widget_base_url: workspaceAuth.rooiam_widget_base_url?.trim() || "",
+      });
+      setWorkspaceAuth(data);
+      setAuthLoaded(true);
+      setAuthMessage("Workspace auth updated.");
+    } catch (e) {
+      setAuthError(
+        e instanceof Error ? e.message : "Failed to save workspace auth configuration",
+      );
+    } finally {
+      setAuthBusy(false);
     }
   };
 
@@ -253,19 +374,45 @@ export function SettingsPage() {
                 placeholder="#f36949"
               />
             </label>
+            <ColorPreviewField
+              label="Accent preview"
+              value={branding.accent_color}
+              fallback="#f36949"
+              hint="Click to choose the accent swatch"
+              tone="accent"
+              onChange={(value) =>
+                setBranding((current) => ({
+                  ...current,
+                  accent_color: value,
+                }))
+              }
+            />
             <label>
-              Accent preview
+              Background color
               <input
-                type="color"
-                value={branding.accent_color ?? "#f36949"}
+                value={branding.background_color ?? ""}
                 onChange={(event) =>
                   setBranding((current) => ({
                     ...current,
-                    accent_color: event.target.value,
+                    background_color: event.target.value,
                   }))
                 }
+                placeholder="#f6e7df"
               />
             </label>
+            <ColorPreviewField
+              label="Background preview"
+              value={branding.background_color}
+              fallback="#f6e7df"
+              hint="Click to choose the workspace backdrop"
+              tone="background"
+              onChange={(value) =>
+                setBranding((current) => ({
+                  ...current,
+                  background_color: value,
+                }))
+              }
+            />
             <label className="checkbox field-span-2">
               <input
                 type="checkbox"
@@ -278,6 +425,19 @@ export function SettingsPage() {
                 }
               />
               Show "Powered by Howllo" in the public footer
+            </label>
+            <label className="checkbox field-span-2">
+              <input
+                type="checkbox"
+                checked={branding.show_roadmap}
+                onChange={(event) =>
+                  setBranding((current) => ({
+                    ...current,
+                    show_roadmap: event.target.checked,
+                  }))
+                }
+              />
+              Show roadmap in the public workspace navigation
             </label>
           </div>
           <div className="button-row" style={{ marginTop: 16 }}>
@@ -299,22 +459,6 @@ export function SettingsPage() {
         </Panel>
 
         <Panel title="Active workspace">
-          <div className="button-row" style={{ marginBottom: 16 }}>
-            <a
-              href={`${BOARD_WEB_BASE_URL}${publicRoutes.roadmap(tenant)}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open public roadmap
-            </a>
-            <a
-              href={`${BOARD_WEB_BASE_URL}${publicRoutes.workspace(tenant)}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open public workspace
-            </a>
-          </div>
           <dl className="detail-list">
             <div>
               <dt>Workspace slug</dt>
@@ -335,6 +479,85 @@ export function SettingsPage() {
               <dd>{branding.site_name || branding.tenant_name}</dd>
             </div>
           </dl>
+        </Panel>
+
+        <Panel title="Workspace Auth">
+          <p className="muted">
+            Configure which login provider this workspace uses. RooIAM settings
+            here override any server-wide fallback and are what <code>howllo-web</code>
+            resolves at sign-in time.
+          </p>
+          <div className="form-grid">
+            <label className="field-span-2">
+              Provider
+              <select
+                value={workspaceAuth.provider}
+                onChange={(event) =>
+                  setWorkspaceAuth((current) => ({
+                    ...current,
+                    provider: event.target.value,
+                  }))
+                }
+              >
+                <option value="rooiam">RooIAM</option>
+              </select>
+            </label>
+            <label className="field-span-2">
+              RooIAM workspace ID
+              <input
+                value={workspaceAuth.rooiam_workspace_id ?? ""}
+                onChange={(event) =>
+                  setWorkspaceAuth((current) => ({
+                    ...current,
+                    rooiam_workspace_id: event.target.value || null,
+                  }))
+                }
+                placeholder="59d94bdf-2549-4fb8-b57c-900a6a67f3dd"
+              />
+            </label>
+            <label className="field-span-2">
+              RooIAM client ID
+              <input
+                value={workspaceAuth.rooiam_client_id ?? ""}
+                onChange={(event) =>
+                  setWorkspaceAuth((current) => ({
+                    ...current,
+                    rooiam_client_id: event.target.value || null,
+                  }))
+                }
+                placeholder="client_id for this workspace"
+              />
+            </label>
+            <label className="field-span-2">
+              RooIAM widget base URL
+              <input
+                value={workspaceAuth.rooiam_widget_base_url ?? ""}
+                onChange={(event) =>
+                  setWorkspaceAuth((current) => ({
+                    ...current,
+                    rooiam_widget_base_url: event.target.value || null,
+                  }))
+                }
+                placeholder="https://api.rooiam.com/login-widget"
+              />
+            </label>
+          </div>
+          <div className="button-row" style={{ marginTop: 16 }}>
+            <button
+              className="primary"
+              disabled={authBusy}
+              onClick={saveWorkspaceAuth}
+            >
+              {authBusy ? "Saving..." : "Save workspace auth"}
+            </button>
+            {authLoaded ? (
+              <span className="badge">
+                Current provider: {workspaceAuth.provider || "unset"}
+              </span>
+            ) : null}
+          </div>
+          {authMessage ? <p className="muted">{authMessage}</p> : null}
+          {authError ? <p className="error-text">{authError}</p> : null}
         </Panel>
 
         <Panel title="Exports">

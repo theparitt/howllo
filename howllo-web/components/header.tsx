@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { RooiamLoginWidget } from "@/components/rooiam-login-widget";
+import { AuthControl } from "@/components/auth-control";
 
 export function Header() {
   return (
@@ -22,7 +22,7 @@ export function Header() {
           <Link href="/roadmap" className="nav__link">
             Roadmap
           </Link>
-          <RooiamLoginWidget />
+          <AuthControl />
         </nav>
       </div>
     </header>

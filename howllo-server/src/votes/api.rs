@@ -3,27 +3,67 @@ use actix_web::{delete, post, web, HttpResponse, Responder};
 use crate::auth::AuthenticatedUser;
 use crate::db::DbPool;
 use crate::errors::AppError;
+use crate::realtime::{Hub, RealtimeEvent};
+use crate::repositories::post_repository;
 use crate::services::vote_service;
 
 #[post("/api/posts/{post_id}/vote")]
 pub async fn add_vote(
     pool: web::Data<DbPool>,
+    hub: web::Data<Hub>,
     path: web::Path<uuid::Uuid>,
     auth: AuthenticatedUser,
 ) -> Result<impl Responder, AppError> {
     let post_id = path.into_inner();
     vote_service::add_vote(pool.get_ref(), post_id, auth.0.id).await?;
+
+    if let Some(scope) = post_repository::find_post_access(pool.get_ref(), post_id, None)
+        .await
+        .map_err(|error| {
+            tracing::error!(error = %error, post_id = %post_id, "error loading vote realtime scope");
+            AppError::InternalServerError
+        })?
+    {
+        hub.broadcast(
+            scope.tenant_id,
+            RealtimeEvent {
+                event_type: "post.vote_changed".to_string(),
+                board_id: Some(scope.board_id),
+                post_id: Some(post_id),
+            },
+        );
+    }
+
     Ok(HttpResponse::Ok().finish())
 }
 
 #[delete("/api/posts/{post_id}/vote")]
 pub async fn remove_vote(
     pool: web::Data<DbPool>,
+    hub: web::Data<Hub>,
     path: web::Path<uuid::Uuid>,
     auth: AuthenticatedUser,
 ) -> Result<impl Responder, AppError> {
     let post_id = path.into_inner();
     vote_service::remove_vote(pool.get_ref(), post_id, auth.0.id).await?;
+
+    if let Some(scope) = post_repository::find_post_access(pool.get_ref(), post_id, None)
+        .await
+        .map_err(|error| {
+            tracing::error!(error = %error, post_id = %post_id, "error loading unvote realtime scope");
+            AppError::InternalServerError
+        })?
+    {
+        hub.broadcast(
+            scope.tenant_id,
+            RealtimeEvent {
+                event_type: "post.vote_changed".to_string(),
+                board_id: Some(scope.board_id),
+                post_id: Some(post_id),
+            },
+        );
+    }
+
     Ok(HttpResponse::Ok().finish())
 }
 

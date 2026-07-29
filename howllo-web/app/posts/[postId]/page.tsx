@@ -1,10 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getComments, getPostDetail, getStatusHistory } from "@/lib/api";
-import { buildTenantPath, resolveTenantContext } from "@/lib/default-tenant";
+import {
+  WorkspaceContextError,
+  buildTenantPath,
+  resolveTenantContext,
+} from "@/lib/default-tenant";
 import { getServerBearerToken } from "@/lib/server-auth";
 import { StatusPill } from "@/components/status-pill";
 import { PostActions } from "@/components/post-actions";
+import { RealtimeRefresh } from "@/components/realtime-refresh";
+import { WorkspaceState } from "@/components/workspace-state";
 
 type PostPageProps = {
   params: Promise<{
@@ -18,8 +24,19 @@ type PostPageProps = {
 export default async function PostPage({ params, searchParams }: PostPageProps) {
   const { postId } = await params;
   const query = await searchParams;
-  const { tenantSlug: tenant, defaultTenantSlug } = await resolveTenantContext(query.tenant);
-  const token = await getServerBearerToken();
+  let tenant: string;
+  let defaultTenantSlug: string;
+
+  try {
+    ({ tenantSlug: tenant, defaultTenantSlug } = await resolveTenantContext(query.tenant));
+  } catch (error) {
+    if (error instanceof WorkspaceContextError) {
+      return <WorkspaceState kind={error.kind} workspaceSlug={error.workspaceSlug} />;
+    }
+    throw error;
+  }
+
+  const token = await getServerBearerToken(tenant);
 
   try {
     const [post, comments, history] = await Promise.all([
@@ -30,6 +47,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
 
     return (
       <div className="two-column">
+        <RealtimeRefresh postId={post.id} tenantSlug={tenant} />
         <div className="grid" style={{ gap: "1rem" }}>
           <section className="post-detail">
             <div className="eyebrow-row">
@@ -140,7 +158,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
         </div>
 
         <div className="grid" style={{ gap: "1rem" }}>
-          <PostActions isLocked={post.is_locked} postId={post.id} />
+          <PostActions tenantSlug={tenant} isLocked={post.is_locked} postId={post.id} />
         </div>
       </div>
     );

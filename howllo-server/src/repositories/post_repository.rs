@@ -572,7 +572,8 @@ pub async fn create_post(
     body: &str,
     attachments: &[String],
 ) -> Result<crate::dto::PostCreatedDto, sqlx::Error> {
-    let attachments_json = serde_json::to_value(attachments).unwrap_or_else(|_| serde_json::json!([]));
+    let attachments_json =
+        serde_json::to_value(attachments).unwrap_or_else(|_| serde_json::json!([]));
     sqlx::query_as!(
         crate::dto::PostCreatedDto,
         r#"
