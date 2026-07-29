@@ -7,6 +7,7 @@ import type {
   Comment,
   CurrentUser,
   MyActivity,
+  MyInvitation,
   Notification,
   PaginatedResponse,
   PostDetail,
@@ -289,6 +290,35 @@ export async function getMyActivity(
     },
   );
   return unwrap<MyActivity>(response);
+}
+
+export async function getMyInvitations(token: string): Promise<MyInvitation[]> {
+  const response = await apiFetch(buildUrl("/api/me/invitations"), {
+    cache: "no-store",
+    headers: {
+      Authorization: token,
+    },
+  });
+  return unwrap<MyInvitation[]>(response);
+}
+
+export async function respondToInvitation(
+  invitationId: string,
+  action: "accept" | "reject",
+  token: string,
+): Promise<void> {
+  const response = await apiFetch(
+    buildUrl(`/api/me/invitations/${invitationId}/${action}`),
+    {
+      method: "POST",
+      headers: {
+        Authorization: token,
+      },
+    },
+  );
+  if (!response.ok) {
+    throw new ApiError(response.status, (await response.text()) || `Request failed with ${response.status}`);
+  }
 }
 
 export async function getWebhooks(

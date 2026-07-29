@@ -9,6 +9,7 @@ import { getServerBearerToken } from "@/lib/server-auth";
 import type { Board, PostListItem } from "@/lib/types";
 import { ApiUnavailable } from "@/components/api-unavailable";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
+import { PendingInvitations } from "@/components/pending-invitations";
 import { StatusPill } from "@/components/status-pill";
 import { WorkspaceState } from "@/components/workspace-state";
 import { themedSurfaceStyle } from "@/lib/theme";
@@ -119,6 +120,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   return (
     <div className="page-stack">
       <RealtimeRefresh boardId={selectedBoard.id} tenantSlug={tenant} />
+      <PendingInvitations tenantSlug={tenant} />
       <section className="board-bar">
         {boards.map((board: Board) => {
           const isActive = board.slug === selectedBoard.slug;

@@ -5,6 +5,7 @@ import type {
   AuditLogItem,
   BoardDetail,
   BoardSummary,
+  InvitationItem,
   MembershipItem,
   PaginatedResponse,
   Tag,
@@ -139,6 +140,25 @@ export const admin = (client: HowlloClient) => ({
   removeMember: (userId: string) =>
     client.request<void>(`/api/admin/members/${userId}`, {
       method: "DELETE",
+    }),
+
+  // Invitations
+  listInvitations: () =>
+    client.request<InvitationItem[]>(`/api/admin/invitations`),
+
+  createInvitation: (input: { email: string; role: string }) =>
+    client.request<{ id: string; email: string; role: string; status: string }>(
+      `/api/admin/invitations`,
+      {
+        method: "POST",
+        withTenant: false,
+        body: JSON.stringify({ ...input, tenant_slug: client.tenant }),
+      },
+    ),
+
+  withdrawInvitation: (id: string) =>
+    client.request<void>(`/api/admin/invitations/${id}/withdraw`, {
+      method: "POST",
     }),
 
   // Audit

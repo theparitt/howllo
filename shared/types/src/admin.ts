@@ -28,6 +28,24 @@ export type MembershipItem = {
   role: string;
 };
 
+export type InvitationStatus =
+  | "pending"
+  | "accepted"
+  | "rejected"
+  | "withdrawn"
+  | "expired";
+
+export type InvitationItem = {
+  id: string;
+  email: string;
+  role: string;
+  status: InvitationStatus;
+  tenant_slug: string;
+  tenant_name: string;
+  invited_by_name: string | null;
+  created_at: string;
+};
+
 export type WorkspaceAuthConfig = {
   tenant_slug: string;
   provider: string;

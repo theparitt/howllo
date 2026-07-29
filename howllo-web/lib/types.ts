@@ -180,3 +180,14 @@ export type MyActivity = {
   follows: MyPostReferenceActivityItem[];
   status_changes: MyStatusActivityItem[];
 };
+
+export type MyInvitation = {
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  tenant_slug: string;
+  tenant_name: string;
+  invited_by_name: string | null;
+  created_at: string;
+};
