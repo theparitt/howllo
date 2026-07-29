@@ -9,6 +9,7 @@ import {
   resolveTenantContext,
 } from "@/lib/default-tenant";
 import { getServerBearerToken } from "@/lib/server-auth";
+import { countLabel } from "@/lib/format";
 import type {
   MyCommentActivityItem,
   MyPostActivityItem,
@@ -40,7 +41,7 @@ function ActivityPostRow({
       <div>
         <strong>{item.title}</strong>
         <p className="section-subtitle">
-          {item.board_name} • {item.comment_count} comments • {item.vote_count} votes • {formatDate(item.created_at)}
+          {item.board_name} • {countLabel(item.comment_count, "comment")} • {countLabel(item.vote_count, "vote")} • {formatDate(item.created_at)}
         </p>
       </div>
       <StatusPill status={item.status} />

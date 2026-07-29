@@ -3,251 +3,626 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Howllo | Powerful Feedback & Roadmaps</title>
+    <title>Howllo · Feedback boards & roadmaps your users can see</title>
+    <meta name="description" content="Howllo turns scattered feature requests into a prioritized roadmap your users can watch — collect signal, let people vote, and ship in the open.">
+    <meta property="og:title" content="Howllo · Feedback boards & roadmaps">
+    <meta property="og:description" content="Collect feedback, prioritize with votes, and ship in the open.">
+    <meta name="theme-color" content="#f6e7df">
+    <link rel="icon" href="brand/howllo-logo.svg" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary: #2563eb;
-            --primary-dark: #1d4ed8;
-            --text-main: #0f172a;
-            --text-muted: #64748b;
-            --bg-light: #f8fafc;
+            --coral: #f36949;
+            --coral-600: #e0522f;
+            --coral-700: #c43e1e;
+            --lavender: #7f6dcf;
+            --lavender-soft: #a99cf0;
+
+            --bg: #f6e7df;
+            --bg-deep: #f1ddd2;
+            --panel: rgba(255, 250, 246, 0.72);
+            --panel-strong: #fffaf6;
+
+            --text: #3a2c34;
+            --text-soft: #5d4c56;
+            --muted: #8a7882;
+            --border: rgba(92, 63, 67, 0.1);
+            --border-strong: rgba(92, 63, 67, 0.16);
+
+            --shadow-sm: 0 1px 3px rgba(102, 71, 83, 0.05);
+            --shadow: 0 8px 24px -16px rgba(102, 71, 83, 0.2);
+            --shadow-lg: 0 18px 40px -24px rgba(102, 71, 83, 0.26);
+            --shadow-xl: 0 40px 80px -40px rgba(102, 71, 83, 0.38);
+            --ring: 0 0 0 3px rgba(243, 105, 73, 0.18);
+
+            --radius-xl: 22px;
+            --radius-lg: 18px;
+            --radius-md: 14px;
+            --radius-sm: 10px;
+
+            --font-sans: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+            --font-display: "Bricolage Grotesque", "Instrument Sans", system-ui, sans-serif;
+            --font-mono: "IBM Plex Mono", "SFMono-Regular", monospace;
+            --ease: cubic-bezier(0.22, 1, 0.36, 1);
         }
+
+        *, *::before, *::after { box-sizing: border-box; }
+
         body {
             margin: 0;
-            font-family: 'Inter', sans-serif;
-            color: var(--text-main);
-            background-color: white;
+            font-family: var(--font-sans);
+            color: var(--text);
             line-height: 1.6;
+            overflow-x: hidden;
+            background:
+                radial-gradient(1100px 600px at 82% -8%, rgba(169, 156, 240, 0.28), transparent 60%),
+                radial-gradient(900px 520px at -6% 8%, rgba(243, 105, 73, 0.16), transparent 55%),
+                var(--bg);
+            -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility;
         }
+
+        a { color: inherit; }
+
         .container {
-            max-width: 1200px;
+            max-width: 1140px;
             margin: 0 auto;
-            padding: 0 2rem;
+            padding: 0 1.6rem;
         }
+
+        /* ---------------------------------------------------------------- Nav */
         nav {
-            padding: 1.5rem 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+            padding: 1.3rem 0;
         }
         .logo {
             display: inline-flex;
             align-items: center;
-            gap: 1rem;
+            gap: 0.7rem;
+            text-decoration: none;
         }
         .logo-mark {
-            width: 48px;
-            height: 48px;
-            border-radius: 16px;
-            background: rgba(255,255,255,0.95);
-            box-shadow: 0 14px 30px rgba(37, 99, 235, 0.12);
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            width: 42px;
+            height: 42px;
+            border-radius: 13px;
+            background: var(--panel-strong);
+            box-shadow: var(--shadow), inset 0 0 0 1px var(--border);
+            display: grid;
+            place-items: center;
             overflow: hidden;
         }
-        .logo-mark img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
+        .logo-mark img { width: 68%; height: 68%; object-fit: contain; }
+        .logo-wordmark img { height: 26px; width: auto; display: block; }
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 1.8rem;
         }
-        .logo-wordmark img {
-            height: 34px;
-            width: auto;
-            display: block;
-        }
-        .btn {
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            font-weight: 600;
+        .nav-links a.nav-link {
             text-decoration: none;
-            transition: all 0.2s;
-            display: inline-block;
+            color: var(--text-soft);
+            font-weight: 500;
+            font-size: 0.96rem;
+            transition: color 160ms var(--ease);
+        }
+        .nav-links a.nav-link:hover { color: var(--coral-700); }
+
+        /* ------------------------------------------------------------ Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.72rem 1.25rem;
+            border-radius: 999px;
+            font-family: var(--font-sans);
+            font-weight: 600;
+            font-size: 0.96rem;
+            text-decoration: none;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: transform 180ms var(--ease), box-shadow 180ms var(--ease),
+                background 180ms var(--ease), color 180ms var(--ease);
         }
         .btn-primary {
-            background: var(--primary);
-            color: white;
+            background: linear-gradient(135deg, var(--coral), var(--coral-600));
+            color: #fff;
+            box-shadow: 0 14px 28px -14px rgba(196, 62, 30, 0.7);
         }
-        .btn-primary:hover {
-            background: var(--primary-dark);
-            transform: translateY(-1px);
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 20px 34px -14px rgba(196, 62, 30, 0.75); }
+        .btn-ghost {
+            background: var(--panel-strong);
+            color: var(--text);
+            border-color: var(--border-strong);
+            box-shadow: var(--shadow-sm);
         }
+        .btn-ghost:hover { transform: translateY(-2px); border-color: rgba(127, 109, 207, 0.4); color: var(--coral-700); }
+        .btn-lg { padding: 0.9rem 1.6rem; font-size: 1.02rem; }
+
+        /* --------------------------------------------------------------- Hero */
         .hero {
-            padding: 6rem 0;
-            display: flex;
-            align-items: center;
-            gap: 4rem;
-        }
-        .hero-content {
-            flex: 1;
-        }
-        .hero-brand {
-            margin-bottom: 1.5rem;
-        }
-        .hero-brand img {
-            height: 54px;
-            width: auto;
-            display: block;
-        }
-        .hero-image {
-            flex: 1.2;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
-            border-radius: 12px;
-            overflow: hidden;
-            border: 1px solid #e2e8f0;
-            background: white;
-            min-height: 360px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .hero-image-inner {
-            width: min(560px, 100%);
-            padding: 2rem;
-        }
-        .hero-image-inner img {
-            width: 100%;
-            display: block;
-        }
-        .hero-preview {
-            margin-top: 2rem;
             display: grid;
-            gap: 1rem;
+            grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+            gap: 3.4rem;
+            align-items: center;
+            padding: 3.4rem 0 4.6rem;
         }
-        .preview-card {
-            border: 1px solid #e2e8f0;
-            border-radius: 14px;
-            padding: 1rem 1.1rem;
-            background: #fffaf5;
-        }
-        .preview-card .status {
-            display: inline-block;
-            font-size: 0.75rem;
-            font-weight: 700;
-            padding: 0.35rem 0.7rem;
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            font-family: var(--font-mono);
+            font-size: 0.76rem;
+            font-weight: 500;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--lavender);
+            background: rgba(178, 162, 255, 0.2);
+            border: 1px solid rgba(107, 76, 194, 0.16);
+            padding: 0.4rem 0.85rem;
             border-radius: 999px;
-            background: rgba(37,99,235,0.12);
-            color: var(--primary-dark);
-            margin-bottom: 0.75rem;
         }
+        .eyebrow .dot { width: 0.5rem; height: 0.5rem; border-radius: 999px; background: var(--coral); }
         h1 {
-            font-size: 4rem;
+            font-family: var(--font-display);
+            font-size: clamp(2.15rem, 6.4vw, 4rem);
+            line-height: 1.03;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            margin: 1.3rem 0 1.1rem;
+            overflow-wrap: break-word;
+        }
+        h1 .grad {
+            background: linear-gradient(115deg, var(--coral), var(--lavender));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .hero-lead {
+            font-size: 1.16rem;
+            color: var(--text-soft);
+            max-width: 34rem;
+            margin: 0 0 2rem;
+        }
+        .hero-cta { display: flex; gap: 0.85rem; flex-wrap: wrap; }
+        .hero-trust {
+            margin-top: 1.6rem;
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+        .hero-trust svg { color: var(--coral); flex: none; }
+
+        /* ------------------------------------------------ Product preview mock */
+        .preview {
+            background: var(--panel-strong);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-xl);
+            padding: 1.15rem;
+            position: relative;
+            min-width: 0;
+            max-width: 100%;
+        }
+        .post > div { min-width: 0; }
+        .post-title { overflow-wrap: break-word; }
+        .preview::before {
+            content: "";
+            position: absolute;
+            inset: -1px -1px auto -1px;
+            height: 64px;
+            border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+            background: linear-gradient(135deg, rgba(243,105,73,0.14), rgba(127,109,207,0.14));
+            pointer-events: none;
+        }
+        .preview-head {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            padding: 0.35rem 0.4rem 0.9rem;
+        }
+        .preview-icon {
+            width: 34px; height: 34px; border-radius: 10px;
+            background: linear-gradient(135deg, var(--coral), var(--coral-600));
+            display: grid; place-items: center; color: #fff; flex: none;
+            font-family: var(--font-display); font-weight: 700;
+        }
+        .preview-title { font-family: var(--font-display); font-weight: 600; font-size: 1.02rem; }
+        .preview-sub { color: var(--muted); font-size: 0.82rem; }
+        .tabs { display: flex; gap: 0.4rem; margin: 0 0 0.9rem; flex-wrap: wrap; }
+        .tab {
+            font-size: 0.82rem; font-weight: 600; color: var(--text-soft);
+            padding: 0.34rem 0.75rem; border-radius: 999px;
+            border: 1px solid var(--border);
+        }
+        .tab.active { background: var(--coral); color: #fff; border-color: transparent; box-shadow: var(--shadow); }
+
+        .post {
+            display: grid;
+            grid-template-columns: auto minmax(0,1fr) auto;
+            align-items: center;
+            gap: 0.85rem;
+            padding: 0.8rem 0.85rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            background: #fff;
+            margin-bottom: 0.65rem;
+            transition: transform 180ms var(--ease), box-shadow 180ms var(--ease);
+        }
+        .post:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+        .vote {
+            display: grid; place-items: center; gap: 0.1rem;
+            width: 46px; padding: 0.35rem 0; border-radius: 10px;
+            border: 1px solid var(--border-strong);
+            font-family: var(--font-mono); font-weight: 500; color: var(--coral-700);
             line-height: 1;
-            font-weight: 800;
-            margin-bottom: 1.5rem;
-            letter-spacing: -0.04em;
         }
-        .hero p {
-            font-size: 1.25rem;
-            color: var(--text-muted);
-            margin-bottom: 2.5rem;
+        .vote svg { color: var(--coral); }
+        .vote b { font-size: 0.95rem; }
+        .post-title { font-weight: 600; font-size: 0.95rem; }
+        .post-meta { color: var(--muted); font-size: 0.8rem; }
+
+        .chip {
+            display: inline-flex; align-items: center; gap: 0.42rem;
+            font-family: var(--font-mono); font-size: 0.72rem; font-weight: 500;
+            letter-spacing: 0.02em;
+            padding: 0.28rem 0.62rem; border-radius: 999px; white-space: nowrap;
+            border: 1px solid transparent;
         }
-        .features {
-            padding: 5rem 0;
-            background: var(--bg-light);
+        .chip::before { content:""; width: 0.42rem; height: 0.42rem; border-radius: 999px; background: currentColor; opacity: 0.65; }
+        .chip.planned { color: #9a5400; background: rgba(255,196,110,0.26); border-color: rgba(154,84,0,0.18); }
+        .chip.progress { color: #0f5b8d; background: rgba(120,200,255,0.24); border-color: rgba(15,91,141,0.18); }
+        .chip.done { color: #0d6a55; background: rgba(120,230,195,0.26); border-color: rgba(13,106,85,0.18); }
+        .chip.review { color: #6b4cc2; background: rgba(178,162,255,0.24); border-color: rgba(107,76,194,0.18); }
+
+        /* ----------------------------------------------------------- Sections */
+        section.band { padding: 4.2rem 0; }
+        .section-head { text-align: center; max-width: 40rem; margin: 0 auto 2.8rem; }
+        .section-kicker {
+            font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--coral-700); font-weight: 500;
         }
+        h2 {
+            font-family: var(--font-display); font-weight: 700;
+            font-size: clamp(1.9rem, 3.6vw, 2.6rem); letter-spacing: -0.025em;
+            margin: 0.7rem 0 0.6rem; line-height: 1.08;
+        }
+        .section-head p { color: var(--text-soft); font-size: 1.06rem; margin: 0; }
+
         .feature-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 2rem;
+            gap: 1.3rem;
         }
         .feature-card {
-            background: white;
-            padding: 2rem;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
+            background: var(--panel-strong);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 1.7rem 1.6rem;
+            box-shadow: var(--shadow);
+            transition: transform 200ms var(--ease), box-shadow 200ms var(--ease), border-color 200ms var(--ease);
         }
-        .feature-card h3 {
-            font-size: 1.25rem;
-            margin-bottom: 1rem;
+        .feature-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); border-color: rgba(127,109,207,0.32); }
+        .feature-ic {
+            width: 44px; height: 44px; border-radius: 13px;
+            display: grid; place-items: center; margin-bottom: 1.1rem;
+            background: rgba(243,105,73,0.12); color: var(--coral-700);
         }
-        footer {
-            padding: 4rem 0;
-            border-top: 1px solid #e2e8f0;
+        .feature-card:nth-child(3n+2) .feature-ic { background: rgba(178,162,255,0.2); color: var(--lavender); }
+        .feature-card:nth-child(3n) .feature-ic { background: rgba(120,230,195,0.24); color: #0d6a55; }
+        .feature-card h3 { font-family: var(--font-display); font-weight: 600; font-size: 1.16rem; margin: 0 0 0.5rem; }
+        .feature-card p { color: var(--text-soft); margin: 0; font-size: 0.98rem; }
+
+        /* ------------------------------------------------------- Roadmap band */
+        .roadmap-band {
+            background:
+                radial-gradient(700px 340px at 15% 0%, rgba(243,105,73,0.1), transparent 60%),
+                var(--bg-deep);
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+        .road-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.3rem; }
+        .road-col {
+            background: var(--panel-strong);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 1.2rem;
+            box-shadow: var(--shadow);
+        }
+        .road-col-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+        .road-col-head b { font-family: var(--font-mono); color: var(--muted); font-weight: 500; }
+        .road-item {
+            background: #fff; border: 1px solid var(--border);
+            border-radius: var(--radius-md); padding: 0.85rem 0.9rem; margin-bottom: 0.7rem;
+        }
+        .road-item:last-child { margin-bottom: 0; }
+        .road-item strong { font-weight: 600; font-size: 0.94rem; display: block; }
+        .road-item span { color: var(--muted); font-size: 0.8rem; }
+
+        /* ---------------------------------------------------------- Steps band */
+        .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.6rem; counter-reset: step; }
+        .step { position: relative; padding-top: 0.4rem; }
+        .step-num {
+            font-family: var(--font-display); font-weight: 700; font-size: 1rem;
+            width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
+            color: #fff; background: linear-gradient(135deg, var(--coral), var(--lavender));
+            box-shadow: var(--shadow); margin-bottom: 0.9rem;
+        }
+        .step h3 { font-family: var(--font-display); font-weight: 600; font-size: 1.14rem; margin: 0 0 0.4rem; }
+        .step p { color: var(--text-soft); margin: 0; font-size: 0.98rem; }
+
+        /* ------------------------------------------------------------ CTA band */
+        .cta-wrap {
+            position: relative; overflow: hidden;
+            border-radius: var(--radius-xl);
+            background: linear-gradient(135deg, var(--coral), var(--coral-600) 55%, var(--coral-700));
+            color: #fff;
+            padding: 3.4rem 2.4rem;
             text-align: center;
-            color: var(--text-muted);
+            box-shadow: var(--shadow-xl);
+        }
+        .cta-wrap::after {
+            content: ""; position: absolute; inset: 0;
+            background: radial-gradient(500px 240px at 82% -20%, rgba(255,255,255,0.28), transparent 60%);
+            pointer-events: none;
+        }
+        .cta-wrap h2 { color: #fff; position: relative; }
+        .cta-wrap p { position: relative; color: rgba(255,255,255,0.9); font-size: 1.08rem; max-width: 34rem; margin: 0.4rem auto 1.8rem; }
+        .cta-wrap .btn-primary {
+            position: relative; background: #fff; color: var(--coral-700);
+            box-shadow: 0 16px 30px -14px rgba(0,0,0,0.35);
+        }
+        .cta-wrap .btn-primary:hover { transform: translateY(-2px); }
+
+        /* ------------------------------------------------------------- Footer */
+        footer { padding: 3rem 0 3.5rem; border-top: 1px solid var(--border); }
+        .footer-row {
+            display: flex; align-items: center; justify-content: space-between; gap: 1.2rem; flex-wrap: wrap;
+        }
+        .footer-links { display: flex; gap: 1.4rem; flex-wrap: wrap; }
+        .footer-links a { text-decoration: none; color: var(--text-soft); font-size: 0.92rem; font-weight: 500; }
+        .footer-links a:hover { color: var(--coral-700); }
+        .footer-copy { color: var(--muted); font-size: 0.86rem; }
+
+        /* --------------------------------------------------------------- Anim */
+        @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+        .rise { animation: rise 0.7s var(--ease) both; }
+        .rise-2 { animation-delay: 0.08s; }
+        .rise-3 { animation-delay: 0.16s; }
+        @media (prefers-reduced-motion: reduce) { .rise { animation: none; } }
+
+        /* -------------------------------------------------------- Responsive */
+        @media (max-width: 900px) {
+            .hero { grid-template-columns: 1fr; gap: 2.4rem; padding-top: 2.4rem; }
+            .feature-grid, .road-cols, .steps { grid-template-columns: 1fr; }
+            .nav-links .nav-link { display: none; }
+        }
+        @media (max-width: 560px) {
+            .container { padding: 0 1.15rem; }
+            .cta-wrap { padding: 2.4rem 1.4rem; }
+            .nav-links { gap: 0.6rem; }
+            .nav-links .btn-ghost { display: none; }
+            .btn { padding: 0.62rem 1.05rem; font-size: 0.9rem; }
+            .hero-cta .btn { flex: 1 1 auto; justify-content: center; }
+            .preview { padding: 0.9rem; }
+            .post { gap: 0.6rem; padding: 0.7rem; }
+            .chip { font-size: 0.68rem; padding: 0.24rem 0.5rem; }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <nav>
-            <div class="logo" aria-label="Howllo">
-                <div class="logo-mark">
-                    <img src="brand/howllo-logo.svg" alt="Howllo logo">
-                </div>
-                <div class="logo-wordmark">
-                    <img src="brand/howllo-logo-wordmark-horizontal.svg" alt="Howllo">
-                </div>
-            </div>
-            <div>
-                <a href="#" class="btn btn-primary">Sign Up Free</a>
+            <a class="logo" href="/" aria-label="Howllo home">
+                <span class="logo-mark"><img src="brand/howllo-logo.svg" alt=""></span>
+                <span class="logo-wordmark"><img src="brand/howllo-logo-wordmark-horizontal.svg" alt="Howllo"></span>
+            </a>
+            <div class="nav-links">
+                <a class="nav-link" href="#features">Features</a>
+                <a class="nav-link" href="#roadmap">Roadmap</a>
+                <a class="nav-link" href="#how">How it works</a>
+                <a class="btn btn-ghost" href="http://localhost:5111">Sign in</a>
+                <a class="btn btn-primary" href="http://localhost:5112">Get started</a>
             </div>
         </nav>
 
         <section class="hero">
             <div class="hero-content">
-                <div class="hero-brand">
-                    <img src="brand/howllo-logo-wordmark-horizontal.svg" alt="Howllo wordmark">
+                <span class="eyebrow rise"><span class="dot"></span> Feedback → Roadmap → Changelog</span>
+                <h1 class="rise rise-2">Capture feedback.<br><span class="grad">Ship in the open.</span></h1>
+                <p class="hero-lead rise rise-2">Howllo turns scattered feature requests into one prioritized board your users can watch — they post, they vote, and they see exactly what you're building next.</p>
+                <div class="hero-cta rise rise-3">
+                    <a class="btn btn-primary btn-lg" href="http://localhost:5112">Start your board</a>
+                    <a class="btn btn-ghost btn-lg" href="#roadmap">See a live roadmap</a>
                 </div>
-                <h1>Capture feedback. <br/>Build the right roadmap.</h1>
-                <p>The feedback platform that helps product teams collect, organize, and prioritize feature requests with beautiful roadmaps.</p>
-                <div style="display: flex; gap: 1rem;">
-                    <a href="#" class="btn btn-primary">Get Started Now</a>
-                    <a href="#" class="btn" style="border: 1px solid #e2e8f0;">See Demo</a>
+                <div class="hero-trust rise rise-3">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                    Self-hostable · Multi-tenant · Your workspace, your brand
                 </div>
             </div>
-            <div class="hero-image">
-                <div class="hero-image-inner">
-                    <img src="brand/howllo-logo-wordmark-horizontal.svg" alt="Howllo">
-                    <div class="hero-preview">
-                        <div class="preview-card">
-                            <div class="status">Planned</div>
-                            <strong>Dark mode for workspace view</strong>
-                            <p style="margin: 0.75rem 0 0; color: var(--text-muted);">Turn product requests into visible roadmap movement with one canonical signal.</p>
-                        </div>
-                        <div class="preview-card">
-                            <div class="status" style="background: rgba(22,163,74,0.12); color:#166534;">In Progress</div>
-                            <strong>Public changelog and release stream</strong>
-                            <p style="margin: 0.75rem 0 0; color: var(--text-muted);">Keep users updated from first request to shipped release without leaving the board.</p>
-                        </div>
+
+            <div class="preview rise rise-3" aria-hidden="true">
+                <div class="preview-head">
+                    <span class="preview-icon">H</span>
+                    <div>
+                        <div class="preview-title">Feature Requests</div>
+                        <div class="preview-sub">howllo.app · public board</div>
                     </div>
+                </div>
+                <div class="tabs">
+                    <span class="tab active">Feature Requests</span>
+                    <span class="tab">Bug Reports</span>
+                    <span class="tab">Roadmap</span>
+                </div>
+
+                <div class="post">
+                    <span class="vote"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg><b>128</b></span>
+                    <div>
+                        <div class="post-title">Native mobile apps (iOS / Android)</div>
+                        <div class="post-meta">42 comments · triaged by product</div>
+                    </div>
+                    <span class="chip review">Under review</span>
+                </div>
+                <div class="post">
+                    <span class="vote"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg><b>96</b></span>
+                    <div>
+                        <div class="post-title">Dark mode across the dashboard</div>
+                        <div class="post-meta">18 comments · on the roadmap</div>
+                    </div>
+                    <span class="chip planned">Planned</span>
+                </div>
+                <div class="post">
+                    <span class="vote"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg><b>73</b></span>
+                    <div>
+                        <div class="post-title">Slack &amp; email notifications</div>
+                        <div class="post-meta">official response · building now</div>
+                    </div>
+                    <span class="chip progress">In progress</span>
+                </div>
+                <div class="post">
+                    <span class="vote"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg><b>51</b></span>
+                    <div>
+                        <div class="post-title">One-click CSV / JSON export</div>
+                        <div class="post-meta">shipped in v1.4</div>
+                    </div>
+                    <span class="chip done">Done</span>
                 </div>
             </div>
         </section>
     </div>
 
-    <section class="features">
+    <!-- Features -->
+    <section class="band" id="features">
         <div class="container">
-            <div style="text-align: center; margin-bottom: 4rem;">
-                <h2 style="font-size: 2.5rem; font-weight: 800; letter-spacing: -0.03em;">Built for modern product teams</h2>
+            <div class="section-head">
+                <span class="section-kicker">Everything the loop needs</span>
+                <h2>One place for signal, priority, and progress</h2>
+                <p>From the first request to the shipped release — no spreadsheets, no lost threads, no guessing what to build next.</p>
             </div>
             <div class="feature-grid">
                 <div class="feature-card">
-                    <h3>Signal Capture</h3>
-                    <p>Easily collect feature requests and bug reports from your users in one central place.</p>
+                    <div class="feature-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+                    <h3>Signal capture</h3>
+                    <p>Collect feature requests and bug reports across boards, each with its own icon, theme, and audience.</p>
                 </div>
                 <div class="feature-card">
-                    <h3>Transparent Roadmaps</h3>
-                    <p>Show your users what you're working on and what's coming next with automatic status updates.</p>
+                    <div class="feature-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/><path d="M12 3v12"/></svg></div>
+                    <h3>Votes &amp; priority</h3>
+                    <p>Let users vote and comment so the loudest, most-wanted ideas rise to the top — automatically.</p>
                 </div>
                 <div class="feature-card">
-                    <h3>User Collaboration</h3>
-                    <p>Let users vote on signals and comment to provide more detail, so you know what matters most.</p>
+                    <div class="feature-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></div>
+                    <h3>Transparent roadmap</h3>
+                    <p>Planned, in progress, and done — a public roadmap that updates itself as posts change status.</p>
                 </div>
+                <div class="feature-card">
+                    <div class="feature-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V5z"/><path d="m9 12 2 2 4-4"/></svg></div>
+                    <h3>Official responses</h3>
+                    <p>Reply on the record. Official updates and status changes land in every follower's timeline.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg></div>
+                    <h3>Changelog ready</h3>
+                    <p>Done items flow straight into a public changelog, so shipping is the same as announcing.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg></div>
+                    <h3>Your workspace</h3>
+                    <p>Multi-tenant and self-hostable, with per-workspace branding, roles, and moderation built in.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Roadmap band -->
+    <section class="band roadmap-band" id="roadmap">
+        <div class="container">
+            <div class="section-head">
+                <span class="section-kicker">Public by default</span>
+                <h2>A roadmap your users actually trust</h2>
+                <p>Because it's built from the same posts they voted on — not a slide deck that's already out of date.</p>
+            </div>
+            <div class="road-cols">
+                <div class="road-col">
+                    <div class="road-col-head"><span class="chip planned">Planned</span><b>2</b></div>
+                    <div class="road-item"><strong>Per-board custom themes</strong><span>124 votes</span></div>
+                    <div class="road-item"><strong>Dark mode across the dashboard</strong><span>96 votes</span></div>
+                </div>
+                <div class="road-col">
+                    <div class="road-col-head"><span class="chip progress">In progress</span><b>2</b></div>
+                    <div class="road-item"><strong>Slack &amp; email notifications</strong><span>73 votes · official update</span></div>
+                    <div class="road-item"><strong>Realtime vote counts</strong><span>40 votes</span></div>
+                </div>
+                <div class="road-col">
+                    <div class="road-col-head"><span class="chip done">Done</span><b>1</b></div>
+                    <div class="road-item"><strong>One-click CSV / JSON export</strong><span>shipped in v1.4</span></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="band" id="how">
+        <div class="container">
+            <div class="section-head">
+                <span class="section-kicker">How it works</span>
+                <h2>Collect. Prioritize. Ship.</h2>
+                <p>Three steps, one continuous loop your whole team and your users can see.</p>
+            </div>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <h3>Collect the signal</h3>
+                    <p>Point users to your boards. They post requests and bugs — no account friction, just a workspace sign-in.</p>
+                </div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <h3>Prioritize with votes</h3>
+                    <p>Watch the top requests surface. Tag, dedupe, and set status while followers stay in the loop.</p>
+                </div>
+                <div class="step">
+                    <div class="step-num">3</div>
+                    <h3>Ship in the open</h3>
+                    <p>Move a post to Done and it lands on the public roadmap and changelog — closing the loop automatically.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="band">
+        <div class="container">
+            <div class="cta-wrap">
+                <h2>Start collecting feedback today</h2>
+                <p>Spin up your first board in minutes and give your users a roadmap worth watching.</p>
+                <a class="btn btn-primary btn-lg" href="http://localhost:5112">Get started free</a>
             </div>
         </div>
     </section>
 
     <footer>
         <div class="container">
-            <div style="display:flex; justify-content:center; margin-bottom: 1rem;">
-                <img src="brand/howllo-logo-wordmark-horizontal.svg" alt="Howllo" style="height: 28px; width: auto;">
+            <div class="footer-row">
+                <a class="logo" href="/" aria-label="Howllo home">
+                    <span class="logo-mark"><img src="brand/howllo-logo.svg" alt=""></span>
+                    <span class="logo-wordmark"><img src="brand/howllo-logo-wordmark-horizontal.svg" alt="Howllo"></span>
+                </a>
+                <div class="footer-links">
+                    <a href="#features">Features</a>
+                    <a href="#roadmap">Roadmap</a>
+                    <a href="#how">How it works</a>
+                    <a href="http://localhost:5112">Live demo</a>
+                </div>
             </div>
-            <p>&copy; 2026 Howllo Inc. All rights reserved.</p>
+            <p class="footer-copy" style="margin-top: 1.4rem;">&copy; 2026 Howllo. Feedback boards &amp; roadmaps for product teams.</p>
         </div>
     </footer>
 </body>

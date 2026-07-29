@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 import Link from "next/link";
 import { StatusPill } from "@/components/status-pill";
+import { countLabel } from "@/lib/format";
 
 type RoadmapItemCardProps = {
   title: string;
@@ -48,8 +49,8 @@ export function RoadmapItemCard({
       {expanded ? (
         <div className="roadmap-card__detail" id={detailId}>
           <div className="metadata muted">
-            <span>{voteCount} votes</span>
-            <span>{commentCount} comments</span>
+            <span>{countLabel(voteCount, "vote")}</span>
+            <span>{countLabel(commentCount, "comment")}</span>
           </div>
           <Link className="roadmap-card__link" href={href}>
             View request →

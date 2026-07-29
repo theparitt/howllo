@@ -11,6 +11,7 @@ import { StatusPill } from "@/components/status-pill";
 import { PostActions } from "@/components/post-actions";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { WorkspaceState } from "@/components/workspace-state";
+import { plural } from "@/lib/format";
 
 type PostPageProps = {
   params: Promise<{
@@ -65,8 +66,8 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                   {post.title}
                 </h1>
                 <div className="metric-row">
-                  <span><strong>{post.vote_count}</strong> votes</span>
-                  <span><strong>{comments.length}</strong> comments</span>
+                  <span><strong>{post.vote_count}</strong> {plural(post.vote_count, "vote")}</span>
+                  <span><strong>{comments.length}</strong> {plural(comments.length, "comment")}</span>
                   <span>{new Date(post.created_at).toLocaleDateString()}</span>
                 </div>
               </div>

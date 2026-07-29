@@ -11,6 +11,7 @@ import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { StatusPill } from "@/components/status-pill";
 import { WorkspaceState } from "@/components/workspace-state";
 import { themedSurfaceStyle } from "@/lib/theme";
+import { countLabel } from "@/lib/format";
 
 type BoardPageProps = {
   params: Promise<{
@@ -133,7 +134,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
                 <div>
                   <strong>{post.title}</strong>
                   <p className="section-subtitle">
-                    {post.vote_count} votes • {post.comment_count} comments
+                    {countLabel(post.vote_count, "vote")} • {countLabel(post.comment_count, "comment")}
                     {post.duplicate_of_post_id ? " • duplicate" : ""}
                   </p>
                 </div>

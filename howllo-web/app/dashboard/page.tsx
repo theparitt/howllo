@@ -12,6 +12,7 @@ import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { StatusPill } from "@/components/status-pill";
 import { WorkspaceState } from "@/components/workspace-state";
 import { themedSurfaceStyle } from "@/lib/theme";
+import { countLabel } from "@/lib/format";
 
 type DashboardPageProps = {
   searchParams: Promise<{
@@ -276,7 +277,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                       <div>
                         <strong>{post.title}</strong>
                         <p className="section-subtitle">
-                          {post.comment_count} comments • {post.vote_count} votes
+                          {countLabel(post.comment_count, "comment")} • {countLabel(post.vote_count, "vote")}
                         </p>
                       </div>
                       <StatusPill status={post.status} />
@@ -308,7 +309,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                       <div>
                         <strong>{post.title}</strong>
                         <p className="section-subtitle">
-                          {post.vote_count} votes • {post.comment_count} comments
+                          {countLabel(post.vote_count, "vote")} • {countLabel(post.comment_count, "comment")}
                         </p>
                       </div>
                       <StatusPill status={post.status} />
