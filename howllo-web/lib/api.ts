@@ -321,6 +321,35 @@ export async function managerRemoveMember(userId: string, tenantSlug: string, to
   );
 }
 
+// ---- Moderation (owner/admin/moderator), called from the web with the
+// workspace-session token. Same endpoints howllo-admin uses.
+
+export async function moderateStatus(postId: string, status: string, reason: string, token: string): Promise<void> {
+  await managerWrite(`/api/admin/posts/${postId}/status`, "PATCH", token, {
+    status,
+    reason: reason.trim() || null,
+  });
+}
+
+export async function moderateVisibility(postId: string, isHidden: boolean, token: string): Promise<void> {
+  await managerWrite(`/api/admin/posts/${postId}/visibility`, "PATCH", token, { is_hidden: isHidden });
+}
+
+export async function moderateLock(postId: string, isLocked: boolean, token: string): Promise<void> {
+  await managerWrite(`/api/admin/posts/${postId}/lock`, "PATCH", token, { is_locked: isLocked });
+}
+
+/// Post an official response: create the comment, then promote it to official.
+export async function postOfficialResponse(postId: string, body: string, token: string): Promise<void> {
+  const created = await apiFetch(buildUrl(`/api/posts/${postId}/comments`), {
+    method: "POST",
+    headers: { "content-type": "application/json", Authorization: token },
+    body: JSON.stringify({ body }),
+  });
+  const comment = await unwrap<{ id: string }>(created);
+  await managerWrite(`/api/admin/comments/${comment.id}/official`, "PATCH", token, { is_official: true });
+}
+
 export async function getUnreadCount(token: string): Promise<number> {
   const response = await apiFetch(buildUrl("/api/notifications/unread-count"), {
     cache: "no-store",

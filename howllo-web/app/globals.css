@@ -1862,3 +1862,21 @@ textarea.manage-input { width: 100%; resize: vertical; }
 }
 .manage-board-tab:hover { border-color: rgba(127, 109, 207, 0.4); }
 .manage-board-tab--active { border-color: var(--coral); background: rgba(243, 105, 73, 0.06); }
+
+/* ------------------------------------------------------------- Moderation */
+.button--small { padding: 0.45rem 0.85rem; font-size: 0.86rem; }
+.button--danger { color: var(--danger); border-color: rgba(192, 57, 43, 0.3); }
+.button--danger:hover { color: #fff; background: var(--danger); border-color: transparent; }
+.mod-panel { border-left: 3px solid var(--coral); display: grid; gap: 1rem; }
+.mod-panel__head { display: flex; align-items: center; justify-content: space-between; }
+.mod-panel__role {
+  font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase;
+  color: var(--coral-700); background: rgba(243, 105, 73, 0.12);
+  padding: 0.2rem 0.55rem; border-radius: 999px;
+}
+.mod-block { display: grid; gap: 0.5rem; }
+.mod-block--row { grid-auto-flow: column; justify-content: start; gap: 0.6rem; }
+.mod-label { font-weight: 600; font-size: 0.85rem; color: var(--text-soft); }
+.mod-status-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.mod-arrow { color: var(--muted); }
+.mod-reason { max-width: 100%; }

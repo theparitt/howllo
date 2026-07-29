@@ -9,6 +9,7 @@ import {
 import { getServerBearerToken } from "@/lib/server-auth";
 import { StatusPill } from "@/components/status-pill";
 import { PostActions } from "@/components/post-actions";
+import { ModerationPanel } from "@/components/moderation-panel";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { WorkspaceState } from "@/components/workspace-state";
 import { plural } from "@/lib/format";
@@ -160,6 +161,13 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
 
         <div className="grid" style={{ gap: "1rem" }}>
           <PostActions tenantSlug={tenant} isLocked={post.is_locked} postId={post.id} />
+          <ModerationPanel
+            tenantSlug={tenant}
+            boardSlug={post.board_slug}
+            postId={post.id}
+            currentStatus={post.status}
+            isLocked={post.is_locked}
+          />
         </div>
       </div>
     );
