@@ -217,6 +217,35 @@ export async function getNotifications(token: string): Promise<Notification[]> {
   return unwrap<Notification[]>(response);
 }
 
+export async function getUnreadCount(token: string): Promise<number> {
+  const response = await apiFetch(buildUrl("/api/notifications/unread-count"), {
+    cache: "no-store",
+    headers: { Authorization: token },
+  });
+  const data = await unwrap<{ unread: number }>(response);
+  return data.unread;
+}
+
+export async function markAllNotificationsRead(token: string): Promise<void> {
+  const response = await apiFetch(buildUrl("/api/notifications/read-all"), {
+    method: "POST",
+    headers: { Authorization: token },
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, (await response.text()) || `Request failed with ${response.status}`);
+  }
+}
+
+export async function markNotificationRead(id: string, token: string): Promise<void> {
+  const response = await apiFetch(buildUrl(`/api/notifications/${id}/read`), {
+    method: "PATCH",
+    headers: { Authorization: token },
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, (await response.text()) || `Request failed with ${response.status}`);
+  }
+}
+
 export async function getMe(token: string): Promise<CurrentUser> {
   const response = await apiFetch(buildUrl("/api/me"), {
     cache: "no-store",

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { AuthControl } from "@/components/auth-control";
+import { NotificationBell } from "@/components/notification-bell";
 import { getTenantBranding } from "@/lib/api";
 import type { TenantBranding } from "@/lib/types";
 import { buildTenantPath } from "@/lib/default-tenant";
@@ -148,6 +149,7 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
                 Roadmap
               </Link>
             ) : null}
+            <NotificationBell />
             <AuthControl myHref={myHref} />
           </nav>
         </div>

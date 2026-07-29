@@ -1617,3 +1617,145 @@ select {
 .text-button:hover:not(:disabled) {
   color: var(--text);
 }
+
+/* --------------------------------------------------- Notification bell + center */
+.notif {
+  position: relative;
+  display: inline-flex;
+}
+.notif__bell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-strong);
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: color 160ms var(--ease), border-color 160ms var(--ease), transform 160ms var(--ease);
+}
+.notif__bell:hover {
+  color: var(--coral-700);
+  border-color: rgba(127, 109, 207, 0.4);
+}
+.notif__badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--coral);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 0 2px var(--panel-strong);
+}
+.notif__center {
+  position: absolute;
+  top: calc(100% + 0.6rem);
+  right: 0;
+  width: min(360px, 90vw);
+  max-height: 70vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 60;
+  animation: notif-pop 0.16s var(--ease) both;
+}
+@keyframes notif-pop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.notif__center-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.notif__center-head strong { font-family: var(--font-display); }
+.notif__list { overflow-y: auto; }
+.notif__empty { padding: 1.6rem 1rem; text-align: center; color: var(--muted); font-size: 0.92rem; }
+.notif__item {
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  cursor: pointer;
+  transition: background 140ms var(--ease);
+}
+.notif__item:hover { background: rgba(127, 109, 207, 0.06); }
+.notif__item--unread { background: rgba(243, 105, 73, 0.06); }
+.notif__item--unread .notif__item-title::before {
+  content: "";
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-right: 0.4rem;
+  border-radius: 999px;
+  background: var(--coral);
+  vertical-align: middle;
+}
+.notif__item-title { font-weight: 600; font-size: 0.92rem; color: var(--text); }
+.notif__item-body { font-size: 0.85rem; color: var(--text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notif__item-time { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
+
+/* --------------------------------------------------------------------- Toasts */
+.toast-stack {
+  position: fixed;
+  right: 1.2rem;
+  bottom: 1.2rem;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: min(340px, calc(100vw - 2rem));
+}
+.toast {
+  position: relative;
+  display: grid;
+  gap: 0.2rem;
+  text-align: left;
+  padding: 0.85rem 2rem 0.85rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--coral);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+  animation: toast-in 0.24s var(--ease) both;
+}
+.toast--more {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+  border-left-color: var(--accent);
+  cursor: default;
+}
+.toast__title { font-weight: 600; font-size: 0.9rem; color: var(--text); }
+.toast__body { font-size: 0.83rem; color: var(--text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast__close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.6rem;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.toast__close:hover { color: var(--text); }
+@keyframes toast-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .toast, .notif__center { animation: none; }
+}
