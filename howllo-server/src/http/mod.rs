@@ -301,6 +301,27 @@ pub mod test_support {
             ALTER TABLE posts
             ADD COLUMN IF NOT EXISTS attachments JSONB NOT NULL DEFAULT '[]'::jsonb;
 
+            CREATE TABLE IF NOT EXISTS accounts (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                slug VARCHAR(255) UNIQUE NOT NULL,
+                name VARCHAR(255) NOT NULL,
+                owner_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+
+            CREATE TABLE IF NOT EXISTS account_memberships (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                role VARCHAR(50) NOT NULL DEFAULT 'owner',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (account_id, user_id)
+            );
+
+            ALTER TABLE tenants
+            ADD COLUMN IF NOT EXISTS account_id UUID REFERENCES accounts(id) ON DELETE CASCADE;
+
             DROP INDEX IF EXISTS boards_one_default_per_tenant_idx;
             "#,
         )
@@ -327,6 +348,8 @@ pub mod test_support {
                 posts,
                 boards,
                 memberships,
+                account_memberships,
+                accounts,
                 users,
                 tenants,
                 tenant_branding,

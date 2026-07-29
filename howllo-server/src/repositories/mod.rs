@@ -1,3 +1,4 @@
+pub mod account_repository;
 pub mod ai_suggestion_repository;
 pub mod api_token_repository;
 pub mod board_repository;

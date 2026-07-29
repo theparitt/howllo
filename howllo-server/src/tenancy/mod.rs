@@ -235,6 +235,29 @@ pub async fn create_admin_tenant(
             AppError::InternalServerError
         })?;
 
+    // Group the new workspace under the creator's account (create one on first
+    // workspace). See docs/TENANCY.md.
+    let account_id = crate::repositories::account_repository::find_or_create_account_for_owner(
+        &mut tx,
+        auth.0.id,
+        name,
+    )
+    .await
+    .map_err(|error| {
+        tracing::error!(error = %error, user_id = %auth.0.id, "error resolving account for workspace");
+        AppError::InternalServerError
+    })?;
+
+    sqlx::query("UPDATE tenants SET account_id = $1 WHERE id = $2")
+        .bind(account_id)
+        .bind(row.id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| {
+            tracing::error!(error = %error, tenant_id = %row.id, account_id = %account_id, "error linking workspace to account");
+            AppError::InternalServerError
+        })?;
+
     tx.commit().await.map_err(|error| {
         tracing::error!(error = %error, tenant_id = %row.id, "error committing workspace creation");
         AppError::InternalServerError
@@ -573,6 +596,73 @@ mod tests {
         bearer_for, lock_test_db, read_json, reset_db, seed_basic_tenant, test_settings,
     };
     use crate::startup;
+
+    // Creating workspaces groups them under the creator's account: the first
+    // one mints an account, the second reuses it. See docs/TENANCY.md.
+    #[actix_web::test]
+    async fn creating_workspaces_groups_them_under_one_account() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let _seed = seed_basic_tenant(&pool).await;
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+
+        // Only the local (system) admin can create workspaces today.
+        let token = bearer_for(
+            "local-admin",
+            "admin@howllo.local",
+            "Admin",
+            &settings.rooiam_jwt_secret,
+        );
+
+        let first_req = test::TestRequest::post()
+            .uri("/api/admin/tenants")
+            .insert_header(("Authorization", token.clone()))
+            .set_json(json!({ "name": "Acme Product" }))
+            .to_request();
+        let first = read_json(test::call_service(&app, first_req).await).await;
+
+        let second_req = test::TestRequest::post()
+            .uri("/api/admin/tenants")
+            .insert_header(("Authorization", token))
+            .set_json(json!({ "name": "Acme Support" }))
+            .to_request();
+        let second = read_json(test::call_service(&app, second_req).await).await;
+
+        let first_slug = first.get("slug").and_then(|v| v.as_str()).unwrap();
+        let second_slug = second.get("slug").and_then(|v| v.as_str()).unwrap();
+
+        // Both workspaces are linked to accounts...
+        let account_ids: Vec<uuid::Uuid> = sqlx::query_scalar(
+            "SELECT account_id FROM tenants WHERE slug = ANY($1) AND account_id IS NOT NULL",
+        )
+        .bind(vec![first_slug.to_string(), second_slug.to_string()])
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(account_ids.len(), 2, "both new workspaces have an account");
+        // ...and it is the SAME account (the creator's).
+        assert_eq!(account_ids[0], account_ids[1]);
+
+        // Exactly one account membership (owner) for the local admin.
+        let account_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM account_memberships WHERE role = 'owner'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(account_count, 1);
+    }
 
     #[actix_web::test]
     async fn admin_can_update_workspace_branding_background() {
