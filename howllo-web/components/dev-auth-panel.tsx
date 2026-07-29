@@ -16,7 +16,7 @@ export function getWorkspaceAuthStorageKey(tenantSlug: string) {
 
 export function getWorkspaceSlugFromPath(pathname: string) {
   const [first] = pathname.replace(/^\/+/, "").split("/");
-  if (!first || ["admin", "auth", "dashboard", "boards", "posts", "roadmap", "my"].includes(first)) {
+  if (!first || ["admin", "auth", "dashboard", "boards", "posts", "roadmap", "my", "feed"].includes(first)) {
     return null;
   }
   return first;

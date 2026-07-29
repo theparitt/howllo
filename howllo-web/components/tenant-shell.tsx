@@ -103,6 +103,7 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
     branding.tenant_slug,
   );
   const roadmapHref = buildTenantPath("/roadmap", branding.tenant_slug, branding.tenant_slug);
+  const feedHref = buildTenantPath("/feed", branding.tenant_slug, branding.tenant_slug);
   const myHref = buildTenantPath(
     "/my/account",
     branding.tenant_slug,
@@ -141,6 +142,9 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <nav className="nav">
+            <Link href={feedHref} className="nav__link">
+              Feed
+            </Link>
             <Link href={dashboardHref} className="nav__link">
               Dashboard
             </Link>
