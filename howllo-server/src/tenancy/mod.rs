@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
 
-use crate::auth::{local_admin, require_permission, AuthenticatedUser};
+use crate::auth::{require_permission, AuthenticatedUser};
 use crate::db::DbPool;
 use crate::domain::permission::Permission;
 use crate::errors::AppError;
@@ -83,7 +83,7 @@ pub struct DeleteWorkspaceRequest {
     pub confirm_slug: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, sqlx::FromRow)]
 pub struct AdminTenantSummaryDto {
     pub id: Uuid,
     pub slug: String,
@@ -154,28 +154,33 @@ pub async fn list_admin_tenants(
     pool: web::Data<DbPool>,
     auth: AuthenticatedUser,
 ) -> Result<impl Responder, AppError> {
-    if !local_admin::is_local_admin_user(&auth.0) {
-        return Err(AppError::Forbidden);
-    }
-
-    let tenants = sqlx::query_as!(
-        AdminTenantSummaryDto,
+    // Return only the workspaces this user can reach: ones they staff directly,
+    // plus every workspace in an account they own/admin. The local (system) admin
+    // holds a membership on every workspace, so it still sees them all.
+    // Untyped query so no sqlx offline-cache regeneration is needed.
+    let tenants = sqlx::query_as::<_, AdminTenantSummaryDto>(
         r#"
         SELECT
             t.id,
             t.slug,
             t.name,
-            COUNT(DISTINCT b.id)::BIGINT AS "board_count!",
-            COUNT(DISTINCT m.user_id)::BIGINT AS "member_count!",
+            COUNT(DISTINCT b.id)::BIGINT AS board_count,
+            COUNT(DISTINCT m.user_id)::BIGINT AS member_count,
             t.created_at,
             t.updated_at
         FROM tenants t
         LEFT JOIN boards b ON b.tenant_id = t.id
         LEFT JOIN memberships m ON m.tenant_id = t.id
+        WHERE t.id IN (SELECT tenant_id FROM memberships WHERE user_id = $1)
+           OR t.account_id IN (
+                SELECT account_id FROM account_memberships
+                WHERE user_id = $1 AND role IN ('owner', 'admin')
+           )
         GROUP BY t.id, t.slug, t.name, t.created_at, t.updated_at
         ORDER BY t.created_at ASC
-        "#
+        "#,
     )
+    .bind(auth.0.id)
     .fetch_all(pool.get_ref())
     .await
     .map_err(|error| {
@@ -192,10 +197,8 @@ pub async fn create_admin_tenant(
     auth: AuthenticatedUser,
     body: web::Json<CreateWorkspaceRequest>,
 ) -> Result<impl Responder, AppError> {
-    if !local_admin::is_local_admin_user(&auth.0) {
-        return Err(AppError::Forbidden);
-    }
-
+    // Any authenticated user can create a workspace; the first one also mints
+    // their account and makes them its owner (SaaS sign-up flow).
     let name = body.name.trim();
     if name.is_empty() {
         return Err(AppError::Validation(
@@ -288,10 +291,6 @@ pub async fn delete_admin_tenant(
     path: web::Path<String>,
     body: web::Json<DeleteWorkspaceRequest>,
 ) -> Result<impl Responder, AppError> {
-    if !local_admin::is_local_admin_user(&auth.0) {
-        return Err(AppError::Forbidden);
-    }
-
     let slug = path.into_inner();
 
     // Typed confirmation must match the slug exactly.
@@ -314,6 +313,9 @@ pub async fn delete_admin_tenant(
         .iter()
         .find(|r| r.slug == slug)
         .ok_or(AppError::NotFound)?;
+
+    // Only a workspace owner (or account owner, via the authz shortcut) may delete it.
+    crate::auth::require_owner(pool.get_ref(), target.id, auth.0.id).await?;
 
     // Never delete the default workspace (oldest) — the app bootstraps from it.
     if rows.first().map(|r| r.id) == Some(target.id) {
@@ -662,6 +664,117 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(account_count, 1);
+    }
+
+    // list_admin_tenants is scoped to the caller, and an account owner can reach
+    // (and manage) every workspace in their account — even one they have no direct
+    // membership on. See docs/TENANCY.md.
+    #[actix_web::test]
+    async fn account_owner_reaches_every_workspace_in_their_account() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+
+        // A plain rooiam user (not the system admin) creates their first workspace.
+        let founder = bearer_for(
+            "founder-1",
+            "founder@example.com",
+            "Founder",
+            &settings.rooiam_jwt_secret,
+        );
+        let create_req = test::TestRequest::post()
+            .uri("/api/admin/tenants")
+            .insert_header(("Authorization", founder.clone()))
+            .set_json(json!({ "name": "Founder One" }))
+            .to_request();
+        let w1 = read_json(test::call_service(&app, create_req).await).await;
+        let w1_slug = w1.get("slug").and_then(|v| v.as_str()).unwrap().to_string();
+
+        // A second workspace is put in the founder's account WITHOUT a direct
+        // membership for them.
+        let account_id: uuid::Uuid =
+            sqlx::query_scalar("SELECT account_id FROM tenants WHERE slug = $1")
+                .bind(&w1_slug)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let w2_slug = format!("founder-two-{}", &uuid::Uuid::new_v4().simple().to_string()[..6]);
+        sqlx::query("INSERT INTO tenants (slug, name, account_id) VALUES ($1, 'Founder Two', $2)")
+            .bind(&w2_slug)
+            .bind(account_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Scoping: founder sees BOTH their workspaces, not the seed's.
+        let list_req = test::TestRequest::get()
+            .uri("/api/admin/tenants")
+            .insert_header(("Authorization", founder.clone()))
+            .to_request();
+        let list = read_json(test::call_service(&app, list_req).await).await;
+        let slugs: Vec<String> = list
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|t| t.get("slug").and_then(|v| v.as_str()).map(String::from))
+            .collect();
+        assert!(slugs.contains(&w1_slug));
+        assert!(slugs.contains(&w2_slug));
+        assert!(!slugs.contains(&seed.tenant_slug));
+
+        // Authz shortcut: founder (account owner, no direct membership on W2) can
+        // manage W2's settings.
+        let patch_req = test::TestRequest::patch()
+            .uri(&format!("/api/admin/tenant-branding?tenant_slug={w2_slug}"))
+            .insert_header(("Authorization", founder))
+            .set_json(json!({
+                "site_name": "Founder Two",
+                "accent_color": "#f36949",
+                "background_color": "#e8f4ff",
+                "show_powered_by": true,
+                "show_roadmap": true
+            }))
+            .to_request();
+        assert_eq!(
+            test::call_service(&app, patch_req).await.status(),
+            StatusCode::OK
+        );
+
+        // A stranger from another account cannot.
+        let stranger = bearer_for(
+            &seed.member_subject,
+            "member@example.com",
+            "Member",
+            &settings.rooiam_jwt_secret,
+        );
+        let denied_req = test::TestRequest::patch()
+            .uri(&format!("/api/admin/tenant-branding?tenant_slug={w2_slug}"))
+            .insert_header(("Authorization", stranger))
+            .set_json(json!({
+                "site_name": "Nope",
+                "accent_color": "#000000",
+                "background_color": "#ffffff",
+                "show_powered_by": true,
+                "show_roadmap": true
+            }))
+            .to_request();
+        assert_eq!(
+            test::call_service(&app, denied_req).await.status(),
+            StatusCode::FORBIDDEN
+        );
     }
 
     #[actix_web::test]
