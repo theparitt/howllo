@@ -95,6 +95,23 @@ pub async fn list_notifications(
     .await
 }
 
+pub async fn count_unread(pool: &DbPool, user_id: Uuid) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT COUNT(*)::bigint FROM notifications WHERE user_id = $1 AND is_read = FALSE",
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+}
+
+pub async fn mark_all_read(pool: &DbPool, user_id: Uuid) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE notifications SET is_read = TRUE WHERE user_id = $1 AND is_read = FALSE")
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn mark_notification_read(
     pool: &DbPool,
     notification_id: Uuid,

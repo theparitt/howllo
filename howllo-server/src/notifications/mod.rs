@@ -1,4 +1,4 @@
-use actix_web::{get, patch, web, HttpResponse, Responder};
+use actix_web::{get, patch, post, web, HttpResponse, Responder};
 use serde::Serialize;
 
 use crate::auth::AuthenticatedUser;
@@ -61,6 +61,34 @@ pub async fn list_notifications(
         })?;
 
     Ok(HttpResponse::Ok().json(items))
+}
+
+#[get("/api/notifications/unread-count")]
+pub async fn unread_count(
+    pool: web::Data<DbPool>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    let count = notification_repository::count_unread(pool.get_ref(), auth.0.id)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, user_id = %auth.0.id, "error counting unread notifications");
+            AppError::InternalServerError
+        })?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "unread": count })))
+}
+
+#[post("/api/notifications/read-all")]
+pub async fn mark_all_read(
+    pool: web::Data<DbPool>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    notification_repository::mark_all_read(pool.get_ref(), auth.0.id)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, user_id = %auth.0.id, "error marking all notifications read");
+            AppError::InternalServerError
+        })?;
+    Ok(HttpResponse::NoContent().finish())
 }
 
 #[patch("/api/notifications/{notification_id}/read")]
@@ -154,5 +182,115 @@ mod tests {
             items[0].get("event_type").and_then(|v| v.as_str()),
             Some("status_changed")
         );
+    }
+
+    #[actix_web::test]
+    async fn author_is_notified_when_someone_comments_and_can_clear_unread() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+
+        let member = bearer_for(&seed.member_subject, "member@example.com", "Member", &settings.rooiam_jwt_secret);
+        let admin = bearer_for(&seed.admin_subject, "admin@example.com", "Admin", &settings.rooiam_jwt_secret);
+
+        // The member authors a post (author auto-follows it).
+        let created = read_json(
+            test::call_service(
+                &app,
+                test::TestRequest::post()
+                    .uri(&format!("/api/boards/{}/posts", seed.board_slug))
+                    .insert_header(("Authorization", member.clone()))
+                    .set_json(json!({ "tenant_slug": seed.tenant_slug, "title": "My idea", "body": "Please build it." }))
+                    .to_request(),
+            )
+            .await,
+        )
+        .await;
+        let post_id = created.get("id").and_then(|v| v.as_str()).unwrap();
+
+        // Someone else comments -> the author is notified.
+        assert_eq!(
+            test::call_service(
+                &app,
+                test::TestRequest::post()
+                    .uri(&format!("/api/posts/{post_id}/comments"))
+                    .insert_header(("Authorization", admin))
+                    .set_json(json!({ "body": "Great idea!" }))
+                    .to_request(),
+            )
+            .await
+            .status(),
+            StatusCode::CREATED
+        );
+
+        let notifs = read_json(
+            test::call_service(
+                &app,
+                test::TestRequest::get()
+                    .uri("/api/notifications")
+                    .insert_header(("Authorization", member.clone()))
+                    .to_request(),
+            )
+            .await,
+        )
+        .await;
+        assert!(notifs
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n.get("event_type").and_then(|v| v.as_str()) == Some("post_comment")));
+
+        // Unread count reflects it, and read-all clears it.
+        let count = read_json(
+            test::call_service(
+                &app,
+                test::TestRequest::get()
+                    .uri("/api/notifications/unread-count")
+                    .insert_header(("Authorization", member.clone()))
+                    .to_request(),
+            )
+            .await,
+        )
+        .await;
+        assert_eq!(count.get("unread").and_then(|v| v.as_i64()), Some(1));
+
+        assert_eq!(
+            test::call_service(
+                &app,
+                test::TestRequest::post()
+                    .uri("/api/notifications/read-all")
+                    .insert_header(("Authorization", member.clone()))
+                    .to_request(),
+            )
+            .await
+            .status(),
+            StatusCode::NO_CONTENT
+        );
+
+        let count2 = read_json(
+            test::call_service(
+                &app,
+                test::TestRequest::get()
+                    .uri("/api/notifications/unread-count")
+                    .insert_header(("Authorization", member))
+                    .to_request(),
+            )
+            .await,
+        )
+        .await;
+        assert_eq!(count2.get("unread").and_then(|v| v.as_i64()), Some(0));
     }
 }

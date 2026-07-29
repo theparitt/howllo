@@ -25,6 +25,25 @@ pub async fn upsert_follow(pool: &DbPool, post_id: Uuid, user_id: Uuid) -> Resul
     Ok(())
 }
 
+/// Ensure a follow exists without resetting the user's notify preferences.
+/// Used for auto-following (author on post create, commenter on comment) so we
+/// never clobber a follow the user has already customized. Untyped so no sqlx
+/// cache regeneration is needed.
+pub async fn ensure_follow(pool: &DbPool, post_id: Uuid, user_id: Uuid) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO post_follows (post_id, user_id)
+        VALUES ($1, $2)
+        ON CONFLICT (post_id, user_id) DO NOTHING
+        "#,
+    )
+    .bind(post_id)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 pub async fn delete_follow(pool: &DbPool, post_id: Uuid, user_id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query!(
         "DELETE FROM post_follows WHERE post_id = $1 AND user_id = $2",

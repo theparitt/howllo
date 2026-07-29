@@ -94,6 +94,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(ai::create_grouping_suggestion)
         .service(ai::review_ai_suggestion)
         .service(notifications::list_notifications)
+        .service(notifications::unread_count)
+        .service(notifications::mark_all_read)
         .service(notifications::mark_notification_read)
         .service(tags::api::list_tags)
         .service(comments::api::create_comment)

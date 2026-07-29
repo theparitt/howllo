@@ -301,6 +301,9 @@ pub mod test_support {
             ALTER TABLE posts
             ADD COLUMN IF NOT EXISTS attachments JSONB NOT NULL DEFAULT '[]'::jsonb;
 
+            ALTER TABLE post_follows
+            ADD COLUMN IF NOT EXISTS notify_on_comment BOOLEAN NOT NULL DEFAULT TRUE;
+
             CREATE TABLE IF NOT EXISTS accounts (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 slug VARCHAR(255) UNIQUE NOT NULL,

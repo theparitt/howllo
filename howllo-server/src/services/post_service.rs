@@ -259,12 +259,17 @@ pub async fn create_post(
         .await
         .map_err(|_| AppError::Forbidden)?;
 
-    post_repository::create_post(pool, board.tenant_id, board.board_id, user_id, title, body, attachments)
+    let created = post_repository::create_post(pool, board.tenant_id, board.board_id, user_id, title, body, attachments)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, tenant_id = %board.tenant_id, board_slug = board_slug, user_id = %user_id, "error creating post");
             AppError::InternalServerError
-        })
+        })?;
+
+    // The author follows their own post so activity on it reaches them.
+    let _ = crate::repositories::subscription_repository::ensure_follow(pool, created.id, user_id).await;
+
+    Ok(created)
 }
 
 pub async fn update_post(
