@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { AuthControl } from "@/components/auth-control";
 import { NotificationBell } from "@/components/notification-bell";
-import { getTenantBranding } from "@/lib/api";
+import { getMyWorkspaceRole, getTenantBranding } from "@/lib/api";
+import { readStoredBearerToken, subscribeToBearerTokenChange } from "@/components/dev-auth-panel";
 import type { TenantBranding } from "@/lib/types";
 import { buildTenantPath } from "@/lib/default-tenant";
 import { hexToRgba } from "@/lib/theme";
@@ -18,6 +19,8 @@ const RESERVED_TOP_LEVEL_ROUTES = new Set([
   "roadmap",
   "admin",
   "my",
+  "feed",
+  "manage",
 ]);
 
 const DEFAULT_BRANDING: TenantBranding = {
@@ -42,6 +45,28 @@ function getTenantSlugFromPath(pathname: string): string | null {
 export function TenantShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [branding, setBranding] = useState<TenantBranding>(DEFAULT_BRANDING);
+  const [canManage, setCanManage] = useState(false);
+
+  // Show the Manage link only to workspace owners/admins.
+  useEffect(() => {
+    const check = () => {
+      const slug =
+        getTenantSlugFromPath(pathname) ??
+        (typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("tenant")?.trim() || null
+          : null);
+      const token = slug ? readStoredBearerToken(slug).trim() : "";
+      if (!slug || !token) {
+        setCanManage(false);
+        return;
+      }
+      getMyWorkspaceRole(slug, token)
+        .then((role) => setCanManage(role === "owner" || role === "admin"))
+        .catch(() => setCanManage(false));
+    };
+    check();
+    return subscribeToBearerTokenChange(check);
+  }, [pathname]);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,6 +129,7 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
   );
   const roadmapHref = buildTenantPath("/roadmap", branding.tenant_slug, branding.tenant_slug);
   const feedHref = buildTenantPath("/feed", branding.tenant_slug, branding.tenant_slug);
+  const manageHref = buildTenantPath("/manage", branding.tenant_slug, branding.tenant_slug);
   const myHref = buildTenantPath(
     "/my/account",
     branding.tenant_slug,
@@ -151,6 +177,11 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
             {branding.show_roadmap ? (
               <Link href={roadmapHref} className="nav__link">
                 Roadmap
+              </Link>
+            ) : null}
+            {canManage ? (
+              <Link href={manageHref} className="nav__link">
+                Manage
               </Link>
             ) : null}
             <NotificationBell />

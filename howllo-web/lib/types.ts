@@ -191,3 +191,22 @@ export type MyInvitation = {
   invited_by_name: string | null;
   created_at: string;
 };
+
+export type ManageBoard = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  board_type: string;
+  is_private: boolean;
+  icon_url: string | null;
+  background_color: string | null;
+  dashboard_sections: DashboardSection[];
+};
+
+export type WorkspaceMember = {
+  user_id: string;
+  email: string;
+  display_name: string;
+  role: string;
+};

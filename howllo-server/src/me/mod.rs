@@ -101,6 +101,38 @@ async fn resolve_tenant_id(pool: &DbPool, tenant_slug: &str) -> Result<Uuid, App
     tenant_id.ok_or(AppError::NotFound)
 }
 
+#[derive(Debug, Deserialize)]
+pub struct WorkspaceRoleQuery {
+    pub tenant_slug: String,
+}
+
+/// The signed-in user's role in a workspace (owner/admin/moderator/member) or
+/// null if they have no membership. Lets the web show a "Manage" surface only
+/// to staff. Account owners/admins resolve as `owner` via the authz shortcut.
+#[get("/api/me/workspace-role")]
+pub async fn get_my_workspace_role(
+    pool: web::Data<DbPool>,
+    auth: AuthenticatedUser,
+    query: web::Query<WorkspaceRoleQuery>,
+) -> Result<impl Responder, AppError> {
+    let tenant_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM tenants WHERE slug = $1")
+            .bind(query.tenant_slug.trim())
+            .fetch_optional(pool.get_ref())
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "error resolving tenant for role lookup");
+                AppError::InternalServerError
+            })?;
+
+    let role = match tenant_id {
+        Some(tid) => crate::auth::resolve_effective_role(pool.get_ref(), tid, auth.0.id).await,
+        None => None,
+    };
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "role": role })))
+}
+
 #[get("/api/me")]
 pub async fn get_me(auth: AuthenticatedUser) -> Result<impl Responder, AppError> {
     Ok(HttpResponse::Ok().json(CurrentUserDto {

@@ -70,6 +70,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(invitations::accept_invitation)
         .service(invitations::reject_invitation)
         .service(me::get_me)
+        .service(me::get_my_workspace_role)
         .service(me::update_me)
         .service(me::get_me_activity)
         .service(posts::api::list_board_posts)

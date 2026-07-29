@@ -92,6 +92,26 @@ async fn membership_context(
     })
 }
 
+/// The user's effective role in a workspace as a db string, or None if they
+/// have no access. Includes the account-owner shortcut. Never errors — a lookup
+/// problem resolves to None (no access).
+pub async fn resolve_effective_role(
+    pool: &DbPool,
+    tenant_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+) -> Option<String> {
+    if is_account_manager_for_tenant(pool, tenant_id, user_id)
+        .await
+        .unwrap_or(false)
+    {
+        return Some(Role::Owner.as_db_str().to_string());
+    }
+    crate::memberships::check_membership(pool, tenant_id, user_id)
+        .await
+        .ok()
+        .map(|role| role.as_db_str().to_string())
+}
+
 /// Whether the user owns/admins the account that this workspace belongs to.
 async fn is_account_manager_for_tenant(
     pool: &DbPool,

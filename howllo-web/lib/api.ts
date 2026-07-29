@@ -6,8 +6,10 @@ import type {
   BootstrapTenant,
   Comment,
   CurrentUser,
+  ManageBoard,
   MyActivity,
   MyInvitation,
+  WorkspaceMember,
   Notification,
   PaginatedResponse,
   PostDetail,
@@ -215,6 +217,108 @@ export async function getNotifications(token: string): Promise<Notification[]> {
     },
   });
   return unwrap<Notification[]>(response);
+}
+
+// ---- Manager surface (tenant/board-owner) — the admin APIs, called from the
+// web with the user's workspace-session token. `Authorization: token` already
+// carries the "Bearer " prefix.
+
+export async function getMyWorkspaceRole(tenantSlug: string, token: string): Promise<string | null> {
+  const response = await apiFetch(
+    buildUrl(`/api/me/workspace-role?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { cache: "no-store", headers: { Authorization: token } },
+  );
+  const data = await unwrap<{ role: string | null }>(response);
+  return data.role;
+}
+
+async function managerWrite(path: string, method: string, token: string, body?: unknown): Promise<void> {
+  const response = await apiFetch(buildUrl(path), {
+    method,
+    headers: { "content-type": "application/json", Authorization: token },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, (await response.text()) || `Request failed with ${response.status}`);
+  }
+}
+
+export async function managerListBoards(tenantSlug: string, token: string): Promise<ManageBoard[]> {
+  const response = await apiFetch(
+    buildUrl(`/api/admin/boards?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { cache: "no-store", headers: { Authorization: token } },
+  );
+  return unwrap<ManageBoard[]>(response);
+}
+
+export async function managerUpdateBoard(
+  boardId: string,
+  input: {
+    name: string;
+    description?: string | null;
+    board_type: string;
+    is_private: boolean;
+    background_color?: string | null;
+    dashboard_sections?: string[];
+    icon_url?: string | null;
+  },
+  token: string,
+): Promise<void> {
+  await managerWrite(`/api/admin/boards/${boardId}`, "PATCH", token, input);
+}
+
+export async function managerListInvitations(tenantSlug: string, token: string): Promise<MyInvitation[]> {
+  const response = await apiFetch(
+    buildUrl(`/api/admin/invitations?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { cache: "no-store", headers: { Authorization: token } },
+  );
+  return unwrap<MyInvitation[]>(response);
+}
+
+export async function managerCreateInvitation(
+  tenantSlug: string,
+  input: { email: string; role: string },
+  token: string,
+): Promise<void> {
+  await managerWrite(`/api/admin/invitations`, "POST", token, { ...input, tenant_slug: tenantSlug });
+}
+
+export async function managerWithdrawInvitation(id: string, tenantSlug: string, token: string): Promise<void> {
+  await managerWrite(
+    `/api/admin/invitations/${id}/withdraw?tenant_slug=${encodeURIComponent(tenantSlug)}`,
+    "POST",
+    token,
+  );
+}
+
+export async function managerListMembers(tenantSlug: string, token: string): Promise<WorkspaceMember[]> {
+  const response = await apiFetch(
+    buildUrl(`/api/admin/members?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { cache: "no-store", headers: { Authorization: token } },
+  );
+  return unwrap<WorkspaceMember[]>(response);
+}
+
+export async function managerUpdateMemberRole(
+  userId: string,
+  role: string,
+  tenantSlug: string,
+  token: string,
+): Promise<void> {
+  await managerWrite(
+    `/api/admin/members/${userId}/role?tenant_slug=${encodeURIComponent(tenantSlug)}`,
+    "PATCH",
+    token,
+    { role },
+  );
+}
+
+export async function managerRemoveMember(userId: string, tenantSlug: string, token: string): Promise<void> {
+  await managerWrite(
+    `/api/admin/members/${userId}?tenant_slug=${encodeURIComponent(tenantSlug)}`,
+    "DELETE",
+    token,
+  );
 }
 
 export async function getUnreadCount(token: string): Promise<number> {

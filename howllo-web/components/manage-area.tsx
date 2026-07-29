@@ -1,0 +1,370 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import {
+  getMyWorkspaceRole,
+  managerCreateInvitation,
+  managerListBoards,
+  managerListInvitations,
+  managerListMembers,
+  managerRemoveMember,
+  managerUpdateBoard,
+  managerUpdateMemberRole,
+  managerWithdrawInvitation,
+} from "@/lib/api";
+import {
+  getCurrentWorkspaceSlug,
+  readStoredBearerToken,
+  subscribeToBearerTokenChange,
+} from "@/components/dev-auth-panel";
+import type { DashboardSection, ManageBoard, MyInvitation, WorkspaceMember } from "@/lib/types";
+
+const INVITE_ROLES = ["admin", "moderator", "member"];
+const MEMBER_ROLES = ["owner", "admin", "moderator", "member"];
+const BOARD_TYPES = ["feature-requests", "bug-reports", "discussions", "announcements"];
+const SECTIONS: { id: DashboardSection; label: string }[] = [
+  { id: "progress", label: "Progress" },
+  { id: "latest", label: "Latest" },
+  { id: "top", label: "Top requests" },
+];
+
+function statusTone(status: string): string {
+  if (status === "accepted") return "green";
+  if (status === "pending") return "blue";
+  return "warm";
+}
+
+export function ManageArea() {
+  const [tenant, setTenant] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null | undefined>(undefined);
+  const [tab, setTab] = useState<"team" | "boards">("team");
+
+  useEffect(() => {
+    const resolve = () => setTenant(getCurrentWorkspaceSlug());
+    resolve();
+    return subscribeToBearerTokenChange(resolve);
+  }, []);
+
+  useEffect(() => {
+    if (!tenant) return;
+    const token = readStoredBearerToken(tenant).trim();
+    if (!token) {
+      setRole(null);
+      return;
+    }
+    getMyWorkspaceRole(tenant, token).then(setRole).catch(() => setRole(null));
+  }, [tenant]);
+
+  if (role === undefined) {
+    return <section className="panel"><p className="section-subtitle">Loading…</p></section>;
+  }
+
+  const canManage = role === "owner" || role === "admin";
+  if (!canManage) {
+    return (
+      <section className="panel empty-state">
+        <h1 className="empty-state__title">Manager access only</h1>
+        <p className="empty-state__copy">
+          {tenant && readStoredBearerToken(tenant).trim()
+            ? "You need an owner or admin role in this workspace to manage it."
+            : "Sign into this workspace to manage its boards and team."}
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <div className="page-stack">
+      <section className="page-head">
+        <h1 className="page-title">Manage workspace</h1>
+        <p className="page-lead">Invite your team and configure your boards.</p>
+      </section>
+
+      <div className="feed-filters">
+        <button type="button" className={`feed-chip${tab === "team" ? " feed-chip--active" : ""}`} onClick={() => setTab("team")}>
+          Team
+        </button>
+        <button type="button" className={`feed-chip${tab === "boards" ? " feed-chip--active" : ""}`} onClick={() => setTab("boards")}>
+          Boards
+        </button>
+      </div>
+
+      {tenant ? tab === "team" ? <TeamTab tenant={tenant} myRole={role!} /> : <BoardsTab tenant={tenant} /> : null}
+    </div>
+  );
+}
+
+function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
+  const [invites, setInvites] = useState<MyInvitation[]>([]);
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [email, setEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("moderator");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const token = () => readStoredBearerToken(tenant).trim();
+
+  const reload = useCallback(async () => {
+    const t = token();
+    if (!t) return;
+    try {
+      const [inv, mem] = await Promise.all([
+        managerListInvitations(tenant, t),
+        managerListMembers(tenant, t),
+      ]);
+      setInvites(inv);
+      setMembers(mem);
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const invite = async () => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await managerCreateInvitation(tenant, { email: email.trim(), role: inviteRole }, token());
+      setNotice(`Invitation sent to ${email.trim()}.`);
+      setEmail("");
+      setInviteRole("moderator");
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to send invitation");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const ownerCount = members.filter((m) => m.role === "owner").length;
+
+  return (
+    <>
+      <section className="panel">
+        <h2 className="section-title">Invite a teammate</h2>
+        <div className="manage-form" style={{ marginTop: "1rem" }}>
+          <input className="manage-input" placeholder="person@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <select className="manage-input" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
+            {INVITE_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <button type="button" className="button button--cta" disabled={busy || !email.trim()} onClick={invite}>
+            {busy ? "Sending…" : "Send invite"}
+          </button>
+        </div>
+        <p className="section-subtitle" style={{ marginTop: "0.6rem" }}>They accept or decline the next time they sign in.</p>
+        {notice ? <p className="success-text">{notice}</p> : null}
+        {error ? <p className="error-text">{error}</p> : null}
+      </section>
+
+      {invites.length > 0 ? (
+        <section className="panel">
+          <h2 className="section-title">Invitations</h2>
+          <div className="list-stack" style={{ marginTop: "1rem" }}>
+            {invites.map((inv) => (
+              <div className="manage-row" key={inv.id}>
+                <div>
+                  <strong>{inv.email}</strong>
+                  <p className="section-subtitle">{inv.role} · <span className="chip" data-tone={statusTone(inv.status)}>{inv.status}</span></p>
+                </div>
+                {inv.status === "pending" ? (
+                  <button type="button" className="ghost-button" onClick={async () => { await managerWithdrawInvitation(inv.id, tenant, token()).catch(() => {}); reload(); }}>
+                    Withdraw
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="panel">
+        <h2 className="section-title">Members</h2>
+        <div className="list-stack" style={{ marginTop: "1rem" }}>
+          {members.map((m) => (
+            <MemberRow key={m.user_id} member={m} tenant={tenant} myRole={myRole} ownerCount={ownerCount} onChanged={reload} />
+          ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
+function MemberRow({
+  member, tenant, myRole, ownerCount, onChanged,
+}: {
+  member: WorkspaceMember; tenant: string; myRole: string; ownerCount: number; onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const token = () => readStoredBearerToken(tenant).trim();
+  const canEditOwners = myRole === "owner";
+  const roleOptions = canEditOwners ? MEMBER_ROLES : MEMBER_ROLES.filter((r) => r !== "owner");
+
+  const changeRole = async (role: string) => {
+    if (member.role === "owner" && ownerCount === 1 && role !== "owner") {
+      setError("Keep at least one owner.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await managerUpdateMemberRole(member.user_id, role, tenant, token());
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (member.role === "owner" && ownerCount === 1) { setError("Keep at least one owner."); return; }
+    if (!window.confirm(`Remove ${member.display_name}?`)) return;
+    setBusy(true);
+    try {
+      await managerRemoveMember(member.user_id, tenant, token());
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="manage-row">
+      <div>
+        <strong>{member.display_name}</strong>
+        <p className="section-subtitle">{member.email}</p>
+        {error ? <p className="error-text">{error}</p> : null}
+      </div>
+      <div className="manage-row__actions">
+        <select className="manage-input" value={member.role} disabled={busy} onChange={(e) => changeRole(e.target.value)}>
+          {roleOptions.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+        <button type="button" className="ghost-button" disabled={busy} onClick={remove}>Remove</button>
+      </div>
+    </div>
+  );
+}
+
+function BoardsTab({ tenant }: { tenant: string }) {
+  const [boards, setBoards] = useState<ManageBoard[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const token = () => readStoredBearerToken(tenant).trim();
+
+  const reload = useCallback(async () => {
+    const t = token();
+    if (!t) return;
+    try {
+      const list = await managerListBoards(tenant, t);
+      setBoards(list);
+      setSelected((cur) => cur ?? list[0]?.id ?? null);
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant]);
+
+  useEffect(() => { void reload(); }, [reload]);
+
+  const board = boards.find((b) => b.id === selected) ?? null;
+
+  return (
+    <section className="dashboard-grid">
+      <section className="panel">
+        <h2 className="section-title">Boards</h2>
+        <div className="list-stack" style={{ marginTop: "1rem" }}>
+          {boards.map((b) => (
+            <button type="button" key={b.id} className={`manage-board-tab${b.id === selected ? " manage-board-tab--active" : ""}`} onClick={() => setSelected(b.id)}>
+              <strong>{b.name}</strong>
+              <span className="section-subtitle">{b.board_type}{b.is_private ? " · private" : ""}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+      {board ? <BoardEditor key={board.id} board={board} tenant={tenant} onSaved={reload} /> : (
+        <section className="panel"><p className="section-subtitle">Select a board to edit.</p></section>
+      )}
+    </section>
+  );
+}
+
+function BoardEditor({ board, tenant, onSaved }: { board: ManageBoard; tenant: string; onSaved: () => void }) {
+  const [name, setName] = useState(board.name);
+  const [description, setDescription] = useState(board.description ?? "");
+  const [boardType, setBoardType] = useState(board.board_type);
+  const [isPrivate, setIsPrivate] = useState(board.is_private);
+  const [bg, setBg] = useState(board.background_color ?? "#fff1ea");
+  const [sections, setSections] = useState<DashboardSection[]>(board.dashboard_sections ?? ["progress", "latest", "top"]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const toggle = (s: DashboardSection) =>
+    setSections((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : SECTIONS.map((x) => x.id).filter((x) => x === s || cur.includes(x))));
+
+  const save = async () => {
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      await managerUpdateBoard(board.id, {
+        name: name.trim(),
+        description: description.trim() || undefined,
+        board_type: boardType,
+        is_private: isPrivate,
+        background_color: bg || undefined,
+        dashboard_sections: sections,
+        icon_url: board.icon_url,
+      }, readStoredBearerToken(tenant).trim());
+      setNotice("Saved.");
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="panel">
+      <h2 className="section-title">{board.name}</h2>
+      <div className="manage-fields" style={{ marginTop: "1rem" }}>
+        <label className="manage-label">Name<input className="manage-input" value={name} onChange={(e) => setName(e.target.value)} /></label>
+        <label className="manage-label">Description<textarea className="manage-input" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
+        <label className="manage-label">Type
+          <select className="manage-input" value={boardType} onChange={(e) => setBoardType(e.target.value)}>
+            {BOARD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </label>
+        <label className="manage-label">Background color
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(bg) ? bg : "#fff1ea"} onChange={(e) => setBg(e.target.value)} />
+            <input className="manage-input" value={bg} onChange={(e) => setBg(e.target.value)} placeholder="#fff1ea" />
+          </div>
+        </label>
+        <label className="manage-check"><input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} /> Private board (members only)</label>
+        <div className="manage-label">
+          Dashboard sections
+          <div className="manage-sections">
+            {SECTIONS.map((s) => (
+              <label key={s.id} className="manage-check">
+                <input type="checkbox" checked={sections.includes(s.id)} onChange={() => toggle(s.id)} /> {s.label}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div style={{ marginTop: "1rem", display: "flex", gap: "0.6rem", alignItems: "center" }}>
+        <button type="button" className="button button--cta" disabled={busy || !name.trim()} onClick={save}>{busy ? "Saving…" : "Save changes"}</button>
+        {notice ? <span className="success-text">{notice}</span> : null}
+      </div>
+      {error ? <p className="error-text">{error}</p> : null}
+    </section>
+  );
+}
