@@ -322,6 +322,21 @@ pub mod test_support {
             ALTER TABLE tenants
             ADD COLUMN IF NOT EXISTS account_id UUID REFERENCES accounts(id) ON DELETE CASCADE;
 
+            CREATE TABLE IF NOT EXISTS workspace_invitations (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                email TEXT NOT NULL,
+                role VARCHAR(50) NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                invited_by UUID REFERENCES users(id) ON DELETE SET NULL,
+                user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                responded_at TIMESTAMPTZ,
+                expires_at TIMESTAMPTZ
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS workspace_invitations_one_pending_idx
+                ON workspace_invitations (tenant_id, lower(email)) WHERE status = 'pending';
+
             DROP INDEX IF EXISTS boards_one_default_per_tenant_idx;
             "#,
         )
@@ -346,6 +361,7 @@ pub mod test_support {
                 post_votes,
                 comments,
                 posts,
+                workspace_invitations,
                 boards,
                 memberships,
                 account_memberships,

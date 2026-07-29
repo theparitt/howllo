@@ -198,6 +198,15 @@ pub async fn create_workspace_session(
         AppError::InternalServerError
     })?;
 
+    // Attach any pending staff invitations for this email to the real account so
+    // the user can accept/reject them. We do NOT auto-accept. See docs.
+    let _ = crate::repositories::invitation_repository::bind_email_to_user(
+        pool.get_ref(),
+        &user.email.trim().to_lowercase(),
+        user.id,
+    )
+    .await;
+
     let random = format!(
         "{}{}{}",
         Uuid::new_v4().simple(),

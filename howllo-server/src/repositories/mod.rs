@@ -4,6 +4,7 @@ pub mod api_token_repository;
 pub mod board_repository;
 pub mod comment_repository;
 pub mod export_repository;
+pub mod invitation_repository;
 pub mod membership_repository;
 pub mod moderation_note_repository;
 pub mod notification_repository;

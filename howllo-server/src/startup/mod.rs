@@ -2,9 +2,9 @@ use crate::db::DbPool;
 use actix_web::{get, web, HttpResponse, Responder};
 
 use crate::{
-    ai, api_tokens, audit, auth, boards, comments, exports, me, memberships, moderation,
-    moderation_notes, notifications, platform, posts, realtime, search, subscriptions, tags,
-    tenancy, votes, webhooks,
+    ai, api_tokens, audit, auth, boards, comments, exports, invitations, me, memberships,
+    moderation, moderation_notes, notifications, platform, posts, realtime, search, subscriptions,
+    tags, tenancy, votes, webhooks,
 };
 
 #[get("/api/health")]
@@ -63,6 +63,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(memberships::create_member)
         .service(memberships::update_member_role)
         .service(memberships::remove_member)
+        .service(invitations::create_invitation)
+        .service(invitations::list_invitations)
+        .service(invitations::withdraw_invitation)
+        .service(invitations::list_my_invitations)
+        .service(invitations::accept_invitation)
+        .service(invitations::reject_invitation)
         .service(me::get_me)
         .service(me::update_me)
         .service(me::get_me_activity)

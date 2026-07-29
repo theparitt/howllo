@@ -11,6 +11,7 @@ pub mod dto;
 pub mod errors;
 pub mod exports;
 pub mod http;
+pub mod invitations;
 pub mod me;
 pub mod memberships;
 pub mod models;

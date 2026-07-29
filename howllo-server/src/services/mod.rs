@@ -2,6 +2,7 @@ pub mod api_token_service;
 pub mod board_service;
 pub mod comment_service;
 pub mod export_service;
+pub mod invitation_service;
 pub mod membership_service;
 pub mod moderation_note_service;
 pub mod moderation_service;

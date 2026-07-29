@@ -48,6 +48,34 @@ pub async fn create_follow_notifications(
     Ok(())
 }
 
+/// Insert a single notification for one recipient (used for non-post events
+/// such as invitations). Untyped so no sqlx offline-cache regeneration is needed.
+pub async fn create_notification(
+    pool: &DbPool,
+    tenant_id: Uuid,
+    user_id: Uuid,
+    event_type: &str,
+    title: &str,
+    body: &str,
+    post_id: Option<Uuid>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO notifications (tenant_id, user_id, post_id, event_type, title, body)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(user_id)
+    .bind(post_id)
+    .bind(event_type)
+    .bind(title)
+    .bind(body)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 pub async fn list_notifications(
     pool: &DbPool,
     user_id: Uuid,
