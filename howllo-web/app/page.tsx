@@ -1,11 +1,5 @@
 import { redirect } from "next/navigation";
-import {
-  WorkspaceContextError,
-  buildTenantPath,
-  resolveTenantContext,
-} from "@/lib/default-tenant";
-import { getServerBearerToken } from "@/lib/server-auth";
-import { WorkspaceState } from "@/components/workspace-state";
+import { WorkspaceHome } from "@/components/workspace-home";
 
 type HomePageProps = {
   searchParams: Promise<{
@@ -13,21 +7,12 @@ type HomePageProps = {
   }>;
 };
 
+// The app root is the signed-in tenant's home: pick or create a workspace.
+// An explicit ?tenant= still jumps straight into that workspace.
 export default async function HomePage({ searchParams }: HomePageProps) {
-  const params = await searchParams;
-  try {
-    const { tenantSlug, defaultTenantSlug } = await resolveTenantContext(params.tenant);
-
-    // Signed-in users land on their activity feed; everyone else on the boards.
-    const signedIn = Boolean(await getServerBearerToken(tenantSlug));
-    const home = signedIn ? "/feed" : "/dashboard";
-    redirect(buildTenantPath(home, tenantSlug, defaultTenantSlug));
-  } catch (error) {
-    if (error instanceof WorkspaceContextError) {
-      return (
-        <WorkspaceState kind={error.kind} workspaceSlug={error.workspaceSlug} />
-      );
-    }
-    throw error;
+  const { tenant } = await searchParams;
+  if (tenant?.trim()) {
+    redirect(`/${encodeURIComponent(tenant.trim())}`);
   }
+  return <WorkspaceHome />;
 }

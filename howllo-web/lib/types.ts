@@ -210,3 +210,13 @@ export type WorkspaceMember = {
   display_name: string;
   role: string;
 };
+
+export type WorkspaceSummary = {
+  id: string;
+  slug: string;
+  name: string;
+  board_count: number;
+  member_count: number;
+  created_at: string;
+  updated_at: string;
+};

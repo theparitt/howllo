@@ -1908,3 +1908,28 @@ textarea.manage-input { width: 100%; resize: vertical; }
   overflow-x: auto;
 }
 .sso-code code { white-space: pre; }
+
+/* --------------------------------------------------------- Workspace home */
+.ws-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+.ws-card {
+  display: grid;
+  gap: 0.3rem;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  color: var(--text);
+  transition: transform 160ms var(--ease), box-shadow 160ms var(--ease), border-color 160ms var(--ease);
+}
+.ws-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+  border-color: rgba(127, 109, 207, 0.4);
+}
+.ws-card strong { font-family: var(--font-display); font-size: 1.1rem; }

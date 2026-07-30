@@ -10,6 +10,7 @@ import type {
   MyActivity,
   MyInvitation,
   WorkspaceMember,
+  WorkspaceSummary,
   Notification,
   PaginatedResponse,
   PostDetail,
@@ -222,6 +223,23 @@ export async function getNotifications(token: string): Promise<Notification[]> {
 // ---- Manager surface (tenant/board-owner) — the admin APIs, called from the
 // web with the user's workspace-session token. `Authorization: token` already
 // carries the "Bearer " prefix.
+
+export async function listMyWorkspaces(token: string): Promise<WorkspaceSummary[]> {
+  const response = await apiFetch(buildUrl("/api/admin/tenants"), {
+    cache: "no-store",
+    headers: { Authorization: token },
+  });
+  return unwrap<WorkspaceSummary[]>(response);
+}
+
+export async function createWorkspace(name: string, token: string): Promise<WorkspaceSummary> {
+  const response = await apiFetch(buildUrl("/api/admin/tenants"), {
+    method: "POST",
+    headers: { "content-type": "application/json", Authorization: token },
+    body: JSON.stringify({ name }),
+  });
+  return unwrap<WorkspaceSummary>(response);
+}
 
 export async function getMyWorkspaceRole(tenantSlug: string, token: string): Promise<string | null> {
   const response = await apiFetch(

@@ -135,3 +135,17 @@ export function readStoredBearerToken(tenantSlug: string) {
   if (!workspace) return "";
   return window.localStorage.getItem(getWorkspaceAuthStorageKey(workspace)) ?? "";
 }
+
+// Any stored workspace-session token — usable as an account-level credential to
+// list/create the user's workspaces (the API scopes by the resolved user).
+export function readAnyStoredBearerToken(): string {
+  if (typeof window === "undefined") return "";
+  for (let i = 0; i < window.localStorage.length; i += 1) {
+    const key = window.localStorage.key(i);
+    if (key && key.startsWith("howllo.auth.")) {
+      const value = window.localStorage.getItem(key);
+      if (value && value.trim()) return value;
+    }
+  }
+  return "";
+}
