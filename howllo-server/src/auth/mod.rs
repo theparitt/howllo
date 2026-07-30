@@ -13,4 +13,6 @@ pub use context::{
 };
 pub use current_user::{maybe_authenticated_user, AuthenticatedUser};
 pub use rooiam::{RooiamClaims, RooiamClient};
-pub use workspace_session::{create_workspace_session, revoke_workspace_session};
+pub use workspace_session::{
+    create_sso_session, create_workspace_session, revoke_workspace_session,
+};

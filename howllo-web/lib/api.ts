@@ -267,6 +267,32 @@ export async function managerUpdateBoard(
   await managerWrite(`/api/admin/boards/${boardId}`, "PATCH", token, input);
 }
 
+export type SsoConfig = { enabled: boolean; secret: string | null; session_path: string };
+
+export async function getSsoConfig(tenantSlug: string, token: string): Promise<SsoConfig> {
+  const response = await apiFetch(
+    buildUrl(`/api/admin/sso-config?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { cache: "no-store", headers: { Authorization: token } },
+  );
+  return unwrap<SsoConfig>(response);
+}
+
+export async function regenerateSsoSecret(tenantSlug: string, token: string): Promise<SsoConfig> {
+  const response = await apiFetch(
+    buildUrl(`/api/admin/sso-config/regenerate?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { method: "POST", headers: { Authorization: token } },
+  );
+  return unwrap<SsoConfig>(response);
+}
+
+export async function disableSso(tenantSlug: string, token: string): Promise<SsoConfig> {
+  const response = await apiFetch(
+    buildUrl(`/api/admin/sso-config?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { method: "DELETE", headers: { Authorization: token } },
+  );
+  return unwrap<SsoConfig>(response);
+}
+
 export async function managerListInvitations(tenantSlug: string, token: string): Promise<MyInvitation[]> {
   const response = await apiFetch(
     buildUrl(`/api/admin/invitations?tenant_slug=${encodeURIComponent(tenantSlug)}`),

@@ -1880,3 +1880,31 @@ textarea.manage-input { width: 100%; resize: vertical; }
 .mod-status-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .mod-arrow { color: var(--muted); }
 .mod-reason { max-width: 100%; }
+
+/* ------------------------------------------------------------------- SSO */
+.sso-secret {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  overflow-x: auto;
+}
+.sso-secret code { white-space: nowrap; }
+.sso-secret .text-button { margin-left: auto; flex: none; }
+.sso-code {
+  margin: 0;
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  background: #2a2130;
+  color: #f6e7df;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.55;
+  overflow-x: auto;
+}
+.sso-code code { white-space: pre; }

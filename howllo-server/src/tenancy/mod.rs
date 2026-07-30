@@ -469,6 +469,93 @@ pub async fn update_workspace_auth_config(
     Ok(HttpResponse::Ok().json(config))
 }
 
+// --------------------------------------------------------------- SSO secret
+// The end-user SSO shared secret is sensitive: only owners/admins may see it,
+// and it is never returned by the public /api/workspace-auth endpoint.
+
+async fn require_settings_for(
+    pool: &DbPool,
+    tenant_slug: &str,
+    actor_user_id: Uuid,
+) -> Result<Uuid, AppError> {
+    let tenant_id = membership_repository::resolve_tenant_id(pool, tenant_slug).await?;
+    require_permission(pool, tenant_id, actor_user_id, Permission::ManageSettings).await?;
+    Ok(tenant_id)
+}
+
+fn sso_config_json(secret: Option<String>) -> serde_json::Value {
+    let secret = secret.filter(|value| !value.trim().is_empty());
+    serde_json::json!({
+        "enabled": secret.is_some(),
+        "secret": secret,
+        "session_path": "/api/auth/sso-session",
+    })
+}
+
+#[get("/api/admin/sso-config")]
+pub async fn get_sso_config(
+    pool: web::Data<DbPool>,
+    query: web::Query<TenantBrandingQuery>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    let tenant_id = require_settings_for(pool.get_ref(), &query.tenant_slug, auth.0.id).await?;
+    let secret: Option<String> =
+        sqlx::query_scalar("SELECT sso_secret FROM workspace_auth_configs WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_optional(pool.get_ref())
+            .await
+            .map_err(|error| {
+                tracing::error!(error = %error, "error reading sso secret");
+                AppError::InternalServerError
+            })?
+            .flatten();
+    Ok(HttpResponse::Ok().json(sso_config_json(secret)))
+}
+
+#[actix_web::post("/api/admin/sso-config/regenerate")]
+pub async fn regenerate_sso_secret(
+    pool: web::Data<DbPool>,
+    query: web::Query<TenantBrandingQuery>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    let tenant_id = require_settings_for(pool.get_ref(), &query.tenant_slug, auth.0.id).await?;
+    let secret = format!("sk_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
+    sqlx::query(
+        r#"
+        INSERT INTO workspace_auth_configs (tenant_id, sso_secret)
+        VALUES ($1, $2)
+        ON CONFLICT (tenant_id) DO UPDATE SET sso_secret = EXCLUDED.sso_secret, updated_at = NOW()
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(&secret)
+    .execute(pool.get_ref())
+    .await
+    .map_err(|error| {
+        tracing::error!(error = %error, "error regenerating sso secret");
+        AppError::InternalServerError
+    })?;
+    Ok(HttpResponse::Ok().json(sso_config_json(Some(secret))))
+}
+
+#[actix_web::delete("/api/admin/sso-config")]
+pub async fn disable_sso(
+    pool: web::Data<DbPool>,
+    query: web::Query<TenantBrandingQuery>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    let tenant_id = require_settings_for(pool.get_ref(), &query.tenant_slug, auth.0.id).await?;
+    sqlx::query("UPDATE workspace_auth_configs SET sso_secret = NULL, updated_at = NOW() WHERE tenant_id = $1")
+        .bind(tenant_id)
+        .execute(pool.get_ref())
+        .await
+        .map_err(|error| {
+            tracing::error!(error = %error, "error disabling sso");
+            AppError::InternalServerError
+        })?;
+    Ok(HttpResponse::Ok().json(sso_config_json(None)))
+}
+
 async fn fetch_tenant_branding(
     pool: &DbPool,
     tenant_slug: &str,

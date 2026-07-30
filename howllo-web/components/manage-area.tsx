@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  disableSso,
   getMyWorkspaceRole,
+  getSsoConfig,
+  regenerateSsoSecret,
+  type SsoConfig,
   managerCreateInvitation,
   managerListBoards,
   managerListInvitations,
@@ -18,6 +22,7 @@ import {
   subscribeToBearerTokenChange,
 } from "@/components/dev-auth-panel";
 import type { DashboardSection, ManageBoard, MyInvitation, WorkspaceMember } from "@/lib/types";
+import { API_BASE_URL } from "@/lib/config";
 
 const INVITE_ROLES = ["admin", "moderator", "member"];
 const MEMBER_ROLES = ["owner", "admin", "moderator", "member"];
@@ -37,7 +42,7 @@ function statusTone(status: string): string {
 export function ManageArea() {
   const [tenant, setTenant] = useState<string | null>(null);
   const [role, setRole] = useState<string | null | undefined>(undefined);
-  const [tab, setTab] = useState<"team" | "boards">("team");
+  const [tab, setTab] = useState<"team" | "boards" | "signin">("team");
 
   useEffect(() => {
     const resolve = () => setTenant(getCurrentWorkspaceSlug());
@@ -87,9 +92,20 @@ export function ManageArea() {
         <button type="button" className={`feed-chip${tab === "boards" ? " feed-chip--active" : ""}`} onClick={() => setTab("boards")}>
           Boards
         </button>
+        <button type="button" className={`feed-chip${tab === "signin" ? " feed-chip--active" : ""}`} onClick={() => setTab("signin")}>
+          Sign-in (SSO)
+        </button>
       </div>
 
-      {tenant ? tab === "team" ? <TeamTab tenant={tenant} myRole={role!} /> : <BoardsTab tenant={tenant} /> : null}
+      {tenant ? (
+        tab === "team" ? (
+          <TeamTab tenant={tenant} myRole={role!} />
+        ) : tab === "boards" ? (
+          <BoardsTab tenant={tenant} />
+        ) : (
+          <SsoTab tenant={tenant} />
+        )
+      ) : null}
     </div>
   );
 }
@@ -365,6 +381,113 @@ function BoardEditor({ board, tenant, onSaved }: { board: ManageBoard; tenant: s
         {notice ? <span className="success-text">{notice}</span> : null}
       </div>
       {error ? <p className="error-text">{error}</p> : null}
+    </section>
+  );
+}
+
+function SsoTab({ tenant }: { tenant: string }) {
+  const [cfg, setCfg] = useState<SsoConfig | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const token = () => readStoredBearerToken(tenant).trim();
+
+  useEffect(() => {
+    const t = token();
+    if (!t) return;
+    getSsoConfig(tenant, t).then(setCfg).catch(() => setCfg(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant]);
+
+  const endpoint = `${API_BASE_URL}/api/auth/sso-session`;
+  const secret = cfg?.secret ?? "";
+
+  const enableOrRotate = async () => {
+    setBusy(true);
+    try {
+      setCfg(await regenerateSsoSecret(tenant, token()));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const turnOff = async () => {
+    if (!window.confirm("Disable SSO? Existing sessions keep working; new SSO logins are rejected.")) return;
+    setBusy(true);
+    try {
+      setCfg(await disableSso(tenant, token()));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const copy = (text: string) => {
+    navigator.clipboard?.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const snippet = `// On YOUR server (Node) — never expose the secret to the browser.
+import jwt from "jsonwebtoken";
+
+const token = jwt.sign(
+  { sub: user.id, email: user.email, name: user.name },
+  process.env.HOWLLO_SSO_SECRET,          // the workspace secret above
+  { algorithm: "HS256", expiresIn: "1h" },
+);
+
+const res = await fetch("${endpoint}", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ tenant_slug: "${tenant}", token }),
+});
+const { session_token } = await res.json();
+// Use session_token as the Bearer token for the board — no login screen.`;
+
+  return (
+    <section className="panel">
+      <h2 className="section-title">End-user SSO</h2>
+      <p className="section-subtitle" style={{ marginTop: "0.3rem" }}>
+        Let your already-signed-in users post &amp; vote without a howllo login. Your backend signs a
+        token with the workspace secret; howllo trusts it and mints a session.
+      </p>
+
+      {!cfg?.enabled ? (
+        <div style={{ marginTop: "1rem" }}>
+          <button type="button" className="button button--cta" disabled={busy} onClick={enableOrRotate}>
+            {busy ? "Enabling…" : "Enable SSO"}
+          </button>
+        </div>
+      ) : (
+        <div className="manage-fields" style={{ marginTop: "1rem" }}>
+          <label className="manage-label">
+            Workspace secret (keep on your server only)
+            <div className="sso-secret">
+              <code>{secret}</code>
+              <button type="button" className="text-button" onClick={() => copy(secret)}>
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </label>
+          <label className="manage-label">
+            Endpoint
+            <div className="sso-secret">
+              <code>{endpoint}</code>
+            </div>
+          </label>
+          <div className="manage-label">
+            Integration (Node)
+            <pre className="sso-code">
+              <code>{snippet}</code>
+            </pre>
+          </div>
+          <div style={{ display: "flex", gap: "0.6rem" }}>
+            <button type="button" className="ghost-button" disabled={busy} onClick={enableOrRotate}>
+              Regenerate secret
+            </button>
+            <button type="button" className="ghost-button button--danger" disabled={busy} onClick={turnOff}>
+              Disable SSO
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
