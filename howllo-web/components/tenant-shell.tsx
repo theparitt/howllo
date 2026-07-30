@@ -9,6 +9,7 @@ import { getMyWorkspaceRole, getTenantBranding } from "@/lib/api";
 import { readStoredBearerToken, subscribeToBearerTokenChange } from "@/components/dev-auth-panel";
 import type { TenantBranding } from "@/lib/types";
 import { buildTenantPath } from "@/lib/default-tenant";
+import { subdomainSlug } from "@/lib/subdomain";
 import { hexToRgba } from "@/lib/theme";
 
 const RESERVED_TOP_LEVEL_ROUTES = new Set([
@@ -51,6 +52,7 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const check = () => {
       const slug =
+        (typeof window !== "undefined" ? subdomainSlug(window.location.host) : null) ??
         getTenantSlugFromPath(pathname) ??
         (typeof window !== "undefined"
           ? new URLSearchParams(window.location.search).get("tenant")?.trim() || null
@@ -72,12 +74,14 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     async function loadBranding() {
+      const hostTenantSlug =
+        typeof window !== "undefined" ? subdomainSlug(window.location.host) : null;
       const pathTenantSlug = getTenantSlugFromPath(pathname);
       const queryTenantSlug =
         typeof window !== "undefined"
           ? new URLSearchParams(window.location.search).get("tenant")?.trim() || null
           : null;
-      const tenantSlug = pathTenantSlug ?? queryTenantSlug;
+      const tenantSlug = hostTenantSlug ?? pathTenantSlug ?? queryTenantSlug;
 
       if (!tenantSlug) {
         if (!cancelled) {

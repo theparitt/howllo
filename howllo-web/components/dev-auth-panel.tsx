@@ -6,6 +6,7 @@ import {
   LEGACY_DEV_AUTH_COOKIE,
   getWorkspaceAuthCookieName,
 } from "@/lib/auth-cookie";
+import { subdomainSlug } from "@/lib/subdomain";
 
 const LEGACY_STORAGE_KEY = "howllo.devBearerToken";
 const AUTH_EVENT = "howllo-auth-changed";
@@ -24,7 +25,9 @@ export function getWorkspaceSlugFromPath(pathname: string) {
 
 export function getCurrentWorkspaceSlug() {
   if (typeof window === "undefined") return null;
-  return getWorkspaceSlugFromPath(window.location.pathname)
+  // On a workspace subdomain the slug is in the host, not the path.
+  return subdomainSlug(window.location.host)
+    ?? getWorkspaceSlugFromPath(window.location.pathname)
     ?? new URLSearchParams(window.location.search).get("tenant")?.trim()
     ?? null;
 }
