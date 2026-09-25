@@ -8,22 +8,20 @@ import { readStoredBearerToken } from "@/components/dev-auth-panel";
 type PostActionsProps = {
   tenantSlug: string;
   postId: string;
-  isLocked: boolean;
 };
 
-export function PostActions({ tenantSlug, postId, isLocked }: PostActionsProps) {
+export function PostActions({ tenantSlug, postId }: PostActionsProps) {
   const router = useRouter();
-  const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"vote" | "follow" | "comment" | null>(null);
+  const [busy, setBusy] = useState<"vote" | "follow" | null>(null);
 
   async function withToken(
-    action: "vote" | "follow" | "comment",
+    action: "vote" | "follow",
     run: (token: string) => Promise<void>,
   ) {
     const token = readStoredBearerToken(tenantSlug);
     if (!token) {
-      setError("Sign in to this workspace before using write actions.");
+      setError("Sign in to vote or follow this post.");
       return;
     }
 
@@ -31,9 +29,6 @@ export function PostActions({ tenantSlug, postId, isLocked }: PostActionsProps) 
     setError(null);
     try {
       await run(token);
-      if (action === "comment") {
-        setComment("");
-      }
       router.refresh();
     } catch (submissionError) {
       setError(
@@ -47,9 +42,7 @@ export function PostActions({ tenantSlug, postId, isLocked }: PostActionsProps) 
   }
 
   return (
-    <section className="panel">
-      <h2 className="section-title" style={{ fontSize: "1.15rem" }}>Participate</h2>
-      <div className="toolbar" style={{ marginTop: "1rem" }}>
+    <div className="post-engagement">
         <button
           className="button"
           disabled={busy !== null}
@@ -66,41 +59,48 @@ export function PostActions({ tenantSlug, postId, isLocked }: PostActionsProps) 
         >
           {busy === "follow" ? "Following..." : "Follow"}
         </button>
-      </div>
-      <hr className="divider" />
+      {error ? <span className="post-engagement__error" role="alert">{error}</span> : null}
+    </div>
+  );
+}
+
+export function CommentComposer({ tenantSlug, postId, isLocked }: PostActionsProps & { isLocked: boolean }) {
+  const router = useRouter();
+  const [comment, setComment] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  if (isLocked) return null;
+
+  return (
       <form
-        className="field-grid"
+        className="comment-composer"
         onSubmit={(event) => {
           event.preventDefault();
-          if (isLocked) return;
-          withToken("comment", (token) =>
-            createComment({
-              postId,
-              body: comment,
-              token,
-            }).then(() => undefined),
-          );
+          if (!comment.trim()) return;
+          const token = readStoredBearerToken(tenantSlug);
+          if (!token) { setError("Sign in to comment."); return; }
+          setBusy(true);
+          setError(null);
+          createComment({ postId, body: comment.trim(), token })
+            .then(() => { setComment(""); router.refresh(); })
+            .catch((cause) => setError(cause instanceof Error ? cause.message : "Could not post comment."))
+            .finally(() => setBusy(false));
         }}
       >
-        <div className="muted" style={{ fontSize: "0.88rem" }}>
-          Add a comment
-        </div>
+        <label htmlFor="post-comment">Add a comment</label>
         <textarea
+          id="post-comment"
           className="textarea"
-          disabled={isLocked || busy !== null}
-          placeholder={
-            isLocked
-              ? "This post is locked."
-              : "Share context, use cases, or follow-up questions."
-          }
+          disabled={busy}
+          placeholder="Write a comment..."
           value={comment}
           onChange={(event) => setComment(event.target.value)}
         />
-        {error ? <div className="notice notice--error">{error}</div> : null}
-        <button className="button" disabled={isLocked || busy !== null} type="submit">
-          {busy === "comment" ? "Posting..." : "Post comment"}
-        </button>
+        {error ? <div className="notice notice--error" role="alert">{error}</div> : null}
+        <div><button className="button" disabled={busy || !comment.trim()} type="submit">
+          {busy ? "Posting..." : "Post comment"}
+        </button></div>
       </form>
-    </section>
   );
 }

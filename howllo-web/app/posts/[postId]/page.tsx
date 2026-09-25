@@ -8,7 +8,7 @@ import {
 } from "@/lib/default-tenant";
 import { getServerBearerToken } from "@/lib/server-auth";
 import { StatusPill } from "@/components/status-pill";
-import { PostActions } from "@/components/post-actions";
+import { CommentComposer, PostActions } from "@/components/post-actions";
 import { ModerationPanel } from "@/components/moderation-panel";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { WorkspaceState } from "@/components/workspace-state";
@@ -48,9 +48,8 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
     ]);
 
     return (
-      <div className="two-column">
+      <div className="post-thread">
         <RealtimeRefresh postId={post.id} tenantSlug={tenant} />
-        <div className="grid" style={{ gap: "1rem" }}>
           <section className="post-detail">
             <div className="eyebrow-row">
               <Link
@@ -101,37 +100,12 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                 ))}
               </div>
             ) : null}
+            <PostActions tenantSlug={tenant} postId={post.id} />
           </section>
 
-          <section className="panel">
-            <h2 className="section-title" style={{ fontSize: "1.15rem" }}>History</h2>
-            <div className="grid" style={{ marginTop: "1rem" }}>
-              {history.length > 0 ? history.map((item) => (
-                <div className="comment-card" key={item.id}>
-                  <div className="toolbar" style={{ justifyContent: "space-between" }}>
-                    <div className="chip">
-                      {item.old_status ?? "none"} → {item.new_status}
-                    </div>
-                    <span className="muted" style={{ fontSize: "0.82rem" }}>
-                      {new Date(item.created_at).toLocaleString()}
-                    </span>
-                  </div>
-                  <p className="muted" style={{ marginBottom: 0 }}>
-                    {item.actor_display_name}
-                    {item.reason ? ` • ${item.reason}` : ""}
-                  </p>
-                </div>
-              )) : (
-                <div className="empty-state">
-                  <h3 className="empty-state__title">No status changes yet</h3>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className="panel">
-            <h2 className="section-title" style={{ fontSize: "1.15rem" }}>Comments</h2>
-            <div className="grid" style={{ marginTop: "1rem" }}>
+          <section className="panel post-thread__comments" id="comments">
+            <h2 className="section-title" style={{ fontSize: "1.15rem" }}>Comments ({comments.length})</h2>
+            <div className="post-thread__comment-list">
               {comments.length > 0 ? comments.map((comment) => (
                 <article className="comment-card" key={comment.id}>
                   <div className="toolbar" style={{ justifyContent: "space-between" }}>
@@ -150,17 +124,25 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                   </p>
                 </article>
               )) : (
-                <div className="empty-state">
-                  <h3 className="empty-state__title">No comments yet</h3>
-                  <p className="empty-state__copy">Be the first to add context.</p>
-                </div>
+                <p className="muted">No comments yet.</p>
               )}
             </div>
+            <CommentComposer tenantSlug={tenant} isLocked={post.is_locked} postId={post.id} />
           </section>
-        </div>
-
-        <div className="grid" style={{ gap: "1rem" }}>
-          <PostActions tenantSlug={tenant} isLocked={post.is_locked} postId={post.id} />
+          {history.length > 0 ? (
+            <details className="post-history">
+              <summary>Status history</summary>
+              <ol>
+                {history.map((item) => (
+                  <li key={item.id}>
+                    <span>{item.old_status ?? "none"} → {item.new_status}</span>
+                    <span className="muted">{new Date(item.created_at).toLocaleString()}</span>
+                    {item.reason ? <span className="muted">{item.reason}</span> : null}
+                  </li>
+                ))}
+              </ol>
+            </details>
+          ) : null}
           <ModerationPanel
             tenantSlug={tenant}
             boardSlug={post.board_slug}
@@ -168,7 +150,6 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
             currentStatus={post.status}
             isLocked={post.is_locked}
           />
-        </div>
       </div>
     );
   } catch (error) {
