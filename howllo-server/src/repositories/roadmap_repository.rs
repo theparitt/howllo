@@ -37,7 +37,9 @@ pub async fn fetch_roadmap_items(
         Some(user_id) => {
             builder.push(" AND (b.is_private = false OR EXISTS (SELECT 1 FROM memberships m WHERE m.tenant_id = t.id AND m.user_id = ");
             builder.push_bind(user_id);
-            builder.push(")) ");
+            builder.push(" AND m.public_participant = FALSE) OR EXISTS (SELECT 1 FROM tenants t2 JOIN account_memberships am ON am.account_id = t2.account_id WHERE t2.id = t.id AND am.user_id = ");
+            builder.push_bind(user_id);
+            builder.push(" AND am.role IN ('owner', 'admin'))) ");
         }
         None => {
             builder.push(" AND b.is_private = false ");

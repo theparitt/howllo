@@ -6,9 +6,172 @@ info:
   contact:
     name: Howllo Team
 servers:
-  - url: http://localhost:5110/api
+  - url: http://localhost:7700/api
     description: Local development
 paths:
+  /auth/providers:
+    get:
+      summary: List enabled login providers without secrets
+      responses:
+        '200':
+          description: Provider display names, kinds and login URLs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, display_name, kind, login_url]
+                  properties:
+                    id: { type: string }
+                    display_name: { type: string }
+                    kind: { type: string, enum: [local, oidc] }
+                    login_url: { type: string }
+  /auth/local/register:
+    post:
+      summary: Register a local board account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalCredentials'
+      responses:
+        '201': { description: Account bearer token and one-time recovery code }
+        '422': { description: 'Invalid username, password or username taken' }
+        '429': { description: Rate limit exceeded }
+  /auth/local/login:
+    post:
+      summary: Sign in with local account credentials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalCredentials'
+      responses:
+        '200': { description: Account bearer token }
+        '401': { description: Invalid credentials }
+        '429': { description: Rate limit exceeded }
+  /auth/local/status:
+    get:
+      summary: Check whether the current account has a local password and recovery code
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: Local credential status; never includes a password or code }
+        '401': { description: Invalid account session }
+  /auth/local/change-password:
+    post:
+      summary: Change a local password using the current password; revokes all sessions
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string }
+                new_password: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        '204': { description: Password changed; all account and workspace sessions revoked }
+        '401': { description: Invalid account session or current password }
+        '429': { description: Rate limit exceeded }
+  /auth/local/rotate-recovery-code:
+    post:
+      summary: Replace the saved recovery code using the current password
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password]
+              properties:
+                current_password: { type: string }
+      responses:
+        '200': { description: One-time recovery code; save offline }
+        '401': { description: Invalid account session or current password }
+        '429': { description: Rate limit exceeded }
+  /auth/local/reset-password:
+    post:
+      summary: Recover a local account using its one-time recovery code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, recovery_code, new_password]
+              properties:
+                username: { type: string }
+                recovery_code: { type: string }
+                new_password: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        '200': { description: New account token and replacement recovery code; old sessions revoked }
+        '401': { description: Invalid username or recovery code }
+        '429': { description: Rate limit exceeded }
+  /auth/login/{provider}:
+    get:
+      summary: Start OIDC authorization code flow with PKCE
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string }
+        - name: return_to
+          in: query
+          schema: { type: string, description: Relative web path }
+      responses:
+        '302': { description: Redirect to provider; sets HTTP-only state cookie }
+        '404': { description: Unknown or disabled provider }
+  /auth/callback/{provider}:
+    get:
+      summary: Complete OIDC login and issue a one-time web exchange code
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string }
+        - name: state
+          in: query
+          required: true
+          schema: { type: string }
+        - name: code
+          in: query
+          schema: { type: string }
+        - name: error
+          in: query
+          schema: { type: string }
+      responses:
+        '302': { description: Redirect to web callback with one-time exchange code }
+        '401': { description: 'Invalid state, code or token' }
+        '404': { description: Unknown or disabled provider }
+  /auth/exchange:
+    post:
+      summary: Redeem one-time OIDC exchange code for a Howllo account token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        '200': { description: Account bearer token and relative return path }
+        '401': { description: Expired or used code }
+  /auth/logout:
+    post:
+      summary: Revoke a Howllo account session
+      security:
+        - BearerAuth: []
+      responses:
+        '204': { description: Session revoked }
+        '401': { description: Missing or invalid account token }
   /health:
     get:
       summary: Health check
@@ -51,6 +214,11 @@ paths:
         '200':
           description: Board details
   /boards/{board_slug}/posts:
+    parameters:
+      - name: board_slug
+        in: path
+        required: true
+        schema: { type: string }
     get:
       summary: List posts on a board with pagination and filters
       parameters:
@@ -142,6 +310,11 @@ paths:
         '200':
           description: Post updated
   /posts/{post_id}/comments:
+    parameters:
+      - name: post_id
+        in: path
+        required: true
+        schema: { type: string }
     get:
       summary: List comments with pagination
       parameters:
@@ -169,6 +342,11 @@ paths:
         '201':
           description: Comment created
   /posts/{post_id}/vote:
+    parameters:
+      - name: post_id
+        in: path
+        required: true
+        schema: { type: string }
     post:
       summary: Vote on a post
       security:
@@ -184,6 +362,11 @@ paths:
         '200':
           description: Vote removed
   /posts/{post_id}/follow:
+    parameters:
+      - name: post_id
+        in: path
+        required: true
+        schema: { type: string }
     post:
       summary: Follow a post
       security:
@@ -257,7 +440,7 @@ paths:
             type: string
       responses:
         '200':
-          description: Grouped roadmap {planned: [], in_progress: [], done: []}
+          description: 'Grouped roadmap {planned: [], in_progress: [], done: []}'
   /search/posts:
     get:
       summary: Full-text search posts
@@ -331,6 +514,11 @@ paths:
         '200':
           description: Notification list
   /notifications/{id}/read:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
     patch:
       summary: Mark notification read
       security:
@@ -354,6 +542,11 @@ paths:
         '201':
           description: Board created
   /admin/boards/{board_id}:
+    parameters:
+      - name: board_id
+        in: path
+        required: true
+        schema: { type: string }
     patch:
       summary: Update board (admin)
       security:
@@ -362,6 +555,11 @@ paths:
         '200':
           description: Board updated
   /admin/boards/{board_id}/summary:
+    parameters:
+      - name: board_id
+        in: path
+        required: true
+        schema: { type: string }
     get:
       summary: Board summary (posts by status, votes, comments)
       security:
@@ -370,6 +568,11 @@ paths:
         '200':
           description: Board summary
   /admin/posts/{post_id}/status:
+    parameters:
+      - name: post_id
+        in: path
+        required: true
+        schema: { type: string }
     patch:
       summary: Change post status
       security:
@@ -390,6 +593,11 @@ paths:
         '200':
           description: Status changed
   /admin/posts/{post_id}/visibility:
+    parameters:
+      - name: post_id
+        in: path
+        required: true
+        schema: { type: string }
     patch:
       summary: Hide/restore post
       security:
@@ -398,6 +606,11 @@ paths:
         '200':
           description: Visibility updated
   /admin/posts/{post_id}/soft-delete:
+    parameters:
+      - name: post_id
+        in: path
+        required: true
+        schema: { type: string }
     patch:
       summary: Soft-delete post
       security:
@@ -406,6 +619,11 @@ paths:
         '200':
           description: Post soft-deleted
   /admin/posts/{post_id}/restore:
+    parameters:
+      - name: post_id
+        in: path
+        required: true
+        schema: { type: string }
     patch:
       summary: Restore soft-deleted post
       security:
@@ -414,6 +632,11 @@ paths:
         '200':
           description: Post restored
   /admin/posts/{post_id}/lock:
+    parameters:
+      - name: post_id
+        in: path
+        required: true
+        schema: { type: string }
     patch:
       summary: Lock/unlock post
       security:
@@ -422,6 +645,11 @@ paths:
         '200':
           description: Lock toggled
   /admin/posts/{post_id}/duplicate:
+    parameters:
+      - name: post_id
+        in: path
+        required: true
+        schema: { type: string }
     patch:
       summary: Mark/link duplicate
       security:
@@ -430,6 +658,15 @@ paths:
         '200':
           description: Duplicate linked
   /admin/posts/{post_id}/tags/{tag_id}:
+    parameters:
+      - name: post_id
+        in: path
+        required: true
+        schema: { type: string }
+      - name: tag_id
+        in: path
+        required: true
+        schema: { type: string }
     post:
       summary: Attach tag to post
       security:
@@ -445,6 +682,11 @@ paths:
         '204':
           description: Tag detached
   /admin/comments/{comment_id}/official:
+    parameters:
+      - name: comment_id
+        in: path
+        required: true
+        schema: { type: string }
     patch:
       summary: Mark/unmark comment as official response
       security:
@@ -453,6 +695,11 @@ paths:
         '200':
           description: Official flag toggled
   /admin/comments/{comment_id}/visibility:
+    parameters:
+      - name: comment_id
+        in: path
+        required: true
+        schema: { type: string }
     patch:
       summary: Hide/restore comment
       security:
@@ -469,6 +716,11 @@ paths:
         '201':
           description: Tag created
   /admin/tags/{tag_id}:
+    parameters:
+      - name: tag_id
+        in: path
+        required: true
+        schema: { type: string }
     patch:
       summary: Update tag
       security:
@@ -521,6 +773,11 @@ paths:
         '201':
           description: Member added
   /admin/members/{user_id}/role:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema: { type: string }
     patch:
       summary: Change member role
       security:
@@ -529,6 +786,11 @@ paths:
         '200':
           description: Role changed
   /admin/members/{user_id}:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema: { type: string }
     delete:
       summary: Remove member
       security:
@@ -552,6 +814,11 @@ paths:
         '201':
           description: Webhook created
   /admin/webhooks/{webhook_id}/deactivate:
+    parameters:
+      - name: webhook_id
+        in: path
+        required: true
+        schema: { type: string }
     patch:
       summary: Deactivate webhook
       security:
@@ -568,6 +835,11 @@ paths:
         '200':
           description: Delivery status list
   /admin/webhooks/deliveries/{delivery_id}/resend:
+    parameters:
+      - name: delivery_id
+        in: path
+        required: true
+        schema: { type: string }
     post:
       summary: Resend webhook delivery
       security:
@@ -607,6 +879,11 @@ paths:
         '201':
           description: Token created (raw token returned once)
   /admin/api-tokens/{token_id}/revoke:
+    parameters:
+      - name: token_id
+        in: path
+        required: true
+        schema: { type: string }
     patch:
       summary: Revoke API token
       security:
@@ -661,6 +938,11 @@ paths:
         '200':
           description: AI suggestions list
   /admin/ai/suggestions/{suggestion_id}:
+    parameters:
+      - name: suggestion_id
+        in: path
+        required: true
+        schema: { type: string }
     patch:
       summary: Review (accept/reject) AI suggestion
       security:
@@ -669,6 +951,11 @@ paths:
         '200':
           description: Suggestion reviewed
   /admin/ai/posts/{post_id}/duplicate-suggestions:
+    parameters:
+      - name: post_id
+        in: path
+        required: true
+        schema: { type: string }
     post:
       summary: Request AI duplicate suggestions
       security:
@@ -677,6 +964,11 @@ paths:
         '201':
           description: Duplicate suggestion created
   /admin/ai/posts/{post_id}/summary:
+    parameters:
+      - name: post_id
+        in: path
+        required: true
+        schema: { type: string }
     post:
       summary: Request AI thread summary
       security:
@@ -685,6 +977,11 @@ paths:
         '201':
           description: Summary created
   /admin/ai/posts/{post_id}/tag-suggestions:
+    parameters:
+      - name: post_id
+        in: path
+        required: true
+        schema: { type: string }
     post:
       summary: Request AI tag suggestions
       security:
@@ -693,6 +990,11 @@ paths:
         '201':
           description: Tag suggestion created
   /admin/ai/posts/{post_id}/moderation-suggestion:
+    parameters:
+      - name: post_id
+        in: path
+        required: true
+        schema: { type: string }
     post:
       summary: Request AI moderation suggestion
       security:
@@ -701,6 +1003,11 @@ paths:
         '201':
           description: Moderation suggestion created
   /admin/ai/posts/{post_id}/grouping-suggestion:
+    parameters:
+      - name: post_id
+        in: path
+        required: true
+        schema: { type: string }
     post:
       summary: Request AI roadmap grouping suggestion
       security:
@@ -709,6 +1016,11 @@ paths:
         '201':
           description: Grouping suggestion created
   /admin/posts/{post_id}/notes:
+    parameters:
+      - name: post_id
+        in: path
+        required: true
+        schema: { type: string }
     get:
       summary: List moderation notes
       security:
@@ -725,8 +1037,15 @@ paths:
           description: Note added
 
 components:
+  schemas:
+    LocalCredentials:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 3, maxLength: 32 }
+        password: { type: string, minLength: 12, maxLength: 128, format: password }
   securitySchemes:
     BearerAuth:
       type: http
       scheme: bearer
-      description: JWT token from RooIAM, or API token starting with "howllo_"
+      description: Howllo account/workspace session, optional legacy RooIAM token, or scoped API token

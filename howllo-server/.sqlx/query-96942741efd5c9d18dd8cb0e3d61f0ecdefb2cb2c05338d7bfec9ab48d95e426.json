@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE posts SET vote_count = vote_count - 1 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "96942741efd5c9d18dd8cb0e3d61f0ecdefb2cb2c05338d7bfec9ab48d95e426"
+}

@@ -13,13 +13,14 @@ layer, never on the correctness path.
 
 | App            | Stack                          | Port | Responsibility            |
 | -------------- | ------------------------------ | ---- | ------------------------- |
-| howllo-server  | Rust + Actix + SQLx + Postgres | 5110 | source of truth / API     |
-| howllo-admin   | Vite + React + TypeScript      | 5111 | moderation / tenant admin |
-| howllo-web     | Next.js + TypeScript           | 5112 | public feedback boards    |
+| howllo-server  | Rust + Actix + SQLx + Postgres | 7700 | source of truth / API     |
+| howllo-admin   | Vite + React + TypeScript      | 7701 | platform operations       |
+| howllo-app     | Next.js + TypeScript           | 7702 | tenant board management   |
+| howllo-web     | Next.js + TypeScript           | 7703 | public feedback boards    |
 | howllo-landing | Static / Next                  | 5114 | marketing                 |
 | howllo-docs    | Docs site                      | 5116 | documentation             |
 
-Why split: admin needs no SEO; public boards and landing do; docs stay static.
+Tenant managers sign in to Howllo App with RooIAM. Public Web uses Howllo local accounts and shows boards under `/{workspace}/boards/{board}`. Both frontends use the same API and records.
 
 ## Shared code (`shared/`)
 
@@ -29,8 +30,8 @@ route builders. `shared/ui` holds shared React components.
 
 ## Identity model
 
-- **Rooiam** = identity provider (who the user is).
-- **Howllo** = authorization (what the user can do in a tenant).
+- **RooIAM** establishes tenant manager identity in Howllo App. **Howllo local accounts** establish public participant identity in Howllo Web. The server can also support configured OIDC providers in other deployments.
+- **Howllo** maps each `(provider_id, subject)` to a stable local user ID and owns workspace authorization.
 
 Every tenant-owned entity carries `tenant_id`. Tenant scoping is enforced
 server-side and never trusted from the frontend.

@@ -40,7 +40,7 @@ export default function PageError({
         </p>
         {isUnavailable ? (
           <p className="workspace-state__hint">
-            Expecting a local server? Start it on <code>127.0.0.1:5110</code>.
+            Expecting a local server? Start it on <code>127.0.0.1:7700</code>.
           </p>
         ) : null}
         <div className="inline-actions" style={{ marginTop: "1rem" }}>

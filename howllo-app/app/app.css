@@ -1,0 +1,66 @@
+.app-shell--manager {
+  --primary: #176f8b;
+  --primary-dark: #115970;
+  --accent: #41a98d;
+  --ring: 0 0 0 3px rgba(23, 111, 139, 0.22);
+  background:
+    radial-gradient(42rem 25rem at 92% -6%, rgba(56, 160, 170, 0.15), transparent 72%),
+    radial-gradient(35rem 29rem at -8% 66%, rgba(107, 190, 174, 0.11), transparent 74%),
+    linear-gradient(180deg, #f7fcfc 0%, #edf5f5 100%);
+  min-height: 100vh;
+}
+
+.app-shell--manager .site-header {
+  background: linear-gradient(180deg, rgba(247, 252, 252, 0.94), rgba(247, 252, 252, 0.78));
+  border-bottom-color: rgba(23, 111, 139, 0.15);
+}
+
+.app-shell--manager .button {
+  background: #176f8b;
+  box-shadow: 0 4px 12px -6px rgba(23, 111, 139, 0.5);
+}
+
+.app-shell--manager .button:hover { background: #115970; }
+.app-shell--manager .feed-chip--active { border-color: rgba(23, 111, 139, 0.4); color: #115970; }
+
+.app-brand-line { display: flex; align-items: center; gap: 0.7rem; }
+.app-brand-badge {
+  padding: 0.28rem 0.48rem;
+  border: 1px solid rgba(23, 111, 139, 0.22);
+  border-radius: 0.42rem;
+  background: #e6f4f4;
+  color: #115970;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  white-space: nowrap;
+}
+
+.branding-logo-preview {
+  min-height: 6.2rem;
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+}
+.branding-logo-preview img { max-width: 100%; max-height: 5rem; object-fit: contain; }
+.branding-logo-preview strong { font-family: var(--font-display); font-size: 1.5rem; }
+.branding-presets, .branding-color-field { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem; }
+.branding-color-field .manage-input { max-width: 11rem; }
+.branding-color-field input[type="color"] { width: 3rem; height: 2.6rem; border: 0; padding: 0; background: transparent; cursor: pointer; }
+.branding-preset {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  border: 1px solid var(--border-strong); border-radius: 999px;
+  background: white; color: var(--text); padding: 0.4rem 0.65rem; cursor: pointer;
+}
+.branding-preset span { width: 0.9rem; height: 0.9rem; border-radius: 50%; }
+.branding-preview {
+  display: grid; justify-items: start; gap: 0.45rem;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-lg); padding: 1.3rem;
+}
+.branding-preview > span { font-size: 0.7rem; letter-spacing: 0.1em; font-weight: 800; }
+.branding-preview > strong { font-family: var(--font-display); font-size: 1.4rem; }
+.branding-preview > button { border: 0; border-radius: 999px; padding: 0.55rem 1rem; font-weight: 700; }
+.branding-board-icon { width: 3.5rem; height: 3.5rem; object-fit: contain; border-radius: 0.75rem; }

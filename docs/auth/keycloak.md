@@ -1,0 +1,3 @@
+# Keycloak
+
+Create an OIDC client in a Keycloak realm and register `https://YOUR_API/api/auth/callback/keycloak` as its redirect URI. Configure a provider with ID `keycloak`, issuer equal to that realm's issuer in its discovery document, client ID and optional client secret. Enable RS256 signed ID tokens and standard authorization code flow with S256 PKCE. Keycloak supports Basic or POST client-secret authentication; match `token_endpoint_auth_method` to the client setting. See [Keycloak server administration](https://www.keycloak.org/docs/latest/server_admin/) and [OIDC setup](oidc.md). Keycloak uses the generic OIDC adapter.

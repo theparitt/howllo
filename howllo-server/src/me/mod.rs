@@ -11,7 +11,7 @@ use crate::errors::AppError;
 #[derive(Debug, Serialize)]
 pub struct CurrentUserDto {
     pub id: Uuid,
-    pub rooiam_subject: String,
+    pub rooiam_subject: Option<String>,
     pub email: String,
     pub display_name: String,
     pub avatar_url: Option<String>,
@@ -115,15 +115,14 @@ pub async fn get_my_workspace_role(
     auth: AuthenticatedUser,
     query: web::Query<WorkspaceRoleQuery>,
 ) -> Result<impl Responder, AppError> {
-    let tenant_id: Option<Uuid> =
-        sqlx::query_scalar("SELECT id FROM tenants WHERE slug = $1")
-            .bind(query.tenant_slug.trim())
-            .fetch_optional(pool.get_ref())
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, "error resolving tenant for role lookup");
-                AppError::InternalServerError
-            })?;
+    let tenant_id: Option<Uuid> = sqlx::query_scalar("SELECT id FROM tenants WHERE slug = $1")
+        .bind(query.tenant_slug.trim())
+        .fetch_optional(pool.get_ref())
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "error resolving tenant for role lookup");
+            AppError::InternalServerError
+        })?;
 
     let role = match tenant_id {
         Some(tid) => crate::auth::resolve_effective_role(pool.get_ref(), tid, auth.0.id).await,

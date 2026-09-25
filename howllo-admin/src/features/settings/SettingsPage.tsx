@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { admin } from "@howllo/api-client";
+import { API_BASE_URL } from "@howllo/config";
 import type { TenantBranding, WorkspaceAuthConfig } from "@howllo/types";
 import { Panel } from "../../components/Panel";
 import { SessionRequired } from "../../components/SessionRequired";
@@ -77,6 +78,8 @@ export function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [brandingError, setBrandingError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [loginProviders, setLoginProviders] = useState<Array<{ id: string; display_name: string; kind: string }>>([]);
+  const [providerLoadError, setProviderLoadError] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [branding, setBranding] = useState<TenantBranding>({
     tenant_slug: tenant,
@@ -90,7 +93,7 @@ export function SettingsPage() {
   });
   const [workspaceAuth, setWorkspaceAuth] = useState<WorkspaceAuthConfig>({
     tenant_slug: tenant,
-    provider: "rooiam",
+    provider: "local",
     rooiam_workspace_id: null,
     rooiam_client_id: null,
     rooiam_widget_base_url: "https://api.rooiam.com/login-widget",
@@ -169,6 +172,19 @@ export function SettingsPage() {
       cancelled = true;
     };
   }, [api, authorization, tenant]);
+
+  useEffect(() => {
+    if (!authorization) return;
+    let cancelled = false;
+    fetch(`${API_BASE_URL}/api/auth/providers`, { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error("provider list unavailable");
+        return response.json() as Promise<Array<{ id: string; display_name: string; kind: string }>>;
+      })
+      .then((providers) => { if (!cancelled) setLoginProviders(providers); })
+      .catch(() => { if (!cancelled) setProviderLoadError(true); });
+    return () => { cancelled = true; };
+  }, [authorization]);
 
   if (!authorization) {
     return (
@@ -266,7 +282,7 @@ export function SettingsPage() {
     setAuthMessage(null);
     try {
       const data = await api.updateWorkspaceAuthConfig({
-        provider: workspaceAuth.provider.trim() || "rooiam",
+        provider: workspaceAuth.provider.trim() || "local",
         rooiam_workspace_id: workspaceAuth.rooiam_workspace_id?.trim() || "",
         rooiam_client_id: workspaceAuth.rooiam_client_id?.trim() || "",
         rooiam_widget_base_url: workspaceAuth.rooiam_widget_base_url?.trim() || "",
@@ -483,13 +499,15 @@ export function SettingsPage() {
 
         <Panel title="Workspace Auth">
           <p className="muted">
-            Configure which login provider this workspace uses. RooIAM settings
-            here override any server-wide fallback and are what <code>howllo-web</code>
-            resolves at sign-in time.
+            Howllo loads enabled login providers from the server. Configure local
+            accounts and OIDC in the server environment. RooIAM widget settings
+            below are optional for existing workspace login widgets.
           </p>
+          {providerLoadError ? <p className="muted">Could not load enabled login providers.</p> :
+            <p className="muted">Enabled: {[...loginProviders.map((provider) => provider.display_name), ...(workspaceAuth.provider === "rooiam" ? ["RooIAM widget"] : [])].join(", ") || "None"}</p>}
           <div className="form-grid">
             <label className="field-span-2">
-              Provider
+              Legacy workspace widget
               <select
                 value={workspaceAuth.provider}
                 onChange={(event) =>
@@ -499,9 +517,11 @@ export function SettingsPage() {
                   }))
                 }
               >
-                <option value="rooiam">RooIAM</option>
+                {loginProviders.some((provider) => provider.id === "local") ? <option value="local">None</option> : null}
+                <option value="rooiam">RooIAM widget</option>
               </select>
             </label>
+            {workspaceAuth.provider === "rooiam" ? <>
             <label className="field-span-2">
               RooIAM workspace ID
               <input
@@ -541,6 +561,7 @@ export function SettingsPage() {
                 placeholder="https://api.rooiam.com/login-widget"
               />
             </label>
+            </> : null}
           </div>
           <div className="button-row" style={{ marginTop: 16 }}>
             <button

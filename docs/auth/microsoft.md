@@ -1,0 +1,3 @@
+# Microsoft Entra ID
+
+Register a web application in your Entra tenant with redirect URI `https://YOUR_API/api/auth/callback/microsoft`. Add a provider entry with ID `microsoft`, display name of your choice, the tenant-specific OIDC issuer from its discovery document, client ID, client secret and scopes `openid profile email`. Set `token_endpoint_auth_method` to `client_secret_post` for a confidential web app. Use a tenant-specific issuer so the ID token issuer can be checked exactly. See [Microsoft's authorization code flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow) and [OIDC setup](oidc.md). Entra uses the generic OIDC adapter.

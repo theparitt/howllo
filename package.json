@@ -1,20 +1,32 @@
 {
   "name": "howllo",
-  "private": true,
   "version": "0.1.0",
-  "description": "Howllo — multi-tenant feedback and roadmap platform (open-core).",
+  "description": "Howllo — open-source multi-tenant feedback and roadmap platform.",
+  "license": "Apache-2.0",
+  "homepage": "https://howllo.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/theparitt/howllo.git"
+  },
   "workspaces": [
     "howllo-web",
+    "howllo-app",
     "howllo-admin",
     "howllo-landing",
     "howllo-docs",
     "shared/*"
   ],
   "scripts": {
+    "deploy": "node scripts/deploy.mjs",
+    "deploy:check": "node scripts/deploy.mjs --dry-run",
     "dev:web": "npm -w howllo-web run dev",
+    "dev:app": "npm -w howllo-app run dev",
     "dev:admin": "npm -w howllo-admin run dev",
     "dev:landing": "npm -w howllo-landing run dev",
     "dev:docs": "npm -w howllo-docs run dev",
     "dev:server": "cargo run --manifest-path howllo-server/Cargo.toml"
+  },
+  "devDependencies": {
+    "wrangler": "^4.140.0"
   }
 }

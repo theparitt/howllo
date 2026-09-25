@@ -37,7 +37,7 @@ pub async fn list_members(
             m.role
         FROM memberships m
         JOIN users u ON u.id = m.user_id
-        WHERE m.tenant_id = $1
+        WHERE m.tenant_id = $1 AND m.public_participant = FALSE
         ORDER BY u.display_name ASC, u.email ASC
         "#,
         tenant_id
@@ -155,7 +155,7 @@ pub async fn upsert_membership(
         INSERT INTO memberships (tenant_id, user_id, role)
         VALUES ($1, $2, $3)
         ON CONFLICT (tenant_id, user_id)
-        DO UPDATE SET role = EXCLUDED.role
+        DO UPDATE SET role = EXCLUDED.role, public_participant = FALSE
         "#,
         tenant_id,
         user_id,
@@ -173,7 +173,7 @@ pub async fn update_membership_role(
     role: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
-        "UPDATE memberships SET role = $1 WHERE tenant_id = $2 AND user_id = $3",
+        "UPDATE memberships SET role = $1, public_participant = FALSE WHERE tenant_id = $2 AND user_id = $3",
         role,
         tenant_id,
         user_id

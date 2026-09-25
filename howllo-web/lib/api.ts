@@ -93,6 +93,22 @@ export async function getTenantBranding(tenantSlug: string): Promise<TenantBrand
   return unwrap<TenantBranding>(response);
 }
 
+export async function managerUpdateTenantBranding(
+  tenantSlug: string,
+  token: string,
+  input: Pick<TenantBranding, "site_name" | "logo_url" | "accent_color" | "background_color" | "show_powered_by" | "show_roadmap">,
+): Promise<TenantBranding> {
+  const response = await apiFetch(
+    buildUrl(`/api/admin/tenant-branding?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    {
+      method: "PATCH",
+      headers: { "content-type": "application/json", Authorization: token },
+      body: JSON.stringify(input),
+    },
+  );
+  return unwrap<TenantBranding>(response);
+}
+
 export async function getWorkspaceAuthConfig(
   tenantSlug: string,
 ): Promise<WorkspaceAuthConfig> {
@@ -269,6 +285,25 @@ export async function managerListBoards(tenantSlug: string, token: string): Prom
   return unwrap<ManageBoard[]>(response);
 }
 
+export async function managerCreateBoard(
+  input: {
+    tenant_slug: string;
+    slug: string;
+    name: string;
+    description?: string;
+    board_type: string;
+    is_private: boolean;
+  },
+  token: string,
+): Promise<ManageBoard> {
+  const response = await apiFetch(buildUrl("/api/admin/boards"), {
+    method: "POST",
+    headers: { "content-type": "application/json", Authorization: token },
+    body: JSON.stringify(input),
+  });
+  return unwrap<ManageBoard>(response);
+}
+
 export async function managerUpdateBoard(
   boardId: string,
   input: {
@@ -341,6 +376,34 @@ export async function managerListMembers(tenantSlug: string, token: string): Pro
     { cache: "no-store", headers: { Authorization: token } },
   );
   return unwrap<WorkspaceMember[]>(response);
+}
+
+export async function managerListParticipants(tenantSlug: string, token: string): Promise<import("./types").WorkspaceParticipant[]> {
+  const response = await apiFetch(
+    buildUrl(`/api/admin/participants?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { cache: "no-store", headers: { Authorization: token } },
+  );
+  return unwrap<import("./types").WorkspaceParticipant[]>(response);
+}
+
+export async function managerSetParticipantRestriction(
+  tenantSlug: string, userId: string, token: string,
+  input: { kind: "suspended" | "banned"; duration_days?: number; reason: string },
+): Promise<void> {
+  await managerWrite(`/api/admin/participants/${userId}/restriction?tenant_slug=${encodeURIComponent(tenantSlug)}`, "PUT", token, input);
+}
+
+export async function managerClearParticipantRestriction(tenantSlug: string, userId: string, token: string): Promise<void> {
+  await managerWrite(`/api/admin/participants/${userId}/restriction?tenant_slug=${encodeURIComponent(tenantSlug)}`, "DELETE", token);
+}
+
+export async function managerModerationQueue(tenantSlug: string, token: string): Promise<import("./types").ModerationQueueItem[]> {
+  const response = await apiFetch(
+    buildUrl(`/api/admin/moderation/queue?tenant_slug=${encodeURIComponent(tenantSlug)}&per_page=50`),
+    { cache: "no-store", headers: { Authorization: token } },
+  );
+  const page = await unwrap<{ items: import("./types").ModerationQueueItem[] }>(response);
+  return page.items;
 }
 
 export async function managerUpdateMemberRole(
@@ -435,13 +498,13 @@ export async function getMe(token: string): Promise<CurrentUser> {
 
 export async function createWorkspaceSession(input: {
   tenantSlug: string;
-  rooiamAccessToken: string;
+  accessToken: string;
 }): Promise<{ session_token: string }> {
   const response = await apiFetch(buildUrl("/api/auth/workspace-session"), {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      Authorization: `Bearer ${input.rooiamAccessToken}`,
+      Authorization: `Bearer ${input.accessToken}`,
     },
     body: JSON.stringify({
       tenant_slug: input.tenantSlug,
@@ -588,6 +651,9 @@ export async function createPost(input: {
 
 /** Upload an image (base64) and return its public URL. */
 export async function uploadImage(file: File, token: string): Promise<string> {
+  if (file.size > 8 * 1024 * 1024) {
+    throw new Error("Image exceeds the 8 MB upload limit.");
+  }
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));

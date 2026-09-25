@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE posts SET title = 'Searchable roadmap item' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "547ae827591d4fb3d0f696e1b32b4d36a249f62fcbd760f317a6ffbaac651da8"
+}

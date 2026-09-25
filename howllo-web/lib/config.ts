@@ -1,7 +1,7 @@
 export const API_BASE_URL =
   process.env.HOWLLO_API_BASE_URL ??
   process.env.NEXT_PUBLIC_API_BASE_URL ??
-  "http://127.0.0.1:5110";
+  "http://127.0.0.1:7700";
 
 function deriveWebSocketBaseUrl(httpUrl: string) {
   if (httpUrl.startsWith("https://")) {
@@ -18,7 +18,7 @@ function deriveWebSocketBaseUrl(httpUrl: string) {
 export const BOARD_ADMIN_BASE_URL =
   process.env.HOWLLO_BOARD_ADMIN_BASE_URL ??
   process.env.NEXT_PUBLIC_BOARD_ADMIN_BASE_URL ??
-  "http://127.0.0.1:5111";
+  "http://127.0.0.1:7701";
 
 export const BOARD_WS_URL =
   process.env.HOWLLO_BOARD_WS_URL ??

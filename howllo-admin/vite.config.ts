@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 
-// Admin runs on 5111. It is an internal tool and does not need SEO.
+// Admin runs on 7701. It is an internal tool and does not need SEO.
 //
 // The shared packages export raw TS from `shared/*/src`, so we alias the
 // `@howllo/*` specifiers straight at those sources. This works without a build
@@ -21,6 +21,6 @@ export default defineConfig({
       "@howllo/ui": sharedRoot("ui"),
     },
   },
-  server: { port: 5111 },
-  preview: { port: 5111 },
+  server: { port: 7701 },
+  preview: { port: 7701 },
 });

@@ -6,7 +6,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub id: Uuid,
-    pub rooiam_subject: String,
+    pub rooiam_subject: Option<String>,
     pub email: String,
     pub display_name: String,
     pub avatar_url: Option<String>,

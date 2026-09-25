@@ -6,6 +6,8 @@ use uuid::Uuid;
 
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 
+use crate::auth::identity::{resolve_user, ExternalIdentity};
+use crate::auth::local_user::resolve_account_token;
 use crate::auth::rooiam::{resolve_rooiam_access_token, ResolvedRooiamIdentity, RooiamClaims};
 use crate::config::Settings;
 use crate::db::DbPool;
@@ -51,30 +53,16 @@ async fn upsert_rooiam_user(
     pool: &DbPool,
     identity: ResolvedRooiamIdentity,
 ) -> Result<User, AppError> {
-    sqlx::query_as::<_, User>(
-        r#"
-        INSERT INTO users (rooiam_subject, email, display_name)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (rooiam_subject)
-        DO UPDATE SET
-            email = EXCLUDED.email,
-            updated_at = NOW()
-        RETURNING id, rooiam_subject, email, display_name, avatar_url, created_at, updated_at
-        "#,
+    resolve_user(
+        pool,
+        &ExternalIdentity {
+            provider_id: "rooiam".into(),
+            subject: identity.sub,
+            email: identity.email,
+            name: identity.name,
+        },
     )
-    .bind(identity.sub)
-    .bind(
-        identity
-            .email
-            .unwrap_or_else(|| "no-email@example.com".to_string()),
-    )
-    .bind(identity.name.unwrap_or_else(|| "Unknown User".to_string()))
-    .fetch_one(pool)
     .await
-    .map_err(|error| {
-        tracing::error!(error = %error, "database error resolving workspace-session user");
-        AppError::InternalServerError
-    })
 }
 
 pub async fn resolve_workspace_session_from_token(
@@ -101,6 +89,11 @@ pub async fn resolve_workspace_session_from_token(
         WHERE s.token_hash = $1
           AND s.revoked_at IS NULL
           AND s.expires_at > NOW()
+          AND NOT EXISTS (
+              SELECT 1 FROM workspace_restrictions r
+              WHERE r.tenant_id = s.tenant_id AND r.user_id = s.user_id
+                AND (r.expires_at IS NULL OR r.expires_at > NOW())
+          )
         "#,
     )
     .bind(&token_hash)
@@ -165,29 +158,45 @@ pub async fn create_workspace_session(
     body: web::Json<CreateWorkspaceSessionRequest>,
 ) -> Result<impl Responder, AppError> {
     let access_token = raw_bearer_token(&req).ok_or(AppError::Unauthorized)?;
-    if access_token.starts_with("howllo_") {
-        return Err(AppError::Unauthorized);
-    }
 
     let tenant_slug = body.tenant_slug.trim();
     if tenant_slug.is_empty() {
         return Err(AppError::Validation("tenant_slug is required".to_string()));
     }
 
-    let identity = resolve_rooiam_access_token(settings.get_ref(), access_token).await?;
-    let user = upsert_rooiam_user(pool.get_ref(), identity).await?;
+    let user = if let Some(user) = resolve_account_token(pool.get_ref(), access_token).await? {
+        user
+    } else {
+        if access_token.starts_with("howllo_") {
+            return Err(AppError::Unauthorized);
+        }
+        let identity = resolve_rooiam_access_token(settings.get_ref(), access_token).await?;
+        upsert_rooiam_user(pool.get_ref(), identity).await?
+    };
 
     let tenant_id =
         crate::repositories::membership_repository::resolve_tenant_id(pool.get_ref(), tenant_slug)
             .await?;
+
+    let restricted: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM workspace_restrictions WHERE tenant_id = $1 AND user_id = $2 AND (expires_at IS NULL OR expires_at > NOW()))",
+    )
+    .bind(tenant_id)
+    .bind(user.id)
+    .fetch_one(pool.get_ref())
+    .await
+    .map_err(|error| { tracing::error!(%error, "error checking workspace restriction"); AppError::InternalServerError })?;
+    if restricted {
+        return Err(AppError::Forbidden);
+    }
 
     // Signing into a workspace makes the user a `member` of that tenant so they
     // can participate on public boards (create posts, vote, comment). Use
     // DO NOTHING so we never downgrade an existing owner/admin/moderator.
     sqlx::query(
         r#"
-        INSERT INTO memberships (tenant_id, user_id, role)
-        VALUES ($1, $2, 'member')
+        INSERT INTO memberships (tenant_id, user_id, role, public_participant)
+        VALUES ($1, $2, 'member', TRUE)
         ON CONFLICT (tenant_id, user_id) DO NOTHING
         "#,
     )
@@ -202,12 +211,14 @@ pub async fn create_workspace_session(
 
     // Attach any pending staff invitations for this email to the real account so
     // the user can accept/reject them. We do NOT auto-accept. See docs.
-    let _ = crate::repositories::invitation_repository::bind_email_to_user(
-        pool.get_ref(),
-        &user.email.trim().to_lowercase(),
-        user.id,
-    )
-    .await;
+    if !user.email.trim().is_empty() {
+        let _ = crate::repositories::invitation_repository::bind_email_to_user(
+            pool.get_ref(),
+            &user.email.trim().to_lowercase(),
+            user.id,
+        )
+        .await;
+    }
 
     let random = format!(
         "{}{}{}",
@@ -275,7 +286,7 @@ async fn upsert_sso_user(
     email: &str,
     name: &str,
 ) -> Result<User, AppError> {
-    sqlx::query_as::<_, User>(
+    let user = sqlx::query_as::<_, User>(
         r#"
         INSERT INTO users (rooiam_subject, email, display_name)
         VALUES ($1, $2, $3)
@@ -292,7 +303,13 @@ async fn upsert_sso_user(
     .map_err(|error| {
         tracing::error!(error = %error, "database error resolving SSO user");
         AppError::InternalServerError
-    })
+    })?;
+    sqlx::query("INSERT INTO user_identities (user_id, provider_id, subject, email) VALUES ($1, 'workspace-sso', $2, $3) ON CONFLICT (provider_id, subject) DO NOTHING")
+        .bind(user.id).bind(subject).bind(email).execute(pool).await.map_err(|error| {
+            tracing::error!(error = %error, "database error mapping SSO identity");
+            AppError::InternalServerError
+        })?;
+    Ok(user)
 }
 
 async fn mint_session_token(
@@ -472,6 +489,17 @@ mod tests {
             .to_request();
         let create_response = test::call_service(&app, create_request).await;
         assert_eq!(create_response.status(), StatusCode::CREATED);
+
+        // Joining a public board must not reveal private boards in the tenant.
+        let private_request = test::TestRequest::get()
+            .uri(&format!(
+                "/api/boards/{}?tenant_slug={}",
+                seed.private_board_slug, seed.tenant_slug
+            ))
+            .insert_header(("Authorization", format!("Bearer {session_token}")))
+            .to_request();
+        let private_response = test::call_service(&app, private_request).await;
+        assert_eq!(private_response.status(), StatusCode::FORBIDDEN);
     }
 
     // Signing in must never downgrade an existing owner/admin/moderator to member.
@@ -510,13 +538,11 @@ mod tests {
         assert_eq!(session_response.status(), StatusCode::CREATED);
 
         // Role stays "admin" — the member grant used ON CONFLICT DO NOTHING.
-        let role: String = sqlx::query_scalar(
-            "SELECT role FROM memberships WHERE user_id = $1",
-        )
-        .bind(seed.admin_user_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let role: String = sqlx::query_scalar("SELECT role FROM memberships WHERE user_id = $1")
+            .bind(seed.admin_user_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(role, "admin");
     }
 
@@ -546,19 +572,31 @@ mod tests {
         .await;
 
         // Owner enables SSO and gets the workspace secret.
-        let admin = bearer_for(&seed.admin_subject, "admin@example.com", "Admin", &settings.rooiam_jwt_secret);
+        let admin = bearer_for(
+            &seed.admin_subject,
+            "admin@example.com",
+            "Admin",
+            &settings.rooiam_jwt_secret,
+        );
         let regen = read_json(
             test::call_service(
                 &app,
                 test::TestRequest::post()
-                    .uri(&format!("/api/admin/sso-config/regenerate?tenant_slug={}", seed.tenant_slug))
+                    .uri(&format!(
+                        "/api/admin/sso-config/regenerate?tenant_slug={}",
+                        seed.tenant_slug
+                    ))
                     .insert_header(("Authorization", admin))
                     .to_request(),
             )
             .await,
         )
         .await;
-        let secret = regen.get("secret").and_then(|v| v.as_str()).unwrap().to_string();
+        let secret = regen
+            .get("secret")
+            .and_then(|v| v.as_str())
+            .unwrap()
+            .to_string();
         assert_eq!(regen.get("enabled").and_then(|v| v.as_bool()), Some(true));
 
         // The customer's backend signs a token for their already-logged-in user.
@@ -569,7 +607,12 @@ mod tests {
                 "name": "Customer User",
                 "exp": (ChronoUtc::now() + ChronoDuration::hours(1)).timestamp() as usize,
             });
-            encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_bytes())).unwrap()
+            encode(
+                &Header::default(),
+                &claims,
+                &EncodingKey::from_secret(secret.as_bytes()),
+            )
+            .unwrap()
         };
 
         // Exchange it for a howllo session.
@@ -584,7 +627,11 @@ mod tests {
             .await,
         )
         .await;
-        let ws_token = session.get("session_token").and_then(|v| v.as_str()).unwrap().to_string();
+        let ws_token = session
+            .get("session_token")
+            .and_then(|v| v.as_str())
+            .unwrap()
+            .to_string();
 
         // That session can post -> the end-user is a real member.
         let create = test::TestRequest::post()
@@ -592,7 +639,10 @@ mod tests {
             .insert_header(("Authorization", format!("Bearer {ws_token}")))
             .set_json(json!({ "tenant_slug": seed.tenant_slug, "title": "From the customer's app", "body": "via SSO" }))
             .to_request();
-        assert_eq!(test::call_service(&app, create).await.status(), StatusCode::CREATED);
+        assert_eq!(
+            test::call_service(&app, create).await.status(),
+            StatusCode::CREATED
+        );
 
         // Identity is namespaced per workspace.
         let count: i64 = sqlx::query_scalar(
@@ -608,6 +658,9 @@ mod tests {
             .uri("/api/auth/sso-session")
             .set_json(json!({ "tenant_slug": seed.tenant_slug, "token": sign("wrong-secret") }))
             .to_request();
-        assert_eq!(test::call_service(&app, bad).await.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            test::call_service(&app, bad).await.status(),
+            StatusCode::UNAUTHORIZED
+        );
     }
 }

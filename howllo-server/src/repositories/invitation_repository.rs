@@ -38,7 +38,7 @@ pub async fn find_user_id_by_email(
     pool: &DbPool,
     email_lower: &str,
 ) -> Result<Option<Uuid>, sqlx::Error> {
-    sqlx::query_scalar("SELECT id FROM users WHERE lower(email) = $1 LIMIT 1")
+    sqlx::query_scalar("SELECT u.id FROM users u JOIN user_identities i ON i.user_id = u.id AND i.provider_id = 'rooiam' WHERE lower(u.email) = $1 LIMIT 1")
         .bind(email_lower)
         .fetch_optional(pool)
         .await

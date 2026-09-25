@@ -18,14 +18,16 @@ import {
   readRooiamOidcState,
   writeRooiamOidcState,
 } from "@/lib/rooiam-auth";
-import { getWorkspaceSlugFromPath, persistBearerToken } from "@/components/dev-auth-panel";
+import { clearAllStoredBearerTokens, getWorkspaceSlugFromPath, persistBearerToken, writeAccountToken } from "@/components/dev-auth-panel";
+import { subdomainSlug } from "@/lib/subdomain";
+import { exchangeSignInCode } from "@/lib/auth-api";
 
 function getTenantSlugFromReturnTo(returnTo: string) {
   try {
     const url = new URL(returnTo, window.location.origin);
     const queryTenant = url.searchParams.get("tenant")?.trim();
     if (queryTenant) return queryTenant;
-    return getWorkspaceSlugFromPath(url.pathname);
+    return getWorkspaceSlugFromPath(url.pathname) ?? subdomainSlug(url.host);
   } catch {
     return null;
   }
@@ -50,12 +52,28 @@ export function AuthCallback() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("Signing you in…");
   const [fallback, setFallback] = useState("/");
+  const [genericCallback, setGenericCallback] = useState(false);
   const providerLabel = authProviderLabel(ACTIVE_AUTH_PROVIDER);
 
   useEffect(() => {
     let cancelled = false;
 
     async function run() {
+      const exchangeCode = new URLSearchParams(window.location.search).get("exchange_code");
+      if (exchangeCode) {
+        setGenericCallback(true);
+        const result = await exchangeSignInCode(exchangeCode);
+        const target = result.return_to.startsWith("/") && !result.return_to.startsWith("//") ? result.return_to : "/";
+        const tenant = getTenantSlugFromReturnTo(target);
+        const bearer = `Bearer ${result.access_token}`;
+        writeAccountToken(bearer);
+        if (tenant) {
+          const session = await createWorkspaceSession({ tenantSlug: tenant, accessToken: result.access_token });
+          persistBearerToken(tenant, `Bearer ${session.session_token}`);
+        }
+        if (!cancelled) router.replace(target);
+        return;
+      }
       if (ACTIVE_AUTH_PROVIDER !== "rooiam") {
         setError(`${providerLabel} callback is not implemented in howllo-web yet.`);
         return;
@@ -76,17 +94,24 @@ export function AuthCallback() {
       const code = params.get("code");
       const state = params.get("state");
       const existing = readRooiamOidcState();
-      if (!tenantSlug) {
-        setError("Open a workspace before completing sign-in.");
-        return;
+
+      // Account mode (no workspace in the return path): sign in at the account
+      // level using howllo's global rooiam app, to create/list workspaces.
+      // Otherwise use the workspace's own rooiam config.
+      let rooiamClientId = "";
+      let rooiamBaseUrl = "";
+      if (tenantSlug) {
+        const workspaceAuth = await getWorkspaceAuthConfig(tenantSlug);
+        if (workspaceAuth.provider !== "rooiam") {
+          setError(`Workspace auth provider "${workspaceAuth.provider}" is not supported here.`);
+          return;
+        }
+        rooiamClientId = workspaceAuth.rooiam_client_id?.trim() ?? "";
+        rooiamBaseUrl = workspaceAuth.rooiam_widget_base_url?.trim() ?? "";
+      } else {
+        rooiamClientId = (process.env.NEXT_PUBLIC_ROOIAM_WIDGET_CLIENT_ID ?? "").trim();
+        rooiamBaseUrl = (process.env.NEXT_PUBLIC_ROOIAM_WIDGET_BASE_URL ?? "").trim();
       }
-      const workspaceAuth = await getWorkspaceAuthConfig(tenantSlug);
-      if (workspaceAuth.provider !== "rooiam") {
-        setError(`Workspace auth provider "${workspaceAuth.provider}" is not supported here.`);
-        return;
-      }
-      const rooiamClientId = workspaceAuth.rooiam_client_id?.trim() ?? "";
-      const rooiamBaseUrl = workspaceAuth.rooiam_widget_base_url?.trim() ?? "";
 
       if (!code || !state) {
         if (!rooiamClientId) {
@@ -133,23 +158,16 @@ export function AuthCallback() {
       }
 
       setMessage(`Exchanging ${providerLabel} authorization code…`);
-      const tokenBody = new URLSearchParams({
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: existing.redirectUri,
-        client_id: rooiamClientId,
-        code_verifier: existing.codeVerifier,
+      const tokenResponse = await fetch("/api/auth/rooiam-token", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          code,
+          codeVerifier: existing.codeVerifier,
+          redirectUri: existing.redirectUri,
+          tenantSlug,
+        }),
       });
-      const tokenResponse = await fetch(
-        `${rooiamBaseUrl.replace(/\/login-widget\/?$/, "")}/v1/oidc/token`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/x-www-form-urlencoded",
-          },
-          body: tokenBody.toString(),
-        },
-      );
       const tokenPayload = await tokenResponse.json().catch(() => ({}));
       if (!tokenResponse.ok || typeof tokenPayload.access_token !== "string") {
         setError(
@@ -162,11 +180,19 @@ export function AuthCallback() {
         return;
       }
 
-      const session = await createWorkspaceSession({
-        tenantSlug,
-        rooiamAccessToken: tokenPayload.access_token,
-      });
-      persistBearerToken(tenantSlug, `Bearer ${session.session_token}`);
+      if (tenantSlug) {
+        const session = await createWorkspaceSession({
+          tenantSlug,
+          accessToken: tokenPayload.access_token,
+        });
+        persistBearerToken(tenantSlug, `Bearer ${session.session_token}`);
+      } else {
+        // Account mode: keep the rooiam token as the account credential for the
+        // dashboard (list/create workspaces). Board sessions are minted per
+        // workspace when the tenant opens one.
+        clearAllStoredBearerTokens();
+        writeAccountToken(`Bearer ${tokenPayload.access_token}`);
+      }
       clearRooiamOidcState();
       consumeRooiamReturnTo();
 
@@ -178,7 +204,7 @@ export function AuthCallback() {
 
     void run().catch((cause) => {
       if (!cancelled) {
-        setError(cause instanceof Error ? cause.message : "Could not complete RooIAM sign-in.");
+        setError(cause instanceof Error ? cause.message : "Could not complete sign-in.");
       }
     });
 
@@ -191,10 +217,10 @@ export function AuthCallback() {
     return (
       <div className="page-stack">
         <section className="panel empty-state workspace-state">
-          <span className="kicker">{providerLabel} callback</span>
+          <span className="kicker">{genericCallback ? "Howllo" : providerLabel} callback</span>
           <h1 className="empty-state__title">Sign-in did not complete.</h1>
           <p className="empty-state__copy">
-            {providerLabel} returned an error: <code>{error}</code>
+            {genericCallback ? "Sign-in failed" : `${providerLabel} returned an error`}: <code>{error}</code>
           </p>
           <div className="hero__actions">
             <Link className="button" href={fallback}>

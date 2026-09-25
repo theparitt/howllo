@@ -5,10 +5,14 @@ pub struct Settings {
     pub database_url: String,
     pub bind_address: String,
     pub rooiam_jwt_secret: String,
+    pub admin_jwt_secret: String,
+    pub rooiam_legacy_hs256_enabled: bool,
     pub rooiam_hosted_userinfo_url: Option<String>,
     pub rooiam_widget_base_url: Option<String>,
     pub rooiam_widget_workspace_id: Option<String>,
     pub rooiam_widget_client_id: Option<String>,
+    /// Default login widget for workspaces without an explicit auth row.
+    pub workspace_auth_provider: String,
     /// One-time key gating local admin setup (first password). Until the admin
     /// is bootstrapped, the setup endpoint requires this value. Set via
     /// HOWLLO_ADMIN_BOOTSTRAP_KEY. If unset, local admin setup is disabled.
@@ -49,6 +53,10 @@ impl Settings {
                 .unwrap_or_else(|_| "127.0.0.1:5110".to_string()),
             rooiam_jwt_secret: env::var("HOWLLO_JWT_SECRET")
                 .unwrap_or_else(|_| "dev-secret".to_string()),
+            admin_jwt_secret: env::var("HOWLLO_ADMIN_JWT_SECRET")
+                .or_else(|_| env::var("HOWLLO_JWT_SECRET"))
+                .unwrap_or_else(|_| "dev-secret".to_string()),
+            rooiam_legacy_hs256_enabled: bool_flag("HOWLLO_ROOIAM_LEGACY_HS256_ENABLED", false),
             rooiam_hosted_userinfo_url: env::var("HOWLLO_ROOIAM_HOSTED_USERINFO_URL")
                 .ok()
                 .map(|value| value.trim().to_string())
@@ -65,6 +73,10 @@ impl Settings {
                 .ok()
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty()),
+            workspace_auth_provider: env::var("HOWLLO_WORKSPACE_AUTH_PROVIDER")
+                .unwrap_or_else(|_| "local".to_string())
+                .trim()
+                .to_ascii_lowercase(),
             admin_bootstrap_key: env::var("HOWLLO_ADMIN_BOOTSTRAP_KEY")
                 .ok()
                 .map(|value| value.trim().to_string())

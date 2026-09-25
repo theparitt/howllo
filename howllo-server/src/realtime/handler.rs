@@ -10,6 +10,7 @@ use actix_web::{get, web, HttpRequest, HttpResponse};
 use futures::StreamExt;
 use serde::Deserialize;
 
+use crate::auth::identity::{resolve_user, ExternalIdentity};
 use crate::auth::rooiam::resolve_rooiam_access_token;
 use crate::auth::workspace_session::{
     is_workspace_session_token, resolve_workspace_session_from_token,
@@ -53,26 +54,16 @@ pub async fn ws_connect(
         session.user.id
     } else {
         let identity = resolve_rooiam_access_token(settings.get_ref(), &query.ticket).await?;
-        let user = sqlx::query!(
-            r#"
-            INSERT INTO users (rooiam_subject, email, display_name)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (rooiam_subject)
-            DO UPDATE SET email = EXCLUDED.email, updated_at = NOW()
-            RETURNING id
-            "#,
-            identity.sub,
-            identity
-                .email
-                .unwrap_or_else(|| "no-email@example.com".to_string()),
-            identity.name.unwrap_or_else(|| "Unknown User".to_string()),
+        let user = resolve_user(
+            pool.get_ref(),
+            &ExternalIdentity {
+                provider_id: "rooiam".into(),
+                subject: identity.sub,
+                email: identity.email,
+                name: identity.name,
+            },
         )
-        .fetch_one(pool.get_ref())
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, tenant_slug = query.tenant_slug.as_str(), "ws error resolving user");
-            AppError::InternalServerError
-        })?;
+        .await?;
         user.id
     };
 

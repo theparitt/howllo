@@ -21,10 +21,12 @@ services:
       dockerfile: Dockerfile
     environment:
       HOWLLO_DATABASE_URL: postgres://postgres:postgres@postgres:5432/howllo
-      HOWLLO_BIND_ADDRESS: 0.0.0.0:5110
+      HOWLLO_BIND_ADDRESS: 0.0.0.0:7700
       HOWLLO_JWT_SECRET: dev-secret
+      HOWLLO_ADMIN_JWT_SECRET: ${HOWLLO_ADMIN_JWT_SECRET:-dev-secret}
       HOWLLO_ADMIN_BOOTSTRAP_KEY: howllo1234
-      HOWLLO_ALLOWED_ORIGINS: http://localhost:3000
+      HOWLLO_AUTH_LOCAL_ENABLED: "true"
+      HOWLLO_ALLOWED_ORIGINS: http://localhost:7702
       HOWLLO_RATE_LIMIT_ENABLED: "true"
       HOWLLO_PUBLIC_WRITE_RATE_LIMIT: 60
       HOWLLO_MAX_POST_BODY_CHARS: 10000
@@ -36,7 +38,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "5110:5110"
+      - "7700:7700"
 
 volumes:
   howllo-postgres:

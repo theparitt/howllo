@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO comments (id, post_id, user_id, body, is_official_response, comment_type)\n            VALUES ($1, $2, $3, $4, TRUE, 'official')\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3f49e5818b9c345dbbded392bc261d0a92e31771cee01ab5d9629e53d6c16d36"
+}

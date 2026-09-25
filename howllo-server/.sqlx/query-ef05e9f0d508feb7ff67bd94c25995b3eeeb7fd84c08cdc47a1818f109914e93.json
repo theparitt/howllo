@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE api_tokens SET expires_at = NOW() - INTERVAL '1 day' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ef05e9f0d508feb7ff67bd94c25995b3eeeb7fd84c08cdc47a1818f109914e93"
+}

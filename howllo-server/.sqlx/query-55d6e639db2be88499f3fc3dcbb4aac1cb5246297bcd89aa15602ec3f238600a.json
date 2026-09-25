@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE posts SET title = 'Searchable hidden item', is_hidden = TRUE WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "55d6e639db2be88499f3fc3dcbb4aac1cb5246297bcd89aa15602ec3f238600a"
+}

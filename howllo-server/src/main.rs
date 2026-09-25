@@ -27,11 +27,13 @@ async fn main() -> std::io::Result<()> {
             .iter()
             .fold(Cors::default(), |cors, origin| cors.allowed_origin(origin))
             .allow_any_header()
-            .allowed_methods(vec!["GET", "POST", "PATCH", "DELETE"]);
+            .allowed_methods(vec!["GET", "POST", "PUT", "PATCH", "DELETE"]);
 
         App::new()
             .wrap(cors)
             .wrap(Logger::default())
+            // An 8 MiB image becomes roughly 10.7 MiB in the JSON base64 upload body.
+            .app_data(web::JsonConfig::default().limit(12 * 1024 * 1024))
             .wrap(http::RequestId)
             .wrap(http::PublicWriteRateLimit::new())
             .app_data(pool_data.clone())

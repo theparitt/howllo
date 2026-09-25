@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "description": "Howllo Landing Page",
   "scripts": {
+    "build": "node scripts/build.mjs",
+    "deploy": "npm run build && wrangler deploy",
     "dev": "serve -l 5114 .",
     "start": "serve -l 5114 ."
   },

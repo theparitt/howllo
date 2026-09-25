@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO posts (id, tenant_id, board_id, user_id, title, body, status)\n            VALUES\n                ($1, $2, $3, $4, $5, $6, $7),\n                ($8, $2, $3, $9, $10, $11, $12),\n                ($13, $2, $14, $4, $15, $16, $17)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Varchar",
+        "Text",
+        "Varchar",
+        "Uuid",
+        "Uuid",
+        "Varchar",
+        "Text",
+        "Varchar",
+        "Uuid",
+        "Uuid",
+        "Varchar",
+        "Text",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e08b681c98db6f9c17218f985ec3b72d3e4077ba22e4dd41a2ec3f898bb9e0f3"
+}

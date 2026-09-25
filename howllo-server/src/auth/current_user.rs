@@ -1,3 +1,5 @@
+use crate::auth::identity::{resolve_user, ExternalIdentity};
+use crate::auth::local_user::resolve_account_token;
 use crate::auth::rooiam::resolve_rooiam_access_token;
 use crate::auth::workspace_session::resolve_workspace_session_from_request;
 use crate::config::Settings;
@@ -42,6 +44,10 @@ async fn authenticate_with_request(req: &HttpRequest) -> Result<Option<User>, Ap
         return Ok(Some(session.user));
     }
 
+    if let Some(user) = resolve_account_token(pool.get_ref(), auth_header).await? {
+        return Ok(Some(user));
+    }
+
     if auth_header.starts_with("howllo_") {
         return Ok(None);
     }
@@ -49,32 +55,27 @@ async fn authenticate_with_request(req: &HttpRequest) -> Result<Option<User>, Ap
     let settings = req
         .app_data::<web::Data<Settings>>()
         .ok_or(AppError::InternalServerError)?;
+    if let Some(user) = crate::auth::local_admin::resolve_admin_token(
+        pool.get_ref(),
+        settings.get_ref(),
+        auth_header,
+    )
+    .await?
+    {
+        return Ok(Some(user));
+    }
     let identity = resolve_rooiam_access_token(settings.get_ref(), auth_header).await?;
 
-    let user = sqlx::query_as::<_, User>(
-        r#"
-        INSERT INTO users (rooiam_subject, email, display_name)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (rooiam_subject)
-        DO UPDATE SET
-            email = EXCLUDED.email,
-            updated_at = NOW()
-        RETURNING id, rooiam_subject, email, display_name, avatar_url, created_at, updated_at
-        "#,
+    let user = resolve_user(
+        pool.get_ref(),
+        &ExternalIdentity {
+            provider_id: "rooiam".into(),
+            subject: identity.sub,
+            email: identity.email,
+            name: identity.name,
+        },
     )
-    .bind(identity.sub)
-    .bind(
-        identity
-            .email
-            .unwrap_or_else(|| "no-email@example.com".to_string()),
-    )
-    .bind(identity.name.unwrap_or_else(|| "Unknown User".to_string()))
-    .fetch_one(pool.get_ref())
-    .await
-    .map_err(|e| {
-        tracing::error!(error = %e, "database error resolving authenticated user");
-        AppError::InternalServerError
-    })?;
+    .await?;
 
     Ok(Some(user))
 }

@@ -30,6 +30,58 @@ CREATE TABLE IF NOT EXISTS _sqlx_migrations (
 pub async fn run(settings: &Settings) -> io::Result<DbPool> {
     banner("starting up");
 
+    if !matches!(
+        settings.workspace_auth_provider.as_str(),
+        "local" | "rooiam"
+    ) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "HOWLLO_WORKSPACE_AUTH_PROVIDER must be local or rooiam",
+        ));
+    }
+    if settings.workspace_auth_provider == "rooiam"
+        && (settings.rooiam_widget_base_url.is_none()
+            || settings.rooiam_widget_workspace_id.is_none()
+            || settings.rooiam_widget_client_id.is_none()
+            || settings.rooiam_hosted_userinfo_url.is_none())
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "RooIAM workspace login needs widget URL, workspace ID, client ID and userinfo URL",
+        ));
+    }
+
+    let oidc_providers = crate::auth::providers::configured_oidc().map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid HOWLLO_OIDC_PROVIDERS configuration",
+        )
+    })?;
+    if oidc_providers.iter().any(|provider| provider.enabled) {
+        for key in ["HOWLLO_PUBLIC_API_URL", "HOWLLO_WEB_ORIGIN"] {
+            let value = std::env::var(key).unwrap_or_default();
+            let valid = url::Url::parse(&value)
+                .ok()
+                .map(|url| {
+                    (url.scheme() == "https"
+                        || (url.scheme() == "http"
+                            && matches!(url.host_str(), Some("localhost" | "127.0.0.1"))))
+                        && url.path() == "/"
+                        && url.query().is_none()
+                        && url.fragment().is_none()
+                        && url.username().is_empty()
+                        && url.password().is_none()
+                })
+                .unwrap_or(false);
+            if !valid {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("{key} must be an HTTPS origin or localhost URL when OIDC is enabled"),
+                ));
+            }
+        }
+    }
+
     line(
         Level::Ok,
         "server",
@@ -47,10 +99,7 @@ pub async fn run(settings: &Settings) -> io::Result<DbPool> {
     let bootstrap = match tenancy::ensure_bootstrap_tenant(&pool).await {
         Ok(b) => b,
         Err(error) => {
-            let io_err = io::Error::new(
-                io::ErrorKind::Other,
-                format!("bootstrap tenant init failed: {error}"),
-            );
+            let io_err = io::Error::other(format!("bootstrap tenant init failed: {error}"));
             return Err(fail("tenancy", &io_err));
         }
     };
@@ -126,20 +175,12 @@ async fn check_postgres(settings: &Settings) -> io::Result<DbPool> {
     sqlx::query_scalar::<_, i32>("SELECT 1")
         .fetch_one(&pool)
         .await
-        .map_err(|error| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("postgres health check failed: {error}"),
-            )
-        })?;
+        .map_err(|error| io::Error::other(format!("postgres health check failed: {error}")))?;
 
     line(Level::Ok, "postgres", "query", "health check passed");
 
     pool.execute(MIGRATIONS_TABLE_SQL).await.map_err(|error| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!("postgres migration table init failed: {error}"),
-        )
+        io::Error::other(format!("postgres migration table init failed: {error}"))
     })?;
 
     let applied_versions: Vec<i64> = sqlx::query_scalar(
@@ -147,12 +188,7 @@ async fn check_postgres(settings: &Settings) -> io::Result<DbPool> {
     )
     .fetch_all(&pool)
     .await
-    .map_err(|error| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!("postgres migration state check failed: {error}"),
-        )
-    })?;
+    .map_err(|error| io::Error::other(format!("postgres migration state check failed: {error}")))?;
 
     let applied_set: HashSet<i64> = applied_versions.iter().copied().collect();
     let pending_migrations = MIGRATOR
@@ -192,18 +228,16 @@ async fn check_postgres(settings: &Settings) -> io::Result<DbPool> {
             reconcile_migration_checksum(&pool, version).await?;
             if pending_migrations > 0 {
                 MIGRATOR.run(&pool).await.map_err(|error| {
-                    io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("postgres migration failed after checksum repair: {error}"),
-                    )
+                    io::Error::other(format!(
+                        "postgres migration failed after checksum repair: {error}"
+                    ))
                 })?;
             }
         }
         Err(error) => {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("postgres migration failed: {error}"),
-            ));
+            return Err(io::Error::other(format!(
+                "postgres migration failed: {error}"
+            )));
         }
     }
 
@@ -224,19 +258,15 @@ async fn check_ai(settings: &Settings) -> io::Result<()> {
         &format!("checking {} ({})", settings.ai.base_url, settings.ai.model),
     );
 
-    let response = reqwest::get(&settings.ai.base_url).await.map_err(|error| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!("ai endpoint check failed: {error}"),
-        )
-    })?;
+    let response = reqwest::get(&settings.ai.base_url)
+        .await
+        .map_err(|error| io::Error::other(format!("ai endpoint check failed: {error}")))?;
 
     let response_status = response.status();
     if !response_status.is_success() && response_status != StatusCode::NOT_FOUND {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("ai endpoint returned unexpected status: {response_status}"),
-        ));
+        return Err(io::Error::other(format!(
+            "ai endpoint returned unexpected status: {response_status}"
+        )));
     }
 
     line(
@@ -256,12 +286,9 @@ async fn check_storage(pool: &DbPool) -> io::Result<()> {
         load_platform_storage_config, test_local_storage, test_minio_storage, StorageBackend,
     };
 
-    let cfg = load_platform_storage_config(pool).await.map_err(|error| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!("could not load storage config: {error}"),
-        )
-    })?;
+    let cfg = load_platform_storage_config(pool)
+        .await
+        .map_err(|error| io::Error::other(format!("could not load storage config: {error}")))?;
 
     match cfg.backend {
         StorageBackend::Local => {
@@ -271,8 +298,7 @@ async fn check_storage(pool: &DbPool) -> io::Result<()> {
                 "local",
                 &format!("checking {}", paint("90", &cfg.local_path)),
             );
-            test_local_storage(&cfg.local_path)
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            test_local_storage(&cfg.local_path).map_err(io::Error::other)?;
             line(Level::Ok, "storage", "local", "writable");
         }
         StorageBackend::Minio => {
@@ -298,7 +324,7 @@ async fn check_storage(pool: &DbPool) -> io::Result<()> {
                 cfg.minio_use_ssl,
             )
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            .map_err(io::Error::other)?;
             line(
                 Level::Ok,
                 "storage",
@@ -346,12 +372,9 @@ fn map_database_error(error: sqlx::Error) -> io::Error {
                 ),
                 _ => format!("postgres connection failed: {}", db_error.message()),
             };
-            io::Error::new(io::ErrorKind::Other, message)
+            io::Error::other(message)
         }
-        other => io::Error::new(
-            io::ErrorKind::Other,
-            format!("postgres connection failed: {other}"),
-        ),
+        other => io::Error::other(format!("postgres connection failed: {other}")),
     }
 }
 
@@ -450,10 +473,9 @@ async fn reconcile_migration_checksum(pool: &DbPool, version: i64) -> io::Result
         .iter()
         .find(|migration| migration.version == version)
         .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("migration checksum repair failed: version {version} not found locally"),
-            )
+            io::Error::other(format!(
+                "migration checksum repair failed: version {version} not found locally"
+            ))
         })?;
 
     sqlx::query("UPDATE _sqlx_migrations SET checksum = $1 WHERE version = $2 AND success = TRUE")
@@ -462,10 +484,9 @@ async fn reconcile_migration_checksum(pool: &DbPool, version: i64) -> io::Result
         .execute(pool)
         .await
         .map_err(|error| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("migration checksum repair failed for {version}: {error}"),
-            )
+            io::Error::other(format!(
+                "migration checksum repair failed for {version}: {error}"
+            ))
         })?;
 
     line(

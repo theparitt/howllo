@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO posts (id, tenant_id, board_id, user_id, title, body, status)\n            SELECT $1, t.id, b.id, $2, $3, $4, $5\n            FROM tenants t\n            JOIN boards b ON b.tenant_id = t.id\n            WHERE t.slug = $6 AND b.slug = $7\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Varchar",
+        "Text",
+        "Varchar",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fdd73c410e7b58fabafcae74f0dd5012b3a55f14f5704d5f4577e181c53d80f8"
+}

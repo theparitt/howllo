@@ -52,8 +52,8 @@ Use:
 - PostgreSQL for primary database
 - SQLx for database access
 - Next.js for `howllo-web`
-- reserved board admin / moderator surface on `5111`
-- reserved board realtime websocket endpoint on `5112`
+- board admin / moderator surface on `7701`
+- board realtime websocket endpoint on `7700/ws`
 - Next.js for `howllo-landing`
 - static docs site for `howllo-docs`
 
@@ -68,9 +68,9 @@ This matches the current direction of the codebase:
 
 Local port rule:
 
-- `5110` = API
-- `5111` = board admin / moderator
-- `5112` = board websocket
+- `7700` = API and board websocket at `/ws`
+- `7701` = board admin / moderator
+- `7702` = public feedback boards
 - `5115` = docs / help surface
 
 

@@ -47,14 +47,14 @@ The architecture should avoid:
 
 Howllo sits in the product ecosystem as:
 
-- Rooiam = identity provider
+- local accounts or configured OIDC providers = identity providers; RooIAM is optional
 - Howllo = feedback and roadmap platform
 
 At runtime:
 
 - user visits Howllo UI
 - Howllo UI calls `howllo-server`
-- `howllo-server` validates auth via Rooiam-based session or token flow
+- `howllo-server` validates Howllo sessions or a configured provider flow
 - `howllo-server` executes domain logic
 - PostgreSQL stores tenant-scoped data
 - optional AI services enhance search, duplicate detection, summaries, and moderation assistance later
@@ -151,30 +151,30 @@ Responsibilities:
 
 ## 5. Deployment Topology
 
-Recommended deployment surfaces:
+Current deployment surfaces:
 
-- `howllo.com` -> landing
-- `app.howllo.com` -> web
-- `admin.howllo.com` -> admin
-- `docs.howllo.com` -> docs
-- `api.howllo.com` -> server
+- `howllo.dev` and `www.howllo.dev` -> landing Worker
+- `app.howllo.dev` -> tenant management Worker
+- `feedback.howllo.dev` -> public web Worker
+- `admin.howllo.dev` -> platform admin Worker
+- `api.howllo.dev` -> Cloudflare Tunnel to the Rust server and public MinIO assets
 
 ### Local development port allocation
 
 Canonical map (also in `shared/config/src/ports.ts`):
 
-- `5110` -> `howllo-server` HTTP API
-- `5111` -> `howllo-admin` (Vite + React) admin/moderation surface
-- `5112` -> `howllo-web` (Next.js) public feedback boards
-- `5113` -> board realtime websocket endpoint
+- `7700` -> `howllo-server` HTTP API and `/ws` realtime endpoint
+- `7701` -> `howllo-admin` (Vite + React) platform operations
+- `7702` -> `howllo-app` (Next.js) workspace management
+- `7703` -> `howllo-web` (Next.js) public feedback boards
 - `5114` -> `howllo-landing` marketing site
 - `5115` -> `howllo-widget` (reserved, later)
 - `5116` -> `howllo-docs` help / documentation surface
 
 Important rule:
 
-- `5111` stays reserved for the admin/moderation surface
-- board realtime socket traffic uses `5113` (do not reuse `5112`, which is the web app)
+- `7701` runs the platform operator surface
+- board realtime socket traffic uses `7700/ws`
 - user help and product documentation live on `5116`
 
 Recommended infrastructure:
@@ -462,11 +462,11 @@ users
 Responsibilities:
 
 local user record
-mapping to Rooiam identity
+mapping from provider ID and subject to the Howllo user ID
 user profile basics
 user lifecycle inside Howllo context
 
-Rooiam remains identity provider, but Howllo still needs local application-facing user records.
+RooIAM remains an optional provider. Howllo stores provider-neutral user records.
 
 memberships
 
@@ -644,14 +644,14 @@ Tenant scoping must be enforced in the backend, not trusted from the frontend.
 14. Authentication and Authorization
 Authentication
 
-Rooiam is the identity provider.
+Local accounts and configured OIDC providers authenticate users. RooIAM is optional.
 
 Howllo should accept:
 
-user identity from Rooiam-based session or token flow
-local mapping from external subject to internal user
+user identity from local credentials or an OIDC authorization code flow
+local mapping from `(provider_id, subject)` to an internal user
 
-Howllo should not duplicate full auth logic internally.
+Howllo validates its own sessions and provider responses before granting access.
 
 Authorization
 
@@ -659,7 +659,7 @@ Howllo owns authorization.
 
 Meaning:
 
-Rooiam says who the user is
+The configured provider establishes who the user is
 Howllo says what the user can do in a tenant
 
 Authorization should check:
@@ -1058,7 +1058,7 @@ Consistency, security, tenant safety.
 
 Decision 3
 
-Use Rooiam for auth, Howllo for authorization.
+Use local accounts or configured OIDC providers for authentication, and Howllo for authorization.
 
 Reason:
 Clean separation of identity vs permissions.

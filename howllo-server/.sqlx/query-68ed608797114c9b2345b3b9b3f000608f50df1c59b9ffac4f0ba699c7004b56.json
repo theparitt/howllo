@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO posts (id, tenant_id, board_id, user_id, title, body, status) SELECT $1, $2, b.id, $3, 'B Post', 'body', 'planned' FROM boards b WHERE b.tenant_id = $2 LIMIT 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "68ed608797114c9b2345b3b9b3f000608f50df1c59b9ffac4f0ba699c7004b56"
+}

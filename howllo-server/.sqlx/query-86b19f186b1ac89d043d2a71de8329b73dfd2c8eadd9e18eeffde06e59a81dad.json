@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT p.id, p.title, p.body, p.status, u.display_name as author_display_name,\n               p.vote_count, p.is_locked, p.duplicate_of_post_id, p.created_at, b.slug as board_slug,\n               p.attachments\n        FROM posts p\n        JOIN boards b ON p.board_id = b.id\n        JOIN tenants t ON p.tenant_id = t.id\n        JOIN users u ON p.user_id = u.id\n        WHERE p.id = $1 AND t.slug = $2 AND p.is_hidden = false AND p.deleted_at IS NULL\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "body",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "author_display_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "vote_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "is_locked",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "duplicate_of_post_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "board_slug",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "attachments",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "86b19f186b1ac89d043d2a71de8329b73dfd2c8eadd9e18eeffde06e59a81dad"
+}

@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT h.id, h.old_status, h.new_status, h.reason, h.created_at, u.display_name as actor_display_name\n        FROM post_status_history h\n        JOIN users u ON h.user_id = u.id\n        WHERE h.post_id = $1\n        ORDER BY h.created_at DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "old_status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "new_status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "actor_display_name",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "9f4e98625f3c6fd661e3537c735f642ec1e0ce9628ab4a62c0bbd7b271235ba4"
+}

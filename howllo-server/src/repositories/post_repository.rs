@@ -44,6 +44,7 @@ pub struct PostStatusContextRecord {
 }
 
 pub struct EditablePostRecord {
+    pub tenant_id: Uuid,
     pub user_id: Uuid,
     pub is_hidden: bool,
     pub deleted_at: Option<DateTime<Utc>>,
@@ -597,13 +598,14 @@ pub async fn get_editable_post(
     post_id: Uuid,
 ) -> Result<Option<EditablePostRecord>, sqlx::Error> {
     let row = sqlx::query!(
-        "SELECT user_id, is_hidden, deleted_at FROM posts WHERE id = $1",
+        "SELECT tenant_id, user_id, is_hidden, deleted_at FROM posts WHERE id = $1",
         post_id
     )
     .fetch_optional(pool)
     .await?;
 
     Ok(row.map(|row| EditablePostRecord {
+        tenant_id: row.tenant_id,
         user_id: row.user_id,
         is_hidden: row.is_hidden,
         deleted_at: row.deleted_at,

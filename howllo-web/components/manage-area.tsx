@@ -1,6 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { RooiamInlineLogin } from "@/components/rooiam-inline-login";
+import { ENABLED_AUTH_PROVIDERS } from "@/lib/auth-provider";
 import {
   disableSso,
   getMyWorkspaceRole,
@@ -8,6 +11,7 @@ import {
   regenerateSsoSecret,
   type SsoConfig,
   managerCreateInvitation,
+  managerCreateBoard,
   managerListBoards,
   managerListInvitations,
   managerListMembers,
@@ -42,7 +46,7 @@ function statusTone(status: string): string {
 export function ManageArea() {
   const [tenant, setTenant] = useState<string | null>(null);
   const [role, setRole] = useState<string | null | undefined>(undefined);
-  const [tab, setTab] = useState<"team" | "boards" | "signin">("team");
+  const [tab, setTab] = useState<"team" | "boards" | "signin">("boards");
 
   useEffect(() => {
     const resolve = () => setTenant(getCurrentWorkspaceSlug());
@@ -66,6 +70,13 @@ export function ManageArea() {
 
   const canManage = role === "owner" || role === "admin";
   if (!canManage) {
+    if (tenant && !readStoredBearerToken(tenant).trim() && ENABLED_AUTH_PROVIDERS.length === 1 && ENABLED_AUTH_PROVIDERS[0] === "rooiam") {
+      return <section className="rooiam-inline-login" aria-label="Sign in to manage workspace">
+        <h1 className="rooiam-inline-login__title">Sign in to Howllo App</h1>
+        <p className="section-subtitle">Workspace owners and admins can manage boards here.</p>
+        <RooiamInlineLogin tenantSlug={tenant} />
+      </section>;
+    }
     return (
       <section className="panel empty-state">
         <h1 className="empty-state__title">Manager access only</h1>
@@ -82,7 +93,7 @@ export function ManageArea() {
     <div className="page-stack">
       <section className="page-head">
         <h1 className="page-title">Manage workspace</h1>
-        <p className="page-lead">Invite your team and configure your boards.</p>
+        <p className="page-lead">Create boards, choose who can see them, and share public board links with your users.</p>
       </section>
 
       <div className="feed-filters">
@@ -273,7 +284,17 @@ function MemberRow({
 function BoardsTab({ tenant }: { tenant: string }) {
   const [boards, setBoards] = useState<ManageBoard[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [slugInput, setSlugInput] = useState("");
+  const [description, setDescription] = useState("");
+  const [boardType, setBoardType] = useState(BOARD_TYPES[0]);
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const token = () => readStoredBearerToken(tenant).trim();
+  const generatedSlug = name.trim().toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const slug = slugInput.trim() || generatedSlug;
 
   const reload = useCallback(async () => {
     const t = token();
@@ -282,8 +303,9 @@ function BoardsTab({ tenant }: { tenant: string }) {
       const list = await managerListBoards(tenant, t);
       setBoards(list);
       setSelected((cur) => cur ?? list[0]?.id ?? null);
-    } catch {
-      /* ignore */
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load boards.");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant]);
@@ -292,8 +314,58 @@ function BoardsTab({ tenant }: { tenant: string }) {
 
   const board = boards.find((b) => b.id === selected) ?? null;
 
+  async function createBoard(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!name.trim() || !slug) return;
+    if (boards.some((existing) => existing.slug === slug)) {
+      setError(`A board with the URL slug "${slug}" already exists.`);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const created = await managerCreateBoard({
+        tenant_slug: tenant,
+        slug,
+        name: name.trim(),
+        description: description.trim(),
+        board_type: boardType,
+        is_private: isPrivate,
+      }, token());
+      setSelected(created.id);
+      setCreating(false);
+      setName("");
+      setSlugInput("");
+      setDescription("");
+      await reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not create board.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <section className="dashboard-grid">
+    <div className="page-stack">
+      <section className="panel">
+        <div className="manage-board-heading">
+          <div>
+            <h2 className="section-title">Your boards</h2>
+            <p className="section-subtitle">Public boards appear at <Link className="text-link" href={`/${encodeURIComponent(tenant)}`}>/{tenant}</Link>. Private boards are for workspace members.</p>
+          </div>
+          <button className="button button--cta" type="button" onClick={() => setCreating((value) => !value)}>{creating ? "Cancel" : "Create board"}</button>
+        </div>
+        {creating ? <form className="manage-fields" style={{ marginTop: "1rem" }} onSubmit={(event) => void createBoard(event)}>
+          <label className="manage-label">Board name<input className="manage-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Product ideas" required /></label>
+          <label className="manage-label">URL slug<input className="manage-input" value={slugInput} onChange={(event) => setSlugInput(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} placeholder={generatedSlug || "product-ideas"} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required={!generatedSlug} /></label>
+          <label className="manage-label">Description<textarea className="manage-input" rows={2} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+          <label className="manage-label">Type<select className="manage-input" value={boardType} onChange={(event) => setBoardType(event.target.value)}>{BOARD_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+          <label className="manage-check"><input type="checkbox" checked={isPrivate} onChange={(event) => setIsPrivate(event.target.checked)} /> Private board (members only)</label>
+          <button className="button button--cta" type="submit" disabled={busy || !name.trim() || !slug}>{busy ? "Creating…" : "Create board"}</button>
+        </form> : null}
+        {error ? <p className="error-text" role="alert">{error}</p> : null}
+      </section>
+      <section className="dashboard-grid">
       <section className="panel">
         <h2 className="section-title">Boards</h2>
         <div className="list-stack" style={{ marginTop: "1rem" }}>
@@ -308,7 +380,8 @@ function BoardsTab({ tenant }: { tenant: string }) {
       {board ? <BoardEditor key={board.id} board={board} tenant={tenant} onSaved={reload} /> : (
         <section className="panel"><p className="section-subtitle">Select a board to edit.</p></section>
       )}
-    </section>
+      </section>
+    </div>
   );
 }
 
@@ -350,6 +423,13 @@ function BoardEditor({ board, tenant, onSaved }: { board: ManageBoard; tenant: s
   return (
     <section className="panel">
       <h2 className="section-title">{board.name}</h2>
+      <div className="manage-board-links">
+        <Link className="button" href={`/${encodeURIComponent(tenant)}/boards/${encodeURIComponent(board.slug)}`}>Open board</Link>
+        {!board.is_private ? <button className="button" type="button" onClick={() => {
+          const url = `${window.location.origin}/${encodeURIComponent(tenant)}/boards/${encodeURIComponent(board.slug)}`;
+          void navigator.clipboard.writeText(url).then(() => setNotice("Public board link copied.")).catch(() => setError("Could not copy link. Open the board and copy its URL."));
+        }}>Copy public link</button> : <span className="section-subtitle">Private: workspace members only</span>}
+      </div>
       <div className="manage-fields" style={{ marginTop: "1rem" }}>
         <label className="manage-label">Name<input className="manage-input" value={name} onChange={(e) => setName(e.target.value)} /></label>
         <label className="manage-label">Description<textarea className="manage-input" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} /></label>

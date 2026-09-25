@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO memberships (tenant_id, user_id, role)\n        VALUES ($1, $2, $3)\n        ON CONFLICT (tenant_id, user_id)\n        DO UPDATE SET role = EXCLUDED.role, public_participant = FALSE\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e6a743f13c5a6955ee5875624006ec2110898ae310814f3ecc48723d5a400370"
+}

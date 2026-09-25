@@ -2,7 +2,11 @@ pub mod api_token;
 pub mod context;
 pub mod current_user;
 pub mod hosted_rooiam;
+pub mod identity;
 pub mod local_admin;
+pub mod local_user;
+pub mod oidc;
+pub mod providers;
 pub mod rooiam;
 pub mod workspace_session;
 

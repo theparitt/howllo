@@ -4,9 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 5111",
+    "dev": "vite --port 7701",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --port 5111",
+    "deploy": "npm run build && wrangler deploy",
+    "preview": "vite preview --port 7701",
     "lint": "eslint ."
   },
   "dependencies": {

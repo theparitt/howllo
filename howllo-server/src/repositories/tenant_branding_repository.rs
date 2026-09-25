@@ -44,6 +44,7 @@ pub async fn get_by_tenant_slug(
     Ok(row.map(map_branding_row))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn upsert(
     pool: &DbPool,
     tenant_id: Uuid,

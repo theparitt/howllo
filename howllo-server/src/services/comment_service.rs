@@ -89,9 +89,7 @@ pub async fn list_comments(
             .await?
             .ok_or(AppError::Forbidden)?;
 
-        memberships::check_membership(pool, access.tenant_id, user.id)
-            .await
-            .map_err(|_| AppError::Forbidden)?;
+        memberships::require_private_access(pool, access.tenant_id, user.id).await?;
     }
 
     let (limit, offset) = match (page, per_page) {

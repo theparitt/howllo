@@ -4,6 +4,7 @@ use uuid::Uuid;
 use crate::db::DbPool;
 use crate::dto::PostListItemDto;
 
+#[allow(clippy::too_many_arguments)]
 pub async fn search_posts(
     pool: &DbPool,
     tenant_slug: &str,
@@ -68,7 +69,9 @@ pub async fn search_posts(
         Some(user_id) => {
             builder.push(" AND (b.is_private = false OR EXISTS (SELECT 1 FROM memberships m WHERE m.tenant_id = t.id AND m.user_id = ");
             builder.push_bind(user_id);
-            builder.push(")) ");
+            builder.push(" AND m.public_participant = FALSE) OR EXISTS (SELECT 1 FROM tenants t2 JOIN account_memberships am ON am.account_id = t2.account_id WHERE t2.id = t.id AND am.user_id = ");
+            builder.push_bind(user_id);
+            builder.push(" AND am.role IN ('owner', 'admin'))) ");
         }
         None => {
             builder.push(" AND b.is_private = false ");

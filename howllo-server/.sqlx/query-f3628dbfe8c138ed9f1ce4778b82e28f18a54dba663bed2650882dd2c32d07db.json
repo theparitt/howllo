@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO tenants (id, slug, name) VALUES ($1, 'ai-tenant-b', 'B')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f3628dbfe8c138ed9f1ce4778b82e28f18a54dba663bed2650882dd2c32d07db"
+}

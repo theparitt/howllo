@@ -1,7 +1,6 @@
-import { ManageArea } from "@/components/manage-area";
+import { redirect } from "next/navigation";
 
-// Tenant/board-owner management (boards + team). Tenant + token resolve
-// client-side inside ManageArea, gated to owner/admin.
+// Legacy unscoped management link. Pick a workspace before opening Howllo App.
 export default function ManagePage() {
-  return <ManageArea />;
+  redirect("/");
 }

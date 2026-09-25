@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO boards (id, tenant_id, slug, name, board_type, is_private) VALUES ($1, $2, 'board-b', 'Board B', 'feature-requests', FALSE)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a4736e5cab7d3fa0064200d37ed181843a11c329cd0e879eddc6ba7756cc185a"
+}

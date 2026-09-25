@@ -2,13 +2,15 @@
 // Keep app dev scripts and docker-compose in sync with these values.
 export const PORTS = {
   /** howllo-server — Rust/Actix HTTP API */
-  server: 5110,
+  server: 7700,
   /** howllo-admin — Vite + React admin/moderation console */
-  admin: 5111,
+  admin: 7701,
+  /** howllo-app — Next.js tenant management */
+  app: 7702,
   /** howllo-web — Next.js public feedback boards */
-  web: 5112,
-  /** board realtime websocket endpoint */
-  websocket: 5113,
+  web: 7703,
+  /** board realtime websocket shares the server port at /ws */
+  websocket: 7700,
   /** howllo-landing — marketing site */
   landing: 5114,
   /** reserved: howllo-widget (embeddable feedback widget) — later */

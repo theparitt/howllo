@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT b.id, b.is_private, t.id as tenant_id\n        FROM boards b\n        JOIN tenants t ON b.tenant_id = t.id\n        WHERE t.slug = $1 AND b.slug = $2\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "is_private",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "tenant_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c1af57e54c696b3079f9c770620dd2c012209feaab5afb108d8628e23b9c1b42"
+}

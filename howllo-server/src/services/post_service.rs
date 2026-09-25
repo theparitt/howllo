@@ -48,9 +48,7 @@ pub async fn ensure_board_access(
         let user = maybe_authenticated_user(req)
             .await?
             .ok_or(AppError::Forbidden)?;
-        memberships::check_membership(pool, board.tenant_id, user.id)
-            .await
-            .map_err(|_| AppError::Forbidden)?;
+        memberships::require_private_access(pool, board.tenant_id, user.id).await?;
     }
 
     Ok(board)
@@ -78,9 +76,7 @@ pub async fn ensure_post_read_access(
         let user = maybe_authenticated_user(req)
             .await?
             .ok_or(AppError::Forbidden)?;
-        memberships::check_membership(pool, post.tenant_id, user.id)
-            .await
-            .map_err(|_| AppError::Forbidden)?;
+        memberships::require_private_access(pool, post.tenant_id, user.id).await?;
     }
 
     Ok(post)
@@ -267,7 +263,8 @@ pub async fn create_post(
         })?;
 
     // The author follows their own post so activity on it reaches them.
-    let _ = crate::repositories::subscription_repository::ensure_follow(pool, created.id, user_id).await;
+    let _ = crate::repositories::subscription_repository::ensure_follow(pool, created.id, user_id)
+        .await;
 
     Ok(created)
 }
@@ -293,6 +290,10 @@ pub async fn update_post(
     if post.user_id != user_id {
         return Err(AppError::Forbidden);
     }
+
+    memberships::check_membership(pool, post.tenant_id, user_id)
+        .await
+        .map_err(|_| AppError::Forbidden)?;
 
     post_repository::update_post_content(pool, post_id, body.title.trim(), body.body.trim())
         .await

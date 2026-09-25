@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO ai_suggestions (tenant_id, post_id, suggestion_type, payload, created_by_user_id) VALUES ($1, $2, 'duplicate', '{}'::jsonb, $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f15939ad722991e3f6a2d1befc39ba7ed19f84f0e6ee8ccd3525eb2663195832"
+}

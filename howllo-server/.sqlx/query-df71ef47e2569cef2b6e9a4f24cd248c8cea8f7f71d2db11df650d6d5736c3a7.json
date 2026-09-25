@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO post_follows (post_id, user_id)\n        VALUES ($1, $2)\n        ON CONFLICT (post_id, user_id)\n        DO UPDATE SET\n            notify_on_status_change = TRUE,\n            notify_on_official_response = TRUE\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "df71ef47e2569cef2b6e9a4f24cd248c8cea8f7f71d2db11df650d6d5736c3a7"
+}

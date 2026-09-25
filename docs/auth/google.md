@@ -1,0 +1,3 @@
+# Google
+
+Create an OpenID Connect web client in Google, register `https://YOUR_API/api/auth/callback/google`, then add a provider with ID `google`, display name `Google`, issuer `https://accounts.google.com`, client ID and client secret to `HOWLLO_OIDC_PROVIDERS`. Set `token_endpoint_auth_method` to `client_secret_post` and scopes to `openid profile email`. Google's [OIDC reference](https://developers.google.com/identity/openid-connect/reference) lists the client secret in the token request body. See [OIDC setup](oidc.md) for the JSON format and callback rules. Google uses the generic OIDC adapter.

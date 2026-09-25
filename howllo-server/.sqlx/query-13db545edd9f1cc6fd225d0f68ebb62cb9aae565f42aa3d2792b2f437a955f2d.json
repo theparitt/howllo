@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT p.tenant_id, b.is_private, p.is_hidden, p.deleted_at\n        FROM posts p\n        JOIN boards b ON p.board_id = b.id\n        WHERE p.id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "is_private",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "is_hidden",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "deleted_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "13db545edd9f1cc6fd225d0f68ebb62cb9aae565f42aa3d2792b2f437a955f2d"
+}

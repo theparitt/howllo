@@ -427,6 +427,22 @@ pub async fn update_workspace_auth_config(
     )
     .await?;
 
+    let widget_provider = body
+        .provider
+        .as_deref()
+        .unwrap_or(&settings.workspace_auth_provider)
+        .trim();
+    if !matches!(widget_provider, "local" | "rooiam") {
+        return Err(AppError::Validation(
+            "unsupported workspace widget provider".into(),
+        ));
+    }
+    if widget_provider == "local" && !crate::auth::providers::local_enabled() {
+        return Err(AppError::Validation(
+            "local account login is disabled for this installation".into(),
+        ));
+    }
+
     sqlx::query(
         r#"
         INSERT INTO workspace_auth_configs (
@@ -447,13 +463,7 @@ pub async fn update_workspace_auth_config(
         "#,
     )
     .bind(tenant_id)
-    .bind(
-        body.provider
-            .as_deref()
-            .unwrap_or("rooiam")
-            .trim()
-            .to_string(),
-    )
+    .bind(widget_provider)
     .bind(normalize_optional_text(body.rooiam_workspace_id.as_deref()))
     .bind(normalize_optional_text(body.rooiam_client_id.as_deref()))
     .bind(normalize_optional_text(body.rooiam_widget_base_url.as_deref()))
@@ -515,6 +525,7 @@ pub async fn get_sso_config(
 #[actix_web::post("/api/admin/sso-config/regenerate")]
 pub async fn regenerate_sso_secret(
     pool: web::Data<DbPool>,
+    settings: web::Data<crate::config::Settings>,
     query: web::Query<TenantBrandingQuery>,
     auth: AuthenticatedUser,
 ) -> Result<impl Responder, AppError> {
@@ -522,13 +533,14 @@ pub async fn regenerate_sso_secret(
     let secret = format!("sk_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
     sqlx::query(
         r#"
-        INSERT INTO workspace_auth_configs (tenant_id, sso_secret)
-        VALUES ($1, $2)
+        INSERT INTO workspace_auth_configs (tenant_id, sso_secret, provider)
+        VALUES ($1, $2, $3)
         ON CONFLICT (tenant_id) DO UPDATE SET sso_secret = EXCLUDED.sso_secret, updated_at = NOW()
         "#,
     )
     .bind(tenant_id)
     .bind(&secret)
+    .bind(&settings.workspace_auth_provider)
     .execute(pool.get_ref())
     .await
     .map_err(|error| {
@@ -571,7 +583,7 @@ async fn fetch_tenant_branding(
     Ok(TenantBrandingDto {
         tenant_slug: record.tenant_slug,
         tenant_name: record.tenant_name.clone(),
-        site_name: record.site_name.unwrap_or_else(|| record.tenant_name),
+        site_name: record.site_name.unwrap_or(record.tenant_name),
         logo_url: record.logo_url,
         accent_color: record.accent_color,
         background_color: record.background_color,
@@ -611,7 +623,7 @@ async fn fetch_workspace_auth_config(
         tenant_slug: row.get("tenant_slug"),
         provider: row
             .get::<Option<String>, _>("provider")
-            .unwrap_or_else(|| "rooiam".to_string()),
+            .unwrap_or_else(|| settings.workspace_auth_provider.clone()),
         rooiam_workspace_id: row
             .get::<Option<String>, _>("rooiam_workspace_id")
             .or_else(|| settings.rooiam_widget_workspace_id.clone()),
@@ -686,6 +698,23 @@ mod tests {
     };
     use crate::startup;
 
+    #[actix_web::test]
+    async fn workspace_without_auth_row_uses_configured_rooiam_default() {
+        let _guard = lock_test_db().await;
+        let mut settings = test_settings();
+        settings.workspace_auth_provider = "rooiam".to_string();
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+        let config = super::fetch_workspace_auth_config(&pool, &settings, &seed.tenant_slug)
+            .await
+            .unwrap();
+        assert_eq!(config.provider, "rooiam");
+        assert_eq!(config.rooiam_client_id.as_deref(), Some("client-dev"));
+    }
+
     // Creating workspaces groups them under the creator's account: the first
     // one mints an account, the second reuses it. See docs/TENANCY.md.
     #[actix_web::test]
@@ -707,11 +736,11 @@ mod tests {
         )
         .await;
 
-        // Only the local (system) admin can create workspaces today.
+        // A signed-in user can create multiple workspaces under one account.
         let token = bearer_for(
-            "local-admin",
-            "admin@howllo.local",
-            "Admin",
+            "workspace-founder",
+            "founder@example.com",
+            "Founder",
             &settings.rooiam_jwt_secret,
         );
 
@@ -798,7 +827,10 @@ mod tests {
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        let w2_slug = format!("founder-two-{}", &uuid::Uuid::new_v4().simple().to_string()[..6]);
+        let w2_slug = format!(
+            "founder-two-{}",
+            &uuid::Uuid::new_v4().simple().to_string()[..6]
+        );
         sqlx::query("INSERT INTO tenants (slug, name, account_id) VALUES ($1, 'Founder Two', $2)")
             .bind(&w2_slug)
             .bind(account_id)

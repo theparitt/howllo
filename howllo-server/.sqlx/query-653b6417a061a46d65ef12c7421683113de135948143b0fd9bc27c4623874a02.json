@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO posts (id, tenant_id, board_id, user_id, title, body, status) VALUES ($1, $2, $3, $4, 'Post B', 'body', 'planned')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "653b6417a061a46d65ef12c7421683113de135948143b0fd9bc27c4623874a02"
+}

@@ -1,629 +1,282 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Howllo · Feedback boards & roadmaps your users can see</title>
-    <meta name="description" content="Howllo turns scattered feature requests into a prioritized roadmap your users can watch — collect signal, let people vote, and ship in the open.">
-    <meta property="og:title" content="Howllo · Feedback boards & roadmaps">
-    <meta property="og:description" content="Collect feedback, prioritize with votes, and ship in the open.">
-    <meta name="theme-color" content="#f6e7df">
-    <link rel="icon" href="brand/howllo-logo.svg" type="image/svg+xml">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --coral: #f36949;
-            --coral-600: #e0522f;
-            --coral-700: #c43e1e;
-            --lavender: #7f6dcf;
-            --lavender-soft: #a99cf0;
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fcfaf7">
+  <meta name="description" content="Howllo brings bug reports, feature requests, votes, and progress updates together in one clear place.">
+  <title>Howllo — feedback that moves forward</title>
+  <link rel="icon" href="brand/howllo-logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #302b2a;
+      --muted: #706966;
+      --coral: #f36949;
+      --coral-dark: #dd5437;
+      --paper: #fcfaf7;
+      --peach: #fff0e8;
+      --line: #eadfd8;
+      --white: #fff;
+      --shadow: 0 24px 70px rgba(79, 55, 44, .10);
+      font-family: "DM Sans", system-ui, sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      scroll-behavior: smooth;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; }
+    a { color: inherit; }
+    img { max-width: 100%; }
+    .container { width: min(1160px, calc(100% - 48px)); margin-inline: auto; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+    a:focus-visible { outline: 3px solid var(--coral); outline-offset: 4px; border-radius: 5px; }
 
-            --bg: #f6e7df;
-            --bg-deep: #f1ddd2;
-            --panel: rgba(255, 250, 246, 0.72);
-            --panel-strong: #fffaf6;
+    .site-header { border-bottom: 1px solid rgba(234, 223, 216, .78); background: rgba(252, 250, 247, .95); }
+    .site-nav { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 86px; }
+    .brand { display: inline-flex; align-items: center; gap: 11px; text-decoration: none; flex: none; }
+    .brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: var(--white); border: 1px solid var(--line); }
+    .brand-mark img { width: 28px; height: 28px; }
+    .brand-wordmark { display: block; height: 23px; width: auto; }
+    .nav-actions { display: flex; align-items: center; gap: clamp(18px, 2.5vw, 34px); }
+    .nav-actions a { text-decoration: none; font-size: 14px; font-weight: 600; color: #554d4b; }
+    .nav-actions a:hover { color: var(--coral-dark); }
+    .nav-actions .sign-in { color: var(--coral-dark); }
 
-            --text: #3a2c34;
-            --text-soft: #5d4c56;
-            --muted: #8a7882;
-            --border: rgba(92, 63, 67, 0.1);
-            --border-strong: rgba(92, 63, 67, 0.16);
+    .hero { padding: clamp(64px, 8vw, 112px) 0 88px; overflow: hidden; }
+    .hero-grid { display: grid; grid-template-columns: minmax(0, .79fr) minmax(0, 1.21fr); align-items: center; gap: clamp(28px, 5vw, 76px); }
+    .eyebrow { display: inline-flex; align-items: center; gap: 9px; color: var(--coral-dark); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .15em; }
+    .eyebrow::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--coral); box-shadow: 0 0 0 5px #ffe7dd; }
+    h1, h2, h3 { font-family: Outfit, system-ui, sans-serif; }
+    h1 { margin: 20px 0 22px; font-size: clamp(45px, 5.5vw, 78px); line-height: 1.03; letter-spacing: -.055em; font-weight: 700; }
+    h1 span { color: var(--coral-dark); }
+    .hero-copy p { max-width: 445px; margin: 0; color: var(--muted); font-size: clamp(17px, 1.55vw, 19px); line-height: 1.7; }
+    .primary-link { display: inline-flex; align-items: center; gap: 12px; min-height: 52px; margin-top: 30px; padding: 0 21px; border-radius: 12px; background: var(--coral); color: var(--white); text-decoration: none; font-weight: 700; box-shadow: 0 13px 28px rgba(243, 105, 73, .18); transition: transform .2s ease, background .2s ease; }
+    .primary-link:hover { background: var(--coral-dark); transform: translateY(-2px); }
+    .primary-link svg { width: 18px; height: 18px; }
+    .hero-note { margin-top: 17px !important; font-size: 13px !important; color: #948783 !important; }
 
-            --shadow-sm: 0 1px 3px rgba(102, 71, 83, 0.05);
-            --shadow: 0 8px 24px -16px rgba(102, 71, 83, 0.2);
-            --shadow-lg: 0 18px 40px -24px rgba(102, 71, 83, 0.26);
-            --shadow-xl: 0 40px 80px -40px rgba(102, 71, 83, 0.38);
-            --ring: 0 0 0 3px rgba(243, 105, 73, 0.18);
+    .visual { position: relative; min-width: 0; padding: 10px 0 52px 84px; }
+    .visual::before { content: ""; position: absolute; z-index: 0; inset: 6% -14% 3% 10%; border-radius: 45% 55% 48% 52%; background: #fbe9df; }
+    .product-window { position: relative; z-index: 1; overflow: hidden; border: 1px solid #e5d9d1; border-radius: 18px; background: var(--white); box-shadow: var(--shadow); transform: rotate(1.4deg); }
+    .window-bar { display: flex; align-items: center; gap: 6px; height: 35px; padding: 0 15px; border-bottom: 1px solid #f0e8e3; background: #fffdfa; }
+    .window-bar i { width: 6px; height: 6px; border-radius: 50%; background: #e9b7a8; }
+    .window-bar i:nth-child(2) { background: #efc9a6; }
+    .window-bar i:nth-child(3) { background: #bbd8cb; }
+    .window-bar span { margin-left: auto; color: #afa29c; font-size: 10px; letter-spacing: .02em; }
+    .board-shot { display: block; width: 100%; height: clamp(300px, 36vw, 438px); object-fit: cover; object-position: top center; }
+    .hero-character { position: absolute; z-index: 2; left: -12px; bottom: -22px; width: clamp(160px, 19vw, 242px); height: auto; filter: drop-shadow(0 13px 12px rgba(74, 48, 40, .13)); }
+    .snapshot-label { position: absolute; z-index: 3; right: 5px; bottom: 15px; padding: 9px 13px; background: var(--white); border: 1px solid var(--line); border-radius: 999px; color: #6c615d; font-size: 11px; box-shadow: 0 8px 26px rgba(79, 55, 44, .08); }
+    .snapshot-label strong { color: var(--ink); }
 
-            --radius-xl: 22px;
-            --radius-lg: 18px;
-            --radius-md: 14px;
-            --radius-sm: 10px;
+    .divider { border-top: 1px solid var(--line); }
+    .section { padding: 96px 0; }
+    .section-intro { max-width: 650px; }
+    .section-intro h2 { margin: 14px 0 15px; font-size: clamp(34px, 3.5vw, 50px); line-height: 1.12; letter-spacing: -.045em; font-weight: 650; }
+    .section-intro p { margin: 0; color: var(--muted); font-size: 17px; line-height: 1.75; }
 
-            --font-sans: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
-            --font-display: "Bricolage Grotesque", "Instrument Sans", system-ui, sans-serif;
-            --font-mono: "IBM Plex Mono", "SFMono-Regular", monospace;
-            --ease: cubic-bezier(0.22, 1, 0.36, 1);
-        }
+    .flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 50px; border: 1px solid var(--line); border-radius: 20px; overflow: hidden; background: var(--white); }
+    .flow-item { padding: 34px 31px 36px; min-width: 0; }
+    .flow-item + .flow-item { border-left: 1px solid var(--line); }
+    .flow-number { color: var(--coral-dark); font: 700 13px Outfit, sans-serif; letter-spacing: .1em; }
+    .flow-item h3 { margin: 23px 0 9px; font-size: 22px; letter-spacing: -.025em; }
+    .flow-item p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.65; }
+    .flow-example { display: inline-flex; align-items: center; gap: 7px; min-height: 27px; margin-top: 24px; padding: 0 10px; border: 1px solid #f1e2da; border-radius: 7px; color: #8e6b5d; background: #fff8f3; font-size: 11px; font-weight: 700; }
+    .flow-example .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--coral); }
 
-        *, *::before, *::after { box-sizing: border-box; }
+    .workspace-band { background: #f8f2ed; border-block: 1px solid var(--line); }
+    .workspace-grid { display: grid; grid-template-columns: 1fr .8fr; align-items: center; gap: clamp(40px, 8vw, 120px); }
+    .workspace-copy .section-intro { max-width: 555px; }
+    .board-stack { position: relative; display: grid; gap: 12px; padding: 30px 38px 30px 0; }
+    .board-stack::after { content: ""; position: absolute; z-index: 0; inset: 6px 0 4px 34px; border: 1px solid #efddd3; border-radius: 22px; background: #fff8f4; transform: rotate(4deg); }
+    .board-tile { position: relative; z-index: 1; display: flex; align-items: center; gap: 14px; min-height: 72px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 13px; background: var(--white); box-shadow: 0 8px 26px rgba(79, 55, 44, .045); }
+    .board-tile .tile-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: #fff0e8; color: var(--coral-dark); font: 700 16px Outfit, sans-serif; flex: none; }
+    .board-tile:nth-child(2) .tile-icon { background: #eeeafe; color: #7762b5; }
+    .board-tile:nth-child(3) .tile-icon { background: #eaf5ee; color: #4a8765; }
+    .board-tile strong { display: block; font-size: 14px; }
+    .board-tile small { color: #968a84; font-size: 12px; }
+    .board-stack-caption { position: relative; z-index: 1; margin: 5px 0 0 4px; color: #9c8f89; font-size: 12px; }
 
-        body {
-            margin: 0;
-            font-family: var(--font-sans);
-            color: var(--text);
-            line-height: 1.6;
-            overflow-x: hidden;
-            background:
-                radial-gradient(1100px 600px at 82% -8%, rgba(169, 156, 240, 0.28), transparent 60%),
-                radial-gradient(900px 520px at -6% 8%, rgba(243, 105, 73, 0.16), transparent 55%),
-                var(--bg);
-            -webkit-font-smoothing: antialiased;
-            text-rendering: optimizeLegibility;
-        }
+    .closing { position: relative; display: flex; align-items: center; min-height: 260px; padding: 58px 0; overflow: hidden; }
+    .closing-inner { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 30px; }
+    .closing h2 { margin: 0; max-width: 640px; font-size: clamp(32px, 3.2vw, 46px); line-height: 1.14; letter-spacing: -.04em; }
+    .closing p { max-width: 560px; margin: 13px 0 0; color: var(--muted); line-height: 1.7; }
+    .closing-character { align-self: flex-end; width: 200px; max-height: 214px; object-fit: contain; object-position: bottom; margin-bottom: -58px; filter: drop-shadow(0 7px 10px rgba(79, 55, 44, .10)); }
+    .site-footer { border-top: 1px solid var(--line); padding: 30px 0; }
+    .footer-inner { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+    .footer-inner .brand-mark { width: 30px; height: 30px; border-radius: 9px; }
+    .footer-inner .brand-mark img { width: 22px; height: 22px; }
+    .footer-inner .brand-wordmark { height: 18px; }
+    .footer-inner p { margin: 0; color: #9a8e89; font-size: 12px; }
 
-        a { color: inherit; }
-
-        .container {
-            max-width: 1140px;
-            margin: 0 auto;
-            padding: 0 1.6rem;
-        }
-
-        /* ---------------------------------------------------------------- Nav */
-        nav {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 1rem;
-            flex-wrap: wrap;
-            padding: 1.3rem 0;
-        }
-        .logo {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.7rem;
-            text-decoration: none;
-        }
-        .logo-mark {
-            width: 42px;
-            height: 42px;
-            border-radius: 13px;
-            background: var(--panel-strong);
-            box-shadow: var(--shadow), inset 0 0 0 1px var(--border);
-            display: grid;
-            place-items: center;
-            overflow: hidden;
-        }
-        .logo-mark img { width: 68%; height: 68%; object-fit: contain; }
-        .logo-wordmark img { height: 26px; width: auto; display: block; }
-        .nav-links {
-            display: flex;
-            align-items: center;
-            gap: 1.8rem;
-        }
-        .nav-links a.nav-link {
-            text-decoration: none;
-            color: var(--text-soft);
-            font-weight: 500;
-            font-size: 0.96rem;
-            transition: color 160ms var(--ease);
-        }
-        .nav-links a.nav-link:hover { color: var(--coral-700); }
-
-        /* ------------------------------------------------------------ Buttons */
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.72rem 1.25rem;
-            border-radius: 999px;
-            font-family: var(--font-sans);
-            font-weight: 600;
-            font-size: 0.96rem;
-            text-decoration: none;
-            border: 1px solid transparent;
-            cursor: pointer;
-            transition: transform 180ms var(--ease), box-shadow 180ms var(--ease),
-                background 180ms var(--ease), color 180ms var(--ease);
-        }
-        .btn-primary {
-            background: linear-gradient(135deg, var(--coral), var(--coral-600));
-            color: #fff;
-            box-shadow: 0 14px 28px -14px rgba(196, 62, 30, 0.7);
-        }
-        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 20px 34px -14px rgba(196, 62, 30, 0.75); }
-        .btn-ghost {
-            background: var(--panel-strong);
-            color: var(--text);
-            border-color: var(--border-strong);
-            box-shadow: var(--shadow-sm);
-        }
-        .btn-ghost:hover { transform: translateY(-2px); border-color: rgba(127, 109, 207, 0.4); color: var(--coral-700); }
-        .btn-lg { padding: 0.9rem 1.6rem; font-size: 1.02rem; }
-
-        /* --------------------------------------------------------------- Hero */
-        .hero {
-            display: grid;
-            grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-            gap: 3.4rem;
-            align-items: center;
-            padding: 3.4rem 0 4.6rem;
-        }
-        .eyebrow {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.55rem;
-            font-family: var(--font-mono);
-            font-size: 0.76rem;
-            font-weight: 500;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-            color: var(--lavender);
-            background: rgba(178, 162, 255, 0.2);
-            border: 1px solid rgba(107, 76, 194, 0.16);
-            padding: 0.4rem 0.85rem;
-            border-radius: 999px;
-        }
-        .eyebrow .dot { width: 0.5rem; height: 0.5rem; border-radius: 999px; background: var(--coral); }
-        h1 {
-            font-family: var(--font-display);
-            font-size: clamp(2.15rem, 6.4vw, 4rem);
-            line-height: 1.03;
-            font-weight: 700;
-            letter-spacing: -0.03em;
-            margin: 1.3rem 0 1.1rem;
-            overflow-wrap: break-word;
-        }
-        h1 .grad {
-            background: linear-gradient(115deg, var(--coral), var(--lavender));
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-        }
-        .hero-lead {
-            font-size: 1.16rem;
-            color: var(--text-soft);
-            max-width: 34rem;
-            margin: 0 0 2rem;
-        }
-        .hero-cta { display: flex; gap: 0.85rem; flex-wrap: wrap; }
-        .hero-trust {
-            margin-top: 1.6rem;
-            display: flex;
-            align-items: center;
-            gap: 0.55rem;
-            color: var(--muted);
-            font-size: 0.9rem;
-        }
-        .hero-trust svg { color: var(--coral); flex: none; }
-
-        /* ------------------------------------------------ Product preview mock */
-        .preview {
-            background: var(--panel-strong);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-xl);
-            box-shadow: var(--shadow-xl);
-            padding: 1.15rem;
-            position: relative;
-            min-width: 0;
-            max-width: 100%;
-        }
-        .post > div { min-width: 0; }
-        .post-title { overflow-wrap: break-word; }
-        .preview::before {
-            content: "";
-            position: absolute;
-            inset: -1px -1px auto -1px;
-            height: 64px;
-            border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-            background: linear-gradient(135deg, rgba(243,105,73,0.14), rgba(127,109,207,0.14));
-            pointer-events: none;
-        }
-        .preview-head {
-            position: relative;
-            display: flex;
-            align-items: center;
-            gap: 0.7rem;
-            padding: 0.35rem 0.4rem 0.9rem;
-        }
-        .preview-icon {
-            width: 34px; height: 34px; border-radius: 10px;
-            background: linear-gradient(135deg, var(--coral), var(--coral-600));
-            display: grid; place-items: center; color: #fff; flex: none;
-            font-family: var(--font-display); font-weight: 700;
-        }
-        .preview-title { font-family: var(--font-display); font-weight: 600; font-size: 1.02rem; }
-        .preview-sub { color: var(--muted); font-size: 0.82rem; }
-        .tabs { display: flex; gap: 0.4rem; margin: 0 0 0.9rem; flex-wrap: wrap; }
-        .tab {
-            font-size: 0.82rem; font-weight: 600; color: var(--text-soft);
-            padding: 0.34rem 0.75rem; border-radius: 999px;
-            border: 1px solid var(--border);
-        }
-        .tab.active { background: var(--coral); color: #fff; border-color: transparent; box-shadow: var(--shadow); }
-
-        .post {
-            display: grid;
-            grid-template-columns: auto minmax(0,1fr) auto;
-            align-items: center;
-            gap: 0.85rem;
-            padding: 0.8rem 0.85rem;
-            border: 1px solid var(--border);
-            border-radius: var(--radius-md);
-            background: #fff;
-            margin-bottom: 0.65rem;
-            transition: transform 180ms var(--ease), box-shadow 180ms var(--ease);
-        }
-        .post:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
-        .vote {
-            display: grid; place-items: center; gap: 0.1rem;
-            width: 46px; padding: 0.35rem 0; border-radius: 10px;
-            border: 1px solid var(--border-strong);
-            font-family: var(--font-mono); font-weight: 500; color: var(--coral-700);
-            line-height: 1;
-        }
-        .vote svg { color: var(--coral); }
-        .vote b { font-size: 0.95rem; }
-        .post-title { font-weight: 600; font-size: 0.95rem; }
-        .post-meta { color: var(--muted); font-size: 0.8rem; }
-
-        .chip {
-            display: inline-flex; align-items: center; gap: 0.42rem;
-            font-family: var(--font-mono); font-size: 0.72rem; font-weight: 500;
-            letter-spacing: 0.02em;
-            padding: 0.28rem 0.62rem; border-radius: 999px; white-space: nowrap;
-            border: 1px solid transparent;
-        }
-        .chip::before { content:""; width: 0.42rem; height: 0.42rem; border-radius: 999px; background: currentColor; opacity: 0.65; }
-        .chip.planned { color: #9a5400; background: rgba(255,196,110,0.26); border-color: rgba(154,84,0,0.18); }
-        .chip.progress { color: #0f5b8d; background: rgba(120,200,255,0.24); border-color: rgba(15,91,141,0.18); }
-        .chip.done { color: #0d6a55; background: rgba(120,230,195,0.26); border-color: rgba(13,106,85,0.18); }
-        .chip.review { color: #6b4cc2; background: rgba(178,162,255,0.24); border-color: rgba(107,76,194,0.18); }
-
-        /* ----------------------------------------------------------- Sections */
-        section.band { padding: 4.2rem 0; }
-        .section-head { text-align: center; max-width: 40rem; margin: 0 auto 2.8rem; }
-        .section-kicker {
-            font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.08em;
-            text-transform: uppercase; color: var(--coral-700); font-weight: 500;
-        }
-        h2 {
-            font-family: var(--font-display); font-weight: 700;
-            font-size: clamp(1.9rem, 3.6vw, 2.6rem); letter-spacing: -0.025em;
-            margin: 0.7rem 0 0.6rem; line-height: 1.08;
-        }
-        .section-head p { color: var(--text-soft); font-size: 1.06rem; margin: 0; }
-
-        .feature-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 1.3rem;
-        }
-        .feature-card {
-            background: var(--panel-strong);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-lg);
-            padding: 1.7rem 1.6rem;
-            box-shadow: var(--shadow);
-            transition: transform 200ms var(--ease), box-shadow 200ms var(--ease), border-color 200ms var(--ease);
-        }
-        .feature-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); border-color: rgba(127,109,207,0.32); }
-        .feature-ic {
-            width: 44px; height: 44px; border-radius: 13px;
-            display: grid; place-items: center; margin-bottom: 1.1rem;
-            background: rgba(243,105,73,0.12); color: var(--coral-700);
-        }
-        .feature-card:nth-child(3n+2) .feature-ic { background: rgba(178,162,255,0.2); color: var(--lavender); }
-        .feature-card:nth-child(3n) .feature-ic { background: rgba(120,230,195,0.24); color: #0d6a55; }
-        .feature-card h3 { font-family: var(--font-display); font-weight: 600; font-size: 1.16rem; margin: 0 0 0.5rem; }
-        .feature-card p { color: var(--text-soft); margin: 0; font-size: 0.98rem; }
-
-        /* ------------------------------------------------------- Roadmap band */
-        .roadmap-band {
-            background:
-                radial-gradient(700px 340px at 15% 0%, rgba(243,105,73,0.1), transparent 60%),
-                var(--bg-deep);
-            border-top: 1px solid var(--border);
-            border-bottom: 1px solid var(--border);
-        }
-        .road-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.3rem; }
-        .road-col {
-            background: var(--panel-strong);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-lg);
-            padding: 1.2rem;
-            box-shadow: var(--shadow);
-        }
-        .road-col-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
-        .road-col-head b { font-family: var(--font-mono); color: var(--muted); font-weight: 500; }
-        .road-item {
-            background: #fff; border: 1px solid var(--border);
-            border-radius: var(--radius-md); padding: 0.85rem 0.9rem; margin-bottom: 0.7rem;
-        }
-        .road-item:last-child { margin-bottom: 0; }
-        .road-item strong { font-weight: 600; font-size: 0.94rem; display: block; }
-        .road-item span { color: var(--muted); font-size: 0.8rem; }
-
-        /* ---------------------------------------------------------- Steps band */
-        .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.6rem; counter-reset: step; }
-        .step { position: relative; padding-top: 0.4rem; }
-        .step-num {
-            font-family: var(--font-display); font-weight: 700; font-size: 1rem;
-            width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
-            color: #fff; background: linear-gradient(135deg, var(--coral), var(--lavender));
-            box-shadow: var(--shadow); margin-bottom: 0.9rem;
-        }
-        .step h3 { font-family: var(--font-display); font-weight: 600; font-size: 1.14rem; margin: 0 0 0.4rem; }
-        .step p { color: var(--text-soft); margin: 0; font-size: 0.98rem; }
-
-        /* ------------------------------------------------------------ CTA band */
-        .cta-wrap {
-            position: relative; overflow: hidden;
-            border-radius: var(--radius-xl);
-            background: linear-gradient(135deg, var(--coral), var(--coral-600) 55%, var(--coral-700));
-            color: #fff;
-            padding: 3.4rem 2.4rem;
-            text-align: center;
-            box-shadow: var(--shadow-xl);
-        }
-        .cta-wrap::after {
-            content: ""; position: absolute; inset: 0;
-            background: radial-gradient(500px 240px at 82% -20%, rgba(255,255,255,0.28), transparent 60%);
-            pointer-events: none;
-        }
-        .cta-wrap h2 { color: #fff; position: relative; }
-        .cta-wrap p { position: relative; color: rgba(255,255,255,0.9); font-size: 1.08rem; max-width: 34rem; margin: 0.4rem auto 1.8rem; }
-        .cta-wrap .btn-primary {
-            position: relative; background: #fff; color: var(--coral-700);
-            box-shadow: 0 16px 30px -14px rgba(0,0,0,0.35);
-        }
-        .cta-wrap .btn-primary:hover { transform: translateY(-2px); }
-
-        /* ------------------------------------------------------------- Footer */
-        footer { padding: 3rem 0 3.5rem; border-top: 1px solid var(--border); }
-        .footer-row {
-            display: flex; align-items: center; justify-content: space-between; gap: 1.2rem; flex-wrap: wrap;
-        }
-        .footer-links { display: flex; gap: 1.4rem; flex-wrap: wrap; }
-        .footer-links a { text-decoration: none; color: var(--text-soft); font-size: 0.92rem; font-weight: 500; }
-        .footer-links a:hover { color: var(--coral-700); }
-        .footer-copy { color: var(--muted); font-size: 0.86rem; }
-
-        /* --------------------------------------------------------------- Anim */
-        @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-        .rise { animation: rise 0.7s var(--ease) both; }
-        .rise-2 { animation-delay: 0.08s; }
-        .rise-3 { animation-delay: 0.16s; }
-        @media (prefers-reduced-motion: reduce) { .rise { animation: none; } }
-
-        /* -------------------------------------------------------- Responsive */
-        @media (max-width: 900px) {
-            .hero { grid-template-columns: 1fr; gap: 2.4rem; padding-top: 2.4rem; }
-            .feature-grid, .road-cols, .steps { grid-template-columns: 1fr; }
-            .nav-links .nav-link { display: none; }
-        }
-        @media (max-width: 560px) {
-            .container { padding: 0 1.15rem; }
-            .cta-wrap { padding: 2.4rem 1.4rem; }
-            .nav-links { gap: 0.6rem; }
-            .nav-links .btn-ghost { display: none; }
-            .btn { padding: 0.62rem 1.05rem; font-size: 0.9rem; }
-            .hero-cta .btn { flex: 1 1 auto; justify-content: center; }
-            .preview { padding: 0.9rem; }
-            .post { gap: 0.6rem; padding: 0.7rem; }
-            .chip { font-size: 0.68rem; padding: 0.24rem 0.5rem; }
-        }
-    </style>
+    @media (max-width: 900px) {
+      .hero-grid { grid-template-columns: 1fr; gap: 32px; }
+      .hero-copy { max-width: 650px; }
+      .visual { max-width: 750px; margin-inline: auto; width: 100%; }
+      .board-shot { height: 450px; }
+      .workspace-grid { grid-template-columns: 1fr; gap: 25px; }
+      .board-stack { max-width: 540px; width: 100%; }
+    }
+    @media (max-width: 620px) {
+      .container { width: min(100% - 36px, 1160px); }
+      .site-nav { min-height: 72px; }
+      .brand-mark { width: 33px; height: 33px; }
+      .brand-mark img { width: 24px; height: 24px; }
+      .brand-wordmark { height: 18px; }
+      .nav-actions a:not(.sign-in):not(.github-link) { display: none; }
+      .hero { padding: 60px 0 62px; }
+      h1 { font-size: clamp(43px, 11vw, 60px); }
+      .visual { padding: 8px 0 32px 45px; }
+      .board-shot { height: 295px; }
+      .hero-character { width: 135px; left: -15px; bottom: -10px; }
+      .snapshot-label { right: 0; bottom: -3px; font-size: 10px; }
+      .section { padding: 70px 0; }
+      .flow { grid-template-columns: 1fr; margin-top: 32px; }
+      .flow-item { padding: 25px; }
+      .flow-item + .flow-item { border-left: 0; border-top: 1px solid var(--line); }
+      .flow-item h3 { margin-top: 14px; }
+      .flow-example { margin-top: 14px; }
+      .board-stack { padding-right: 20px; }
+      .closing { min-height: 0; padding: 58px 0 0; }
+      .closing-inner { align-items: flex-end; }
+      .closing-character { width: 110px; max-height: 135px; margin-bottom: 0; margin-right: -10px; }
+      .closing h2 { font-size: 30px; }
+      .closing p { font-size: 14px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      :root { scroll-behavior: auto; }
+      .primary-link { transition: none; }
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <nav>
-            <a class="logo" href="/" aria-label="Howllo home">
-                <span class="logo-mark"><img src="brand/howllo-logo.svg" alt=""></span>
-                <span class="logo-wordmark"><img src="brand/howllo-logo-wordmark-horizontal.svg" alt="Howllo"></span>
-            </a>
-            <div class="nav-links">
-                <a class="nav-link" href="#features">Features</a>
-                <a class="nav-link" href="#roadmap">Roadmap</a>
-                <a class="nav-link" href="#how">How it works</a>
-                <a class="btn btn-ghost" href="http://localhost:5111">Sign in</a>
-                <a class="btn btn-primary" href="http://localhost:5112">Get started</a>
-            </div>
-        </nav>
+  <header class="site-header">
+    <nav class="site-nav container" aria-label="Main navigation">
+      <a class="brand" href="/" aria-label="Howllo home">
+        <span class="brand-mark"><img src="brand/howllo-logo.svg" alt=""></span>
+        <img class="brand-wordmark" src="brand/howllo-logo-wordmark-horizontal.svg?v=hollow-1" alt="Howllo">
+      </a>
+      <div class="nav-actions">
+        <a href="#product">Product</a>
+        <a href="#how-it-works">How it works</a>
+        <a class="github-link" href="https://github.com/theparitt/howllo" target="_blank" rel="noopener noreferrer">Open source <span aria-hidden="true">↗</span></a>
+        <a class="sign-in" href="https://app.howllo.dev/" data-app-path="/">Sign in <span aria-hidden="true">↗</span></a>
+      </div>
+    </nav>
+  </header>
 
-        <section class="hero">
-            <div class="hero-content">
-                <span class="eyebrow rise"><span class="dot"></span> Feedback → Roadmap → Changelog</span>
-                <h1 class="rise rise-2">Capture feedback.<br><span class="grad">Ship in the open.</span></h1>
-                <p class="hero-lead rise rise-2">Howllo turns scattered feature requests into one prioritized board your users can watch — they post, they vote, and they see exactly what you're building next.</p>
-                <div class="hero-cta rise rise-3">
-                    <a class="btn btn-primary btn-lg" href="http://localhost:5112">Start your board</a>
-                    <a class="btn btn-ghost btn-lg" href="#roadmap">See a live roadmap</a>
-                </div>
-                <div class="hero-trust rise rise-3">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-                    Self-hostable · Multi-tenant · Your workspace, your brand
-                </div>
-            </div>
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-grid container">
+        <div class="hero-copy">
+          <span class="eyebrow">Feedback, in the open</span>
+          <h1 id="hero-title">Hear what matters.<br><span>Show what ships.</span></h1>
+          <p>Give ideas and bug reports a home. Your users can post, vote, and see what your team is working on without chasing updates.</p>
+          <a class="primary-link" href="https://feedback.howllo.dev/howllo-6soj/boards/feature-requests" data-web-path="/howllo-6soj/boards/feature-requests">
+            Explore a real board
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+          </a>
+          <p class="hero-note">A live Howllo workspace, open to explore.</p>
+        </div>
+        <div class="visual">
+          <div class="product-window">
+            <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i><span>Feature Requests · Howllo</span></div>
+            <img class="board-shot" src="assets/feature-board-snapshot.png" alt="Snapshot of the live Howllo Feature Requests board with six real posts, votes, and progress statuses" width="1365" height="900" fetchpriority="high">
+          </div>
+          <img class="hero-character" src="assets/why-pointing.png" alt="" width="1024" height="1536">
+          <span class="snapshot-label"><strong>From the real board</strong> · 6 posts</span>
+        </div>
+      </div>
+    </section>
 
-            <div class="preview rise rise-3" aria-hidden="true">
-                <div class="preview-head">
-                    <span class="preview-icon">H</span>
-                    <div>
-                        <div class="preview-title">Feature Requests</div>
-                        <div class="preview-sub">howllo.app · public board</div>
-                    </div>
-                </div>
-                <div class="tabs">
-                    <span class="tab active">Feature Requests</span>
-                    <span class="tab">Bug Reports</span>
-                    <span class="tab">Roadmap</span>
-                </div>
+    <section class="section divider" id="how-it-works" aria-labelledby="loop-title">
+      <div class="container">
+        <div class="section-intro">
+          <span class="eyebrow">A simple loop</span>
+          <h2 id="loop-title">From a small suggestion to a clear answer.</h2>
+          <p>Keep the conversation in one place so your team and your users always know what happened next.</p>
+        </div>
+        <div class="flow">
+          <article class="flow-item">
+            <span class="flow-number">01 / COLLECT</span>
+            <h3>Give feedback a place</h3>
+            <p>People share requests and report bugs on the right board, with context your team can use.</p>
+            <span class="flow-example"><span class="dot"></span> Bug reports &amp; ideas</span>
+          </article>
+          <article class="flow-item">
+            <span class="flow-number">02 / UNDERSTAND</span>
+            <h3>See what resonates</h3>
+            <p>Votes and comments surface the needs people care about, instead of burying them in chat.</p>
+            <span class="flow-example"><span class="dot"></span> Votes &amp; conversation</span>
+          </article>
+          <article class="flow-item">
+            <span class="flow-number">03 / RESPOND</span>
+            <h3>Make progress visible</h3>
+            <p>Move work from review to done. Everyone can follow the status without asking again.</p>
+            <span class="flow-example"><span class="dot"></span> Review → In progress → Done</span>
+          </article>
+        </div>
+      </div>
+    </section>
 
-                <div class="post">
-                    <span class="vote"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg><b>128</b></span>
-                    <div>
-                        <div class="post-title">Native mobile apps (iOS / Android)</div>
-                        <div class="post-meta">42 comments · triaged by product</div>
-                    </div>
-                    <span class="chip review">Under review</span>
-                </div>
-                <div class="post">
-                    <span class="vote"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg><b>96</b></span>
-                    <div>
-                        <div class="post-title">Dark mode across the dashboard</div>
-                        <div class="post-meta">18 comments · on the roadmap</div>
-                    </div>
-                    <span class="chip planned">Planned</span>
-                </div>
-                <div class="post">
-                    <span class="vote"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg><b>73</b></span>
-                    <div>
-                        <div class="post-title">Slack &amp; email notifications</div>
-                        <div class="post-meta">official response · building now</div>
-                    </div>
-                    <span class="chip progress">In progress</span>
-                </div>
-                <div class="post">
-                    <span class="vote"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg><b>51</b></span>
-                    <div>
-                        <div class="post-title">One-click CSV / JSON export</div>
-                        <div class="post-meta">shipped in v1.4</div>
-                    </div>
-                    <span class="chip done">Done</span>
-                </div>
-            </div>
-        </section>
+    <section class="section workspace-band" id="product" aria-labelledby="workspace-title">
+      <div class="workspace-grid container">
+        <div class="workspace-copy">
+          <div class="section-intro">
+            <span class="eyebrow">Made for your space</span>
+            <h2 id="workspace-title">One workspace. Room for every conversation.</h2>
+            <p>Keep different topics organized with separate boards. Each workspace has its own members, settings, and public feedback space.</p>
+          </div>
+        </div>
+        <div class="board-stack" aria-label="Example boards from the Howllo workspace">
+          <div class="board-tile"><span class="tile-icon">✦</span><span><strong>Feature Requests</strong><small>Ideas worth exploring</small></span></div>
+          <div class="board-tile"><span class="tile-icon">!</span><span><strong>Bug Reports</strong><small>Issues people have found</small></span></div>
+          <div class="board-tile"><span class="tile-icon">↗</span><span><strong>Announcements</strong><small>Updates from your team</small></span></div>
+          <p class="board-stack-caption">Boards from the live Howllo workspace</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="closing" aria-labelledby="closing-title">
+      <div class="closing-inner container">
+        <div>
+          <h2 id="closing-title">A better place for the things people tell you.</h2>
+          <p>Hear the signal, keep the context, and make the next step visible.</p>
+        </div>
+        <img class="closing-character" src="assets/why-celebrating.png" alt="" width="1024" height="1536" loading="lazy">
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner container">
+      <a class="brand" href="/" aria-label="Howllo home">
+        <span class="brand-mark"><img src="brand/howllo-logo.svg" alt=""></span>
+        <img class="brand-wordmark" src="brand/howllo-logo-wordmark-horizontal.svg?v=hollow-1" alt="Howllo">
+      </a>
+      <p>© 2026 Howllo · Open source under <a href="https://github.com/theparitt/howllo/blob/main/LICENSE">Apache 2.0</a>.</p>
     </div>
+  </footer>
 
-    <!-- Features -->
-    <section class="band" id="features">
-        <div class="container">
-            <div class="section-head">
-                <span class="section-kicker">Everything the loop needs</span>
-                <h2>One place for signal, priority, and progress</h2>
-                <p>From the first request to the shipped release — no spreadsheets, no lost threads, no guessing what to build next.</p>
-            </div>
-            <div class="feature-grid">
-                <div class="feature-card">
-                    <div class="feature-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
-                    <h3>Signal capture</h3>
-                    <p>Collect feature requests and bug reports across boards, each with its own icon, theme, and audience.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/><path d="M12 3v12"/></svg></div>
-                    <h3>Votes &amp; priority</h3>
-                    <p>Let users vote and comment so the loudest, most-wanted ideas rise to the top — automatically.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></div>
-                    <h3>Transparent roadmap</h3>
-                    <p>Planned, in progress, and done — a public roadmap that updates itself as posts change status.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V5z"/><path d="m9 12 2 2 4-4"/></svg></div>
-                    <h3>Official responses</h3>
-                    <p>Reply on the record. Official updates and status changes land in every follower's timeline.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg></div>
-                    <h3>Changelog ready</h3>
-                    <p>Done items flow straight into a public changelog, so shipping is the same as announcing.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg></div>
-                    <h3>Your workspace</h3>
-                    <p>Multi-tenant and self-hostable, with per-workspace branding, roles, and moderation built in.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Roadmap band -->
-    <section class="band roadmap-band" id="roadmap">
-        <div class="container">
-            <div class="section-head">
-                <span class="section-kicker">Public by default</span>
-                <h2>A roadmap your users actually trust</h2>
-                <p>Because it's built from the same posts they voted on — not a slide deck that's already out of date.</p>
-            </div>
-            <div class="road-cols">
-                <div class="road-col">
-                    <div class="road-col-head"><span class="chip planned">Planned</span><b>2</b></div>
-                    <div class="road-item"><strong>Per-board custom themes</strong><span>124 votes</span></div>
-                    <div class="road-item"><strong>Dark mode across the dashboard</strong><span>96 votes</span></div>
-                </div>
-                <div class="road-col">
-                    <div class="road-col-head"><span class="chip progress">In progress</span><b>2</b></div>
-                    <div class="road-item"><strong>Slack &amp; email notifications</strong><span>73 votes · official update</span></div>
-                    <div class="road-item"><strong>Realtime vote counts</strong><span>40 votes</span></div>
-                </div>
-                <div class="road-col">
-                    <div class="road-col-head"><span class="chip done">Done</span><b>1</b></div>
-                    <div class="road-item"><strong>One-click CSV / JSON export</strong><span>shipped in v1.4</span></div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- How it works -->
-    <section class="band" id="how">
-        <div class="container">
-            <div class="section-head">
-                <span class="section-kicker">How it works</span>
-                <h2>Collect. Prioritize. Ship.</h2>
-                <p>Three steps, one continuous loop your whole team and your users can see.</p>
-            </div>
-            <div class="steps">
-                <div class="step">
-                    <div class="step-num">1</div>
-                    <h3>Collect the signal</h3>
-                    <p>Point users to your boards. They post requests and bugs — no account friction, just a workspace sign-in.</p>
-                </div>
-                <div class="step">
-                    <div class="step-num">2</div>
-                    <h3>Prioritize with votes</h3>
-                    <p>Watch the top requests surface. Tag, dedupe, and set status while followers stay in the loop.</p>
-                </div>
-                <div class="step">
-                    <div class="step-num">3</div>
-                    <h3>Ship in the open</h3>
-                    <p>Move a post to Done and it lands on the public roadmap and changelog — closing the loop automatically.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- CTA -->
-    <section class="band">
-        <div class="container">
-            <div class="cta-wrap">
-                <h2>Start collecting feedback today</h2>
-                <p>Spin up your first board in minutes and give your users a roadmap worth watching.</p>
-                <a class="btn btn-primary btn-lg" href="http://localhost:5112">Get started free</a>
-            </div>
-        </div>
-    </section>
-
-    <footer>
-        <div class="container">
-            <div class="footer-row">
-                <a class="logo" href="/" aria-label="Howllo home">
-                    <span class="logo-mark"><img src="brand/howllo-logo.svg" alt=""></span>
-                    <span class="logo-wordmark"><img src="brand/howllo-logo-wordmark-horizontal.svg" alt="Howllo"></span>
-                </a>
-                <div class="footer-links">
-                    <a href="#features">Features</a>
-                    <a href="#roadmap">Roadmap</a>
-                    <a href="#how">How it works</a>
-                    <a href="http://localhost:5112">Live demo</a>
-                </div>
-            </div>
-            <p class="footer-copy" style="margin-top: 1.4rem;">&copy; 2026 Howllo. Feedback boards &amp; roadmaps for product teams.</p>
-        </div>
-    </footer>
+  <script>
+    const landingHost = window.location.hostname;
+    const localLanding = landingHost === 'localhost'
+      || landingHost === '::1'
+      || /^(?:10\.|127\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(landingHost);
+    const appBase = localLanding
+      ? `${window.location.protocol}//${landingHost === '::1' ? '[::1]' : landingHost}:7702/`
+      : 'https://app.howllo.dev/';
+    const webBase = localLanding
+      ? `${window.location.protocol}//${landingHost === '::1' ? '[::1]' : landingHost}:7703/`
+      : 'https://feedback.howllo.dev/';
+    document.querySelectorAll('[data-app-path]').forEach(link => {
+      link.href = new URL(link.dataset.appPath, appBase).toString();
+    });
+    document.querySelectorAll('[data-web-path]').forEach(link => {
+      link.href = new URL(link.dataset.webPath, webBase).toString();
+    });
+  </script>
 </body>
 </html>

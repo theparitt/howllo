@@ -258,7 +258,7 @@ function StorageTab() {
                 setPublicBaseUrl(e.target.value);
                 reset();
               }}
-              placeholder="http://127.0.0.1:5110/uploads"
+              placeholder="http://127.0.0.1:7700/uploads"
             />
           </label>
         </div>

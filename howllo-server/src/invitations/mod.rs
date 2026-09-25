@@ -159,16 +159,27 @@ mod tests {
             .insert_header(("Authorization", admin.clone()))
             .set_json(json!({ "tenant_slug": seed.tenant_slug, "email": STAFF_EMAIL, "role": "moderator" }))
             .to_request();
-        assert_eq!(test::call_service(&app, create).await.status(), StatusCode::CREATED);
+        assert_eq!(
+            test::call_service(&app, create).await.status(),
+            StatusCode::CREATED
+        );
 
         // Invitee signs into the workspace -> pending invite binds to their account.
-        let staff = bearer_for(STAFF_SUBJECT, STAFF_EMAIL, "New Staff", &settings.rooiam_jwt_secret);
+        let staff = bearer_for(
+            STAFF_SUBJECT,
+            STAFF_EMAIL,
+            "New Staff",
+            &settings.rooiam_jwt_secret,
+        );
         let session = test::TestRequest::post()
             .uri("/api/auth/workspace-session")
             .insert_header(("Authorization", staff.clone()))
             .set_json(json!({ "tenant_slug": seed.tenant_slug }))
             .to_request();
-        assert_eq!(test::call_service(&app, session).await.status(), StatusCode::CREATED);
+        assert_eq!(
+            test::call_service(&app, session).await.status(),
+            StatusCode::CREATED
+        );
 
         // They see the pending invite and accept it.
         let mine = read_json(
@@ -190,17 +201,24 @@ mod tests {
             .uri(&format!("/api/me/invitations/{invite_id}/accept"))
             .insert_header(("Authorization", staff))
             .to_request();
-        assert_eq!(test::call_service(&app, accept).await.status(), StatusCode::OK);
+        assert_eq!(
+            test::call_service(&app, accept).await.status(),
+            StatusCode::OK
+        );
 
         // Membership now exists with the invited role.
-        let role: String = sqlx::query_scalar(
-            "SELECT m.role FROM memberships m JOIN users u ON u.id = m.user_id WHERE u.rooiam_subject = $1",
+        let (role, public_participant): (String, bool) = sqlx::query_as(
+            "SELECT m.role, m.public_participant FROM memberships m JOIN users u ON u.id = m.user_id WHERE u.rooiam_subject = $1",
         )
         .bind(STAFF_SUBJECT)
         .fetch_one(&pool)
         .await
         .unwrap();
         assert_eq!(role, "moderator");
+        assert!(
+            !public_participant,
+            "accepted staff must not remain a public participant"
+        );
 
         // The inviter got an "accepted" notification.
         let notifs = read_json(
@@ -226,7 +244,12 @@ mod tests {
         let _guard = lock_test_db().await;
         let (settings, pool, seed) = setup().await;
         let app = app!(pool, settings);
-        let admin = bearer_for(&seed.admin_subject, "admin@example.com", "Admin", &settings.rooiam_jwt_secret);
+        let admin = bearer_for(
+            &seed.admin_subject,
+            "admin@example.com",
+            "Admin",
+            &settings.rooiam_jwt_secret,
+        );
 
         let created = read_json(
             test::call_service(
@@ -243,17 +266,29 @@ mod tests {
         let id = created.get("id").and_then(|v| v.as_str()).unwrap();
 
         let withdraw = test::TestRequest::post()
-            .uri(&format!("/api/admin/invitations/{id}/withdraw?tenant_slug={}", seed.tenant_slug))
+            .uri(&format!(
+                "/api/admin/invitations/{id}/withdraw?tenant_slug={}",
+                seed.tenant_slug
+            ))
             .insert_header(("Authorization", admin.clone()))
             .to_request();
-        assert_eq!(test::call_service(&app, withdraw).await.status(), StatusCode::NO_CONTENT);
+        assert_eq!(
+            test::call_service(&app, withdraw).await.status(),
+            StatusCode::NO_CONTENT
+        );
 
         // Withdrawing again fails (no longer pending).
         let again = test::TestRequest::post()
-            .uri(&format!("/api/admin/invitations/{id}/withdraw?tenant_slug={}", seed.tenant_slug))
+            .uri(&format!(
+                "/api/admin/invitations/{id}/withdraw?tenant_slug={}",
+                seed.tenant_slug
+            ))
             .insert_header(("Authorization", admin))
             .to_request();
-        assert_eq!(test::call_service(&app, again).await.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            test::call_service(&app, again).await.status(),
+            StatusCode::NOT_FOUND
+        );
     }
 
     #[actix_web::test]
@@ -261,7 +296,12 @@ mod tests {
         let _guard = lock_test_db().await;
         let (settings, pool, seed) = setup().await;
         let app = app!(pool, settings);
-        let admin = bearer_for(&seed.admin_subject, "admin@example.com", "Admin", &settings.rooiam_jwt_secret);
+        let admin = bearer_for(
+            &seed.admin_subject,
+            "admin@example.com",
+            "Admin",
+            &settings.rooiam_jwt_secret,
+        );
 
         let make = |auth: String| {
             test::TestRequest::post()
@@ -271,12 +311,26 @@ mod tests {
                 .to_request()
         };
 
-        assert_eq!(test::call_service(&app, make(admin.clone())).await.status(), StatusCode::CREATED);
+        assert_eq!(
+            test::call_service(&app, make(admin.clone())).await.status(),
+            StatusCode::CREATED
+        );
         // Second pending invite for the same email is rejected.
-        assert_eq!(test::call_service(&app, make(admin)).await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            test::call_service(&app, make(admin)).await.status(),
+            StatusCode::BAD_REQUEST
+        );
 
         // A plain member cannot invite.
-        let member = bearer_for(&seed.member_subject, "member@example.com", "Member", &settings.rooiam_jwt_secret);
-        assert_eq!(test::call_service(&app, make(member)).await.status(), StatusCode::FORBIDDEN);
+        let member = bearer_for(
+            &seed.member_subject,
+            "member@example.com",
+            "Member",
+            &settings.rooiam_jwt_secret,
+        );
+        assert_eq!(
+            test::call_service(&app, make(member)).await.status(),
+            StatusCode::FORBIDDEN
+        );
     }
 }

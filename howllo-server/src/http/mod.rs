@@ -105,16 +105,30 @@ where
             .map(ToString::to_string)
             .unwrap_or_else(|| "unknown".to_string());
 
-        let should_limit =
-            matches!(method.as_str(), "POST" | "PATCH" | "DELETE") && is_public_write_path(&path);
+        let local_auth = path.starts_with("/api/auth/local/");
+        let should_limit = matches!(method.as_str(), "POST" | "PATCH" | "DELETE")
+            && (is_public_write_path(&path) || local_auth);
 
         if should_limit {
             if let Some(settings) = settings.as_ref() {
-                if settings.rate_limit_enabled {
-                    let limit = settings.public_write_rate_limit.max(1) as usize;
+                if settings.rate_limit_enabled || local_auth {
+                    let limit = if local_auth {
+                        10
+                    } else {
+                        settings.public_write_rate_limit.max(1) as usize
+                    };
                     let now = Instant::now();
                     let window = Duration::from_secs(60);
-                    let key = format!("{peer}:{path}:{method}");
+                    // Do not trust a caller-supplied Forwarded/X-Forwarded-For
+                    // header for password attempt limits.
+                    let limiter_peer = if local_auth {
+                        req.peer_addr()
+                            .map(|addr| addr.ip().to_string())
+                            .unwrap_or_else(|| peer.clone())
+                    } else {
+                        peer.clone()
+                    };
+                    let key = format!("{limiter_peer}:{path}:{method}");
                     let mut bucket = self.buckets.entry(key).or_default();
 
                     while let Some(front) = bucket.front() {
@@ -343,6 +357,21 @@ pub mod test_support {
             CREATE UNIQUE INDEX IF NOT EXISTS workspace_invitations_one_pending_idx
                 ON workspace_invitations (tenant_id, lower(email)) WHERE status = 'pending';
 
+            ALTER TABLE memberships
+                ADD COLUMN IF NOT EXISTS public_participant BOOLEAN NOT NULL DEFAULT FALSE;
+
+            CREATE TABLE IF NOT EXISTS workspace_restrictions (
+                tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL,
+                reason TEXT NOT NULL DEFAULT '',
+                expires_at TIMESTAMPTZ,
+                created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (tenant_id, user_id)
+            );
+
             DROP INDEX IF EXISTS boards_one_default_per_tenant_idx;
             "#,
         )
@@ -368,6 +397,7 @@ pub mod test_support {
                 comments,
                 posts,
                 workspace_invitations,
+                workspace_restrictions,
                 boards,
                 memberships,
                 account_memberships,
@@ -516,10 +546,13 @@ pub mod test_support {
             }),
             bind_address: "127.0.0.1:0".to_string(),
             rooiam_jwt_secret: "dev-secret".to_string(),
+            admin_jwt_secret: "dev-secret".to_string(),
+            rooiam_legacy_hs256_enabled: true,
             rooiam_hosted_userinfo_url: None,
             rooiam_widget_base_url: Some("https://api.rooiam.com/login-widget".to_string()),
             rooiam_widget_workspace_id: Some("workspace-dev".to_string()),
             rooiam_widget_client_id: Some("client-dev".to_string()),
+            workspace_auth_provider: "local".to_string(),
             admin_bootstrap_key: Some("test-bootstrap-key".to_string()),
             allowed_origins: vec!["http://localhost:3000".to_string()],
             rate_limit_enabled: false,

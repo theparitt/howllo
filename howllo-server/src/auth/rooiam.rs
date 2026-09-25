@@ -48,9 +48,16 @@ pub async fn resolve_rooiam_access_token(
     settings: &Settings,
     access_token: &str,
 ) -> Result<ResolvedRooiamIdentity, AppError> {
+    if settings.rooiam_hosted_userinfo_url.is_none() && !settings.rooiam_legacy_hs256_enabled {
+        return Err(AppError::Unauthorized);
+    }
     let client = RooiamClient::new(settings.rooiam_jwt_secret.clone());
 
-    match client.validate_token(access_token) {
+    match if settings.rooiam_legacy_hs256_enabled {
+        client.validate_token(access_token)
+    } else {
+        Err(AppError::Unauthorized)
+    } {
         Ok(claims) => Ok(ResolvedRooiamIdentity {
             sub: claims.sub,
             email: claims.email,
@@ -66,5 +73,19 @@ pub async fn resolve_rooiam_access_token(
                 name: userinfo.name,
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[actix_web::test]
+    async fn absent_rooiam_config_rejects_tokens_without_blocking_local_auth() {
+        let mut settings = crate::http::test_support::test_settings();
+        settings.rooiam_legacy_hs256_enabled = false;
+        settings.rooiam_hosted_userinfo_url = None;
+        assert!(super::resolve_rooiam_access_token(&settings, "any-token")
+            .await
+            .is_err());
+        assert!(crate::auth::providers::local_enabled());
     }
 }

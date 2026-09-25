@@ -79,6 +79,13 @@ pub async fn create_member(
         AppError::InternalServerError
     })?;
 
+    sqlx::query("INSERT INTO user_identities (user_id, provider_id, subject, email) VALUES ($1, 'invited', $2, $3) ON CONFLICT (provider_id, subject) DO NOTHING")
+        .bind(user.id).bind(&invited_subject).bind(&email_lower)
+        .execute(&mut *tx).await.map_err(|error| {
+            tracing::error!(error = %error, "error mapping invited member identity");
+            AppError::InternalServerError
+        })?;
+
     let previous = membership_repository::get_membership_role(pool, tenant_id, user.id)
         .await
         .map_err(|error| {

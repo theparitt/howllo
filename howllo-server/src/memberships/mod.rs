@@ -3,6 +3,7 @@ use crate::domain::role::Role;
 use crate::dto::{CreateMemberRequest, MembershipItemDto, UpdateMemberRoleRequest};
 use crate::errors::AppError;
 use crate::services::membership_service;
+pub mod restrictions;
 use actix_web::{delete, get, patch, post, web, HttpResponse, Responder};
 
 use crate::auth::AuthenticatedUser;
@@ -12,20 +13,48 @@ pub async fn check_membership(
     tenant_id: uuid::Uuid,
     user_id: uuid::Uuid,
 ) -> Result<Role, ()> {
-    sqlx::query!(
-        "SELECT role FROM memberships WHERE tenant_id = $1 AND user_id = $2",
-        tenant_id,
-        user_id
+    sqlx::query_scalar::<_, String>(
+        "SELECT role FROM memberships m WHERE tenant_id = $1 AND user_id = $2 AND NOT EXISTS (SELECT 1 FROM workspace_restrictions r WHERE r.tenant_id = m.tenant_id AND r.user_id = m.user_id AND (r.expires_at IS NULL OR r.expires_at > NOW()))"
     )
+    .bind(tenant_id)
+    .bind(user_id)
     .fetch_optional(pool)
     .await
     .map_err(|e| {
         tracing::error!(error = %e, tenant_id = %tenant_id, user_id = %user_id, "error checking membership");
     })
     .and_then(|opt| opt.ok_or(()))
-    .and_then(|row| Role::parse(&row.role).map_err(|error| {
-        tracing::error!(error = %error, role = row.role, tenant_id = %tenant_id, user_id = %user_id, "invalid membership role in database");
+    .and_then(|role| Role::parse(&role).map_err(|error| {
+        tracing::error!(error = %error, role, tenant_id = %tenant_id, user_id = %user_id, "invalid membership role in database");
     }))
+}
+
+/// Public board participation does not grant access to private boards.
+pub async fn require_private_access(
+    pool: &DbPool,
+    tenant_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+) -> Result<(), AppError> {
+    let allowed: bool = sqlx::query_scalar(
+        r#"SELECT
+            EXISTS(SELECT 1 FROM memberships m
+                WHERE m.tenant_id = $1 AND m.user_id = $2 AND m.public_participant = FALSE)
+            OR EXISTS(SELECT 1 FROM tenants t JOIN account_memberships am ON am.account_id = t.account_id
+                WHERE t.id = $1 AND am.user_id = $2 AND am.role IN ('owner', 'admin'))"#,
+    )
+    .bind(tenant_id)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|error| {
+        tracing::error!(error = %error, tenant_id = %tenant_id, user_id = %user_id, "error checking private board access");
+        AppError::InternalServerError
+    })?;
+    if allowed {
+        Ok(())
+    } else {
+        Err(AppError::Forbidden)
+    }
 }
 
 pub async fn is_admin(

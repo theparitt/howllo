@@ -1,5 +1,6 @@
-import ManagePage from "@/app/manage/page";
+import { redirect } from "next/navigation";
 
-export default function TenantManagePage() {
-  return ManagePage();
+export default async function TenantManagePage({ params }: { params: Promise<{ tenantSlug: string }> }) {
+  const { tenantSlug } = await params;
+  redirect(`/app/${encodeURIComponent(tenantSlug)}`);
 }

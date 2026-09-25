@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE memberships SET role = $1, public_participant = FALSE WHERE tenant_id = $2 AND user_id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0af61c5e8f09c2c6e7d830bf11d563d25fd96d7fc2ea7b76afe1e9a331533ecf"
+}

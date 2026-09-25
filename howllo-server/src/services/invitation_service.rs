@@ -15,7 +15,9 @@ use crate::repositories::{
 fn normalize_email(raw: &str) -> Result<String, AppError> {
     let email = raw.trim().to_lowercase();
     if email.is_empty() || !email.contains('@') {
-        return Err(AppError::Validation("a valid email is required".to_string()));
+        return Err(AppError::Validation(
+            "a valid email is required".to_string(),
+        ));
     }
     Ok(email)
 }
@@ -23,9 +25,9 @@ fn normalize_email(raw: &str) -> Result<String, AppError> {
 /// Staff role that can be invited (owner is reserved / not invitable).
 fn parse_invite_role(raw: &str) -> Result<Role, AppError> {
     let role = Role::parse(raw.trim())?;
-    if matches!(role, Role::Owner) {
+    if !matches!(role, Role::Admin | Role::Moderator) {
         return Err(AppError::Validation(
-            "owner cannot be assigned via invitation".to_string(),
+            "staff invitations support admin or moderator roles".to_string(),
         ));
     }
     Ok(role)
@@ -172,6 +174,23 @@ pub async fn list_my_invitations(
     pool: &DbPool,
     user_id: Uuid,
 ) -> Result<Vec<InvitationListItem>, AppError> {
+    // A RooIAM staff member may first visit the App account home without
+    // opening a workspace session. Bind their pending invitations here.
+    let email: Option<String> = sqlx::query_scalar(
+        "SELECT u.email FROM users u JOIN user_identities i ON i.user_id = u.id WHERE u.id = $1 AND i.provider_id = 'rooiam' LIMIT 1",
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|error| { tracing::error!(%error, "error loading invitee identity"); AppError::InternalServerError })?;
+    if let Some(email) = email.filter(|value| !value.trim().is_empty()) {
+        invitation_repository::bind_email_to_user(pool, &email.trim().to_lowercase(), user_id)
+            .await
+            .map_err(|error| {
+                tracing::error!(%error, "error binding staff invitation");
+                AppError::InternalServerError
+            })?;
+    }
     invitation_repository::list_pending_for_user(pool, user_id)
         .await
         .map_err(|error| {
@@ -185,6 +204,16 @@ pub async fn accept_invitation(
     user_id: Uuid,
     invitation_id: Uuid,
 ) -> Result<(), AppError> {
+    let is_staff_identity: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM user_identities WHERE user_id = $1 AND provider_id = 'rooiam')",
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|error| { tracing::error!(%error, "error checking staff identity"); AppError::InternalServerError })?;
+    if !is_staff_identity {
+        return Err(AppError::Forbidden);
+    }
     let invitation = invitation_repository::respond(pool, invitation_id, user_id, "accepted")
         .await
         .map_err(|error| {
@@ -199,7 +228,7 @@ pub async fn accept_invitation(
         INSERT INTO memberships (tenant_id, user_id, role)
         VALUES ($1, $2, $3)
         ON CONFLICT (tenant_id, user_id)
-        DO UPDATE SET role = EXCLUDED.role
+        DO UPDATE SET role = EXCLUDED.role, public_participant = FALSE
         WHERE memberships.role <> 'owner'
         "#,
     )

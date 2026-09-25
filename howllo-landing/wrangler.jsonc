@@ -1,0 +1,10 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "howllo-landing",
+  "routes": [
+    { "pattern": "howllo.dev", "custom_domain": true },
+    { "pattern": "www.howllo.dev", "custom_domain": true }
+  ],
+  "compatibility_date": "2026-09-25",
+  "assets": { "directory": "./dist" }
+}

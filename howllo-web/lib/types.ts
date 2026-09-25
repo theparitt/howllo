@@ -125,7 +125,7 @@ export type ApiTokenListItem = {
 
 export type CurrentUser = {
   id: string;
-  rooiam_subject: string;
+  rooiam_subject: string | null;
   email: string;
   display_name: string;
   avatar_url: string | null;
@@ -189,6 +189,26 @@ export type MyInvitation = {
   tenant_slug: string;
   tenant_name: string;
   invited_by_name: string | null;
+  created_at: string;
+};
+
+export type WorkspaceParticipant = {
+  user_id: string;
+  display_name: string;
+  email: string;
+  joined_at: string;
+  restriction_kind: "suspended" | "banned" | null;
+  restriction_reason: string | null;
+  restriction_expires_at: string | null;
+};
+
+export type ModerationQueueItem = {
+  id: string;
+  title: string;
+  board_slug: string;
+  status: string;
+  is_hidden: boolean;
+  author_display_name: string;
   created_at: string;
 };
 

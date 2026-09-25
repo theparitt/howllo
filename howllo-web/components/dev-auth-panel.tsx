@@ -16,7 +16,8 @@ export function getWorkspaceAuthStorageKey(tenantSlug: string) {
 }
 
 export function getWorkspaceSlugFromPath(pathname: string) {
-  const [first] = pathname.replace(/^\/+/, "").split("/");
+  const [first, second] = pathname.replace(/^\/+/, "").split("/");
+  if (first === "app") return second || null;
   if (!first || ["admin", "auth", "dashboard", "boards", "posts", "roadmap", "my", "feed", "manage"].includes(first)) {
     return null;
   }
@@ -139,10 +140,46 @@ export function readStoredBearerToken(tenantSlug: string) {
   return window.localStorage.getItem(getWorkspaceAuthStorageKey(workspace)) ?? "";
 }
 
-// Any stored workspace-session token — usable as an account-level credential to
-// list/create the user's workspaces (the API scopes by the resolved user).
+// Account-level credential for signing into the tenant dashboard before any
+// workspace exists. Local and OIDC callbacks both set it.
+const ACCOUNT_TOKEN_KEY = "howllo.account";
+
+export function writeAccountToken(value: string) {
+  if (typeof window === "undefined") return;
+  if (value.trim()) {
+    window.localStorage.setItem(ACCOUNT_TOKEN_KEY, value.trim());
+  } else {
+    window.localStorage.removeItem(ACCOUNT_TOKEN_KEY);
+  }
+  notifyAuthChanged();
+}
+
+export function readAccountToken(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(ACCOUNT_TOKEN_KEY) ?? "";
+}
+
+export function clearAllStoredBearerTokens() {
+  if (typeof window === "undefined") return;
+  const workspaces: string[] = [];
+  for (let i = 0; i < window.localStorage.length; i += 1) {
+    const key = window.localStorage.key(i);
+    if (key?.startsWith("howllo.auth.")) {
+      workspaces.push(key.slice("howllo.auth.".length));
+    }
+  }
+  for (const workspace of workspaces) clearStoredBearerToken(workspace);
+  window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+  document.cookie = `${LEGACY_DEV_AUTH_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+  writeAccountToken("");
+}
+
+// The best available account credential: an explicit account token, else any
+// stored workspace-session token (the API scopes by the resolved user either way).
 export function readAnyStoredBearerToken(): string {
   if (typeof window === "undefined") return "";
+  const account = readAccountToken().trim();
+  if (account) return account;
   for (let i = 0; i < window.localStorage.length; i += 1) {
     const key = window.localStorage.key(i);
     if (key && key.startsWith("howllo.auth.")) {

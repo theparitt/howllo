@@ -15,7 +15,6 @@
 //! - Tokens are short-lived (8h) so a leaked token expires on its own.
 //! - This is intended for a single-admin, localhost-bound deployment.
 
-use crate::auth::RooiamClaims;
 use crate::config::Settings;
 use crate::db::DbPool;
 use crate::errors::AppError;
@@ -25,8 +24,15 @@ use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::Argon2;
 use chrono::{Duration, Utc};
-use jsonwebtoken::{encode, EncodingKey, Header};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+struct AdminClaims {
+    sub: String,
+    exp: usize,
+    token_use: String,
+}
 
 /// Stable JWT subject + user identity for the local admin.
 const LOCAL_ADMIN_SUBJECT: &str = "local-admin";
@@ -36,7 +42,30 @@ const TOKEN_TTL_HOURS: i64 = 8;
 const MIN_PASSWORD_LEN: usize = 8;
 
 pub fn is_local_admin_user(user: &User) -> bool {
-    user.rooiam_subject == LOCAL_ADMIN_SUBJECT
+    user.rooiam_subject.as_deref() == Some(LOCAL_ADMIN_SUBJECT)
+}
+
+pub async fn resolve_admin_token(
+    pool: &DbPool,
+    settings: &Settings,
+    token: &str,
+) -> Result<Option<User>, AppError> {
+    let validation = Validation::new(Algorithm::HS256);
+    let Ok(data) = decode::<AdminClaims>(
+        token,
+        &DecodingKey::from_secret(settings.admin_jwt_secret.as_bytes()),
+        &validation,
+    ) else {
+        return Ok(None);
+    };
+    if data.claims.sub != LOCAL_ADMIN_SUBJECT || data.claims.token_use != "howllo-admin" {
+        return Ok(None);
+    }
+    sqlx::query_as::<_, User>("SELECT id, rooiam_subject, email, display_name, avatar_url, created_at, updated_at FROM users WHERE rooiam_subject = $1")
+        .bind(LOCAL_ADMIN_SUBJECT).fetch_optional(pool).await.map_err(|error| {
+            tracing::error!(error = %error, "error resolving local admin token");
+            AppError::InternalServerError
+        })
 }
 
 #[derive(Serialize)]
@@ -109,11 +138,10 @@ fn verify_password(password: &str, stored_hash: &str) -> bool {
 
 fn mint_token(secret: &str) -> Result<(String, i64), AppError> {
     let expires_in = Duration::hours(TOKEN_TTL_HOURS);
-    let claims = RooiamClaims {
+    let claims = AdminClaims {
         sub: LOCAL_ADMIN_SUBJECT.to_string(),
         exp: (Utc::now() + expires_in).timestamp() as usize,
-        email: Some(LOCAL_ADMIN_EMAIL.to_string()),
-        name: Some(LOCAL_ADMIN_NAME.to_string()),
+        token_use: "howllo-admin".to_string(),
     };
     let token = encode(
         &Header::default(),
@@ -150,12 +178,19 @@ async fn ensure_admin_memberships(pool: &DbPool) -> Result<(), AppError> {
         AppError::InternalServerError
     })?;
 
+    sqlx::query("INSERT INTO user_identities (user_id, provider_id, subject, email) VALUES ($1, 'local-admin', $2, $3) ON CONFLICT (provider_id, subject) DO NOTHING")
+        .bind(user.id).bind(LOCAL_ADMIN_SUBJECT).bind(LOCAL_ADMIN_EMAIL)
+        .execute(pool).await.map_err(|error| {
+            tracing::error!(error = %error, "failed to ensure local admin identity");
+            AppError::InternalServerError
+        })?;
+
     sqlx::query!(
         r#"
         INSERT INTO memberships (tenant_id, user_id, role)
         SELECT t.id, $1, 'owner' FROM tenants t
         ON CONFLICT (tenant_id, user_id)
-        DO UPDATE SET role = 'owner'
+        DO UPDATE SET role = 'owner', public_participant = FALSE
         "#,
         user.id,
     )
@@ -224,7 +259,7 @@ pub async fn auth_setup(
 
     ensure_admin_memberships(pool.get_ref()).await?;
 
-    let (token, expires_in) = mint_token(&settings.rooiam_jwt_secret)?;
+    let (token, expires_in) = mint_token(&settings.admin_jwt_secret)?;
     tracing::info!("local admin bootstrapped");
     Ok(HttpResponse::Ok().json(TokenResponse {
         access_token: token,
@@ -265,7 +300,7 @@ pub async fn auth_login(
     // Re-assert memberships in case tenants were created after bootstrap.
     ensure_admin_memberships(pool.get_ref()).await?;
 
-    let (token, expires_in) = mint_token(&settings.rooiam_jwt_secret)?;
+    let (token, expires_in) = mint_token(&settings.admin_jwt_secret)?;
     Ok(HttpResponse::Ok().json(TokenResponse {
         access_token: token,
         token_type: "Bearer",

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO memberships (tenant_id, user_id, role)\n        SELECT t.id, $1, 'owner' FROM tenants t\n        ON CONFLICT (tenant_id, user_id)\n        DO UPDATE SET role = 'owner', public_participant = FALSE\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7c93b0400e32b644824c3e24764b55c933ed8afdbbcffa23e0c844874d6228b1"
+}

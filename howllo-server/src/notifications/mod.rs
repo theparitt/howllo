@@ -203,8 +203,18 @@ mod tests {
         )
         .await;
 
-        let member = bearer_for(&seed.member_subject, "member@example.com", "Member", &settings.rooiam_jwt_secret);
-        let admin = bearer_for(&seed.admin_subject, "admin@example.com", "Admin", &settings.rooiam_jwt_secret);
+        let member = bearer_for(
+            &seed.member_subject,
+            "member@example.com",
+            "Member",
+            &settings.rooiam_jwt_secret,
+        );
+        let admin = bearer_for(
+            &seed.admin_subject,
+            "admin@example.com",
+            "Admin",
+            &settings.rooiam_jwt_secret,
+        );
 
         // The member authors a post (author auto-follows it).
         let created = read_json(

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE webhook_deliveries SET next_retry_at = NULL WHERE webhook_event_id = $1 AND success = false",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0d9bee4c32ac66d72019cbc012c91a63747b046e4badc7e2fb1c172918c64ce5"
+}

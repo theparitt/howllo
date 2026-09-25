@@ -88,7 +88,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
               <span
                 className={`board-hero-icon${board.icon_url ? "" : " board-hero-icon--default"}`}
               >
-                <img src={board.icon_url || "/brand/howllo-logo.svg"} alt="" />
+                {board.icon_url ? <img src={board.icon_url} alt="" /> : <span className="board-hero-icon__letter">{board.name.trim().charAt(0).toUpperCase()}</span>}
               </span>
               <div className="stack stack--tight">
                 <div className="eyebrow-row">

@@ -2,6 +2,8 @@
 
 Howllo Server is a multi-tenant feedback management backend for collecting, moderating, and publishing user feedback.
 
+It supports local board accounts and generic OpenID Connect without RooIAM. RooIAM is an optional integration. See [authentication setup](../docs/auth/README.md).
+
 ## Features
 
 - **Boards** — Public and private feedback boards per tenant
@@ -35,8 +37,8 @@ HTTP Handler → Service → Repository → PostgreSQL
 cp .env.example .env
 # Edit .env with your PostgreSQL connection
 docker compose up --build
-curl http://localhost:5110/api/health
-curl http://localhost:5110/api/ready
+curl http://localhost:7700/api/health
+curl http://localhost:7700/api/ready
 ```
 
 ## Documentation
@@ -53,6 +55,7 @@ curl http://localhost:5110/api/ready
 - [Search](docs/search.md)
 - [AI](docs/ai.md)
 - [Security](docs/security.md)
+- [Authentication providers](../docs/auth/README.md)
 - [Self-hosting](docs/self-hosting.md)
 - [Backup/Restore](docs/backup-restore.md)
 

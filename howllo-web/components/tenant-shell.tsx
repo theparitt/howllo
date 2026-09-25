@@ -6,11 +6,12 @@ import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { AuthControl } from "@/components/auth-control";
 import { NotificationBell } from "@/components/notification-bell";
 import { getMyWorkspaceRole, getTenantBranding } from "@/lib/api";
-import { readStoredBearerToken, subscribeToBearerTokenChange } from "@/components/dev-auth-panel";
+import { readAnyStoredBearerToken, readStoredBearerToken, subscribeToBearerTokenChange } from "@/components/dev-auth-panel";
+import { ENABLED_AUTH_PROVIDERS } from "@/lib/auth-provider";
 import type { TenantBranding } from "@/lib/types";
 import { buildTenantPath } from "@/lib/default-tenant";
 import { subdomainSlug } from "@/lib/subdomain";
-import { hexToRgba } from "@/lib/theme";
+import { contrastInk, hexToRgba } from "@/lib/theme";
 
 const RESERVED_TOP_LEVEL_ROUTES = new Set([
   "",
@@ -22,6 +23,7 @@ const RESERVED_TOP_LEVEL_ROUTES = new Set([
   "my",
   "feed",
   "manage",
+  "app",
 ]);
 
 const DEFAULT_BRANDING: TenantBranding = {
@@ -36,7 +38,8 @@ const DEFAULT_BRANDING: TenantBranding = {
 };
 
 function getTenantSlugFromPath(pathname: string): string | null {
-  const [first] = pathname.replace(/^\/+/, "").split("/");
+  const [first, second] = pathname.replace(/^\/+/, "").split("/");
+  if (first === "app") return second || null;
   if (RESERVED_TOP_LEVEL_ROUTES.has(first ?? "")) {
     return null;
   }
@@ -47,6 +50,13 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [branding, setBranding] = useState<TenantBranding>(DEFAULT_BRANDING);
   const [canManage, setCanManage] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
+
+  useEffect(() => {
+    const sync = () => setHasSession(Boolean(readAnyStoredBearerToken().trim()));
+    sync();
+    return subscribeToBearerTokenChange(sync);
+  }, []);
 
   // Show the Manage link only to workspace owners/admins.
   useEffect(() => {
@@ -108,12 +118,26 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
     };
   }, [pathname]);
 
+  useEffect(() => {
+    if (!branding.logo_url) return;
+    let icon = document.querySelector<HTMLLinkElement>("#tenant-brand-favicon");
+    if (!icon) {
+      icon = document.createElement("link");
+      icon.id = "tenant-brand-favicon";
+      icon.rel = "icon";
+      document.head.appendChild(icon);
+    }
+    icon.href = branding.logo_url;
+    return () => { icon?.remove(); };
+  }, [branding.logo_url]);
+
   const shellStyle = useMemo(() => {
     const style: Record<string, string> = {};
 
     if (branding.accent_color) {
       style["--primary"] = branding.accent_color;
-      style["--primary-dark"] = branding.accent_color;
+      style["--primary-dark"] = `color-mix(in srgb, ${branding.accent_color} 75%, #17252c)`;
+      style["--primary-ink"] = contrastInk(branding.accent_color);
       style["--accent"] = branding.accent_color;
     }
 
@@ -133,7 +157,7 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
   );
   const roadmapHref = buildTenantPath("/roadmap", branding.tenant_slug, branding.tenant_slug);
   const feedHref = buildTenantPath("/feed", branding.tenant_slug, branding.tenant_slug);
-  const manageHref = buildTenantPath("/manage", branding.tenant_slug, branding.tenant_slug);
+  const boardsHref = buildTenantPath("/", branding.tenant_slug, branding.tenant_slug);
   const myHref = buildTenantPath(
     "/my/account",
     branding.tenant_slug,
@@ -142,36 +166,40 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
   const homeHref = branding.tenant_slug
     ? buildTenantPath("/", branding.tenant_slug, branding.tenant_slug)
     : "/";
+  const managerMode = pathname.startsWith("/app/");
+  const appHref = branding.tenant_slug ? `/app/${encodeURIComponent(branding.tenant_slug)}` : "/";
+  const externalAppHref = `${(process.env.NEXT_PUBLIC_HOWLLO_APP_URL || "http://localhost:7702").replace(/\/$/, "")}${appHref}`;
+  const loginHome = pathname === "/" && !hasSession && ENABLED_AUTH_PROVIDERS.length === 1 && ENABLED_AUTH_PROVIDERS[0] === "rooiam";
 
   return (
-    <div className="app-shell app-shell--themed" style={shellStyle}>
-      <header className="site-header">
+    <div className={`app-shell app-shell--themed${loginHome ? " app-shell--login" : ""}${managerMode ? " app-shell--manager" : ""}`} style={shellStyle}>
+      <header className={`site-header${loginHome ? " site-header--login" : ""}`}>
         <div className="site-header__inner">
           <div className="brand">
-            <Link href={homeHref} className="brand__title" aria-label={branding.site_name}>
+            <Link href={managerMode ? appHref : homeHref} className="brand__title" aria-label={managerMode ? "Howllo App" : branding.site_name}>
               {branding.logo_url ? (
                 <img
-                  alt={branding.site_name}
+                  alt=""
                   src={branding.logo_url}
                   className="brand__logo"
-                  style={{ height: "2rem" }}
+                  style={{ height: "2rem", maxWidth: "7rem" }}
                 />
-              ) : (
-                <img
-                  alt="Howllo"
-                  src="/brand/howllo-logo-wordmark-horizontal.svg"
-                  className="brand__logo"
-                  style={{ height: "1.7rem" }}
-                />
-              )}
+              ) : null}
+              <span className="tenant-brand-wordmark">{branding.site_name}</span>
             </Link>
             <div className="brand__meta">
-              {branding.site_name === branding.tenant_name
+              {managerMode ? "Howllo App · Workspace management" : branding.site_name === branding.tenant_name
                 ? "Feedback & feature requests, out in the open."
                 : `${branding.tenant_name} feedback space`}
             </div>
           </div>
-          <nav className="nav">
+          {managerMode ? <nav className="nav" aria-label="Workspace management">
+            <Link href={homeHref} className="nav__link">View public boards ↗</Link>
+            <AuthControl myHref={myHref} />
+          </nav> : !loginHome ? <nav className="nav">
+            <Link href={boardsHref} className="nav__link">
+              Boards
+            </Link>
             <Link href={feedHref} className="nav__link">
               Feed
             </Link>
@@ -183,20 +211,16 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
                 Roadmap
               </Link>
             ) : null}
-            {canManage ? (
-              <Link href={manageHref} className="nav__link">
-                Manage
-              </Link>
-            ) : null}
+            {canManage ? <a href={externalAppHref} className="nav__link">Howllo App ↗</a> : null}
             <NotificationBell />
             <AuthControl myHref={myHref} />
-          </nav>
+          </nav> : null}
         </div>
       </header>
 
       <main className="app-main">{children}</main>
 
-      {branding.show_powered_by ? (
+      {branding.show_powered_by && !loginHome && !managerMode ? (
         <footer className="site-footer">
           <div className="site-footer__inner">
             <span>Powered by Howllo</span>

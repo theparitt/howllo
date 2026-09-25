@@ -504,7 +504,7 @@ mod tests {
         let timestamp = "1234567890";
         let body = serde_json::json!({"event_type": "test", "payload": "data"});
 
-        let signature = super::sign_webhook(secret, event_id, &timestamp, &body);
+        let signature = super::sign_webhook(secret, event_id, timestamp, &body);
         assert!(signature.is_some());
         let sig = signature.unwrap();
         assert!(sig.starts_with("sha256="));
@@ -632,8 +632,6 @@ mod tests {
         )
         .await
         .unwrap();
-
-        assert!(true);
     }
 
     #[actix_web::test]

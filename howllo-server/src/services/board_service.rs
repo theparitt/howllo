@@ -91,9 +91,7 @@ pub async fn get_board_detail(
                 AppError::InternalServerError
             })?;
 
-        memberships::check_membership(pool, tenant_id, user.id)
-            .await
-            .map_err(|_| AppError::Forbidden)?;
+        memberships::require_private_access(pool, tenant_id, user.id).await?;
     }
 
     Ok(board)
@@ -363,9 +361,7 @@ const DASHBOARD_SECTIONS: [&str; 3] = ["progress", "latest", "top"];
 /// Validate and normalize the requested dashboard sections. `None` means "use
 /// all sections" (default). Unknown values are rejected. The result keeps the
 /// canonical order and is deduplicated, so callers/storage stay consistent.
-fn normalize_dashboard_sections(
-    requested: Option<Vec<String>>,
-) -> Result<Vec<String>, AppError> {
+fn normalize_dashboard_sections(requested: Option<Vec<String>>) -> Result<Vec<String>, AppError> {
     let Some(requested) = requested else {
         return Ok(DASHBOARD_SECTIONS.iter().map(|s| s.to_string()).collect());
     };
