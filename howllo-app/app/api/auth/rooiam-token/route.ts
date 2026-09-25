@@ -89,9 +89,12 @@ export async function POST(request: NextRequest) {
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: form,
       cache: "no-store",
-      redirect: "error",
+      redirect: "manual",
       signal: AbortSignal.timeout(10000),
     });
+    if (response.status >= 300 && response.status < 400) {
+      return error("RooIAM token endpoint redirected unexpectedly.", 502);
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || typeof payload.access_token !== "string") {
       return error(
@@ -105,7 +108,8 @@ export async function POST(request: NextRequest) {
       { access_token: payload.access_token },
       { headers: { "cache-control": "no-store" } },
     );
-  } catch {
+  } catch (cause) {
+    console.error("RooIAM token request failed", cause instanceof Error ? `${cause.name}: ${cause.message}` : "Unknown fetch error");
     return error("Could not reach RooIAM token service.", 502);
   }
 }
