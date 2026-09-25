@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5faf8">
+  <meta name="description" content="Howllo tutorials: set up a workspace, manage boards and teammates, and show users where to post, vote, and follow your roadmap.">
+  <title>Howllo Guides — learn your way around</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="https://howllo.dev" aria-label="Howllo home">
+        <img src="/assets/howllo-logo-wordmark-horizontal.svg" alt="Howllo">
+        <span class="brand-tag">Product guides</span>
+      </a>
+      <nav class="top-links" aria-label="Quick links">
+        <a href="https://github.com/theparitt/howllo">GitHub</a>
+        <a class="app-link" href="https://app.howllo.dev/">Open staff app ↗</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" aria-label="Guide contents">
+      <p class="side-kicker">Howllo tutorials</p>
+      <nav class="side-nav">
+        <span class="nav-group">Start here</span>
+        <a class="active" href="#overview">How Howllo fits together</a>
+        <a href="#first-workspace">Create your workspace</a>
+        <a href="#boards">Create and share boards</a>
+        <span class="nav-group">Workspace app</span>
+        <a href="#branding">Customize your public site</a>
+        <a href="#staff">Invite your team</a>
+        <a href="#moderation">Review posts</a>
+        <a href="#users">Manage public users</a>
+        <a href="#sso">Connect existing user login</a>
+        <span class="nav-group">For end users</span>
+        <a href="#public-site">Post, vote, and follow updates</a>
+        <a href="#account">Create an account</a>
+        <span class="nav-group">Platform operators</span>
+        <a href="#platform-admin">Use Howllo Admin</a>
+      </nav>
+      <div class="sidebar-note"><strong>Two kinds of people, two apps</strong>Staff manage a workspace in Howllo App. Customers visit the public Howllo Web for that workspace.</div>
+    </aside>
+
+    <main class="content">
+      <section class="hero" id="overview">
+        <span class="eyebrow">The Howllo field guide</span>
+        <h1>Know where to click.<br>Know what happens next.</h1>
+        <p>Follow practical, click-by-click guides for workspace owners and staff. Learn how to create boards, invite your team, moderate feedback, and show customers where to take part.</p>
+        <div class="hero-links">
+          <a class="pill" href="#first-workspace"><strong>01</strong> Set up your workspace ↓</a>
+          <a class="pill" href="#public-site"><strong>02</strong> See the customer view ↓</a>
+        </div>
+        <span class="hero-stamp" aria-hidden="true">howllo</span>
+      </section>
+
+      <div class="intro-strip" aria-label="Howllo apps">
+        <article class="surface-card app"><span class="surface-label">For tenant staff · 7702</span><strong>Howllo App</strong><p>Create boards, invite teammates, choose your public look, and moderate your workspace.</p></article>
+        <article class="surface-card web"><span class="surface-label">For customers · 7703</span><strong>Howllo Web</strong><p>Customers browse boards, submit ideas or bugs, vote, comment, and follow progress.</p></article>
+        <article class="surface-card admin"><span class="surface-label">For platform operators · 7701</span><strong>Howllo Admin</strong><p>Operate the Howllo service itself: manage tenants, platform settings, and audit activity.</p></article>
+      </div>
+
+      <section class="doc-section" id="first-workspace">
+        <div class="section-head"><span class="section-number">01</span><div><h2>Create your workspace</h2><p>Your workspace represents one product or project. Its boards, staff, theme, and customer community belong together.</p></div></div>
+        <div class="steps">
+          <div class="step"><span class="step-n">1</span><div><strong>Open Howllo App and sign in as staff</strong><p>Go to <a href="https://app.howllo.dev/">app.howllo.dev</a>. Staff sign in with the workspace’s configured provider (RooIAM on the current hosted setup).</p></div></div>
+          <div class="step"><span class="step-n">2</span><div><strong>Create the workspace</strong><p>On <span class="click">Your workspaces</span>, enter your product or project name under <span class="click">Create a workspace</span>, then click <span class="click">Create workspace</span>. Howllo creates a workspace slug and starter boards; you become its owner.</p></div></div>
+          <div class="step"><span class="step-n">3</span><div><strong>Open the workspace card</strong><p>The card shows its URL slug, board count, and member count. Click the card to open <span class="click">Manage workspace</span>.</p></div></div>
+        </div>
+        <div class="mock" aria-label="Illustration of the workspace list"><div class="mock-bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="mock-title">Howllo App · Your workspaces</span></div><div class="mock-body"><div class="mock-nav"><span class="selected">Your workspaces</span><span>Staff invitations</span></div><div class="mock-panel"><h4>Your workspaces</h4><p>Open a workspace to manage its boards, or create a new one.</p><div class="mock-row"><span><strong>Northstar Product</strong><br><small>/northstar · 3 boards · 1 member</small></span><span class="mock-button">Open workspace</span></div></div></div></div>
+        <div class="note"><strong>Workspace ≠ one board.</strong> A workspace is the shared home for a project. Create separate boards inside it for feature requests, bug reports, discussions, or announcements.</div>
+      </section>
+
+      <section class="doc-section" id="boards">
+        <div class="section-head"><span class="section-number">02</span><div><h2>Create and share boards</h2><p>Use the Boards tab in Howllo App to shape the public feedback spaces inside this workspace.</p></div></div>
+        <div class="steps">
+          <div class="step"><span class="step-n">1</span><div><strong>Open the Boards tab</strong><p>In <span class="click">Manage workspace</span>, choose <span class="click">Boards</span>. The left list shows boards already in the workspace.</p></div></div>
+          <div class="step"><span class="step-n">2</span><div><strong>Click Create board</strong><p>Enter a board name, URL slug, description, and type. Choose whether it is private. Click <span class="click">Create board</span>.</p></div></div>
+          <div class="step"><span class="step-n">3</span><div><strong>Select the board and adjust its display</strong><p>Choose a board from the list. Set its name, description, type, background color, icon, public/private access, and which dashboard sections to show. Click <span class="click">Save changes</span>.</p></div></div>
+          <div class="step"><span class="step-n">4</span><div><strong>Preview and share</strong><p>Click <span class="click">Open board</span> to preview it, or <span class="click">Copy public link</span> to share it. Private boards are available only to workspace members.</p></div></div>
+        </div>
+        <div class="mock" aria-label="Illustration of the workspace board manager"><div class="mock-bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="mock-title">Manage workspace · Boards</span></div><div class="mock-body"><div class="mock-nav"><span>Staff</span><span class="selected">Boards</span><span>Public branding</span><span>Users</span><span>Moderation</span></div><div class="mock-panel"><h4>Your boards <span class="mock-button">Create board</span></h4><p>Public boards appear on your workspace site.</p><div class="mock-row"><span><strong>Feature requests</strong><br><small>feature-requests · feature-requests</small></span><span class="mock-button">Open board ↗</span></div><div class="mock-row"><span><strong>Bug reports</strong><br><small>bugs · bug-reports</small></span><small>Public</small></div></div></div></div>
+        <div class="note warning"><strong>Slug becomes part of the public URL.</strong> Keep it short and readable, such as <code>bugs</code> or <code>feature-requests</code>.</div>
+      </section>
+
+      <section class="doc-section" id="branding">
+        <div class="section-head"><span class="section-number">03</span><div><h2>Customize your public site</h2><p>Public branding changes Howllo Web for this workspace. The staff app keeps its separate Howllo identity and blue-green theme.</p></div></div>
+        <div class="steps">
+          <div class="step"><span class="step-n">1</span><div><strong>Choose Public branding</strong><p>Open <span class="click">Manage workspace</span> → <span class="click">Public branding</span>.</p></div></div>
+          <div class="step"><span class="step-n">2</span><div><strong>Set the name, logo, and colors</strong><p>Upload your public logo, pick an accent and page background, then review the live preview. PNG, JPG, and WebP are supported; uploads up to 5 MB and 4096 × 4096 pixels are accepted and resized to fit.</p></div></div>
+          <div class="step"><span class="step-n">3</span><div><strong>Choose what appears and save</strong><p>Use the checkboxes to show or hide the roadmap and “Powered by Howllo”. Click <span class="click">Save public branding</span>, then use <span class="click">Open public Web</span> to see your changes.</p></div></div>
+        </div>
+      </section>
+
+      <section class="doc-section" id="staff">
+        <div class="section-head"><span class="section-number">04</span><div><h2>Invite your team</h2><p>Staff members help run this workspace. Their roles apply to the whole workspace rather than to only one board.</p></div></div>
+        <div class="steps">
+          <div class="step"><span class="step-n">1</span><div><strong>Open Staff</strong><p>In <span class="click">Manage workspace</span>, select <span class="click">Staff</span>. Under <span class="click">Invite a teammate</span>, enter their email and choose <span class="click">admin</span> or <span class="click">moderator</span>.</p></div></div>
+          <div class="step"><span class="step-n">2</span><div><strong>Click Send invite</strong><p>The invitation appears in the invitations list. Email delivery is not configured on the current hosted setup, so send the invitee the app link yourself.</p></div></div>
+          <div class="step"><span class="step-n">3</span><div><strong>Ask them to sign in and accept</strong><p>The invitee opens <a href="https://app.howllo.dev/">Howllo App</a>, signs in with RooIAM, and accepts or declines the invitation shown there.</p></div></div>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Role</th><th>Typical use</th><th>Workspace access</th></tr></thead><tbody><tr><td>Owner</td><td>Person responsible for the workspace</td><td>Manage boards, staff, branding, sign-in, users, and moderation</td></tr><tr><td>Admin</td><td>Trusted teammate managing the product board</td><td>Manage workspace settings and boards</td></tr><tr><td>Moderator</td><td>Teammate reviewing incoming posts</td><td>Moderation queue</td></tr></tbody></table></div>
+      </section>
+
+      <section class="doc-section" id="moderation">
+        <div class="section-head"><span class="section-number">05</span><div><h2>Review posts</h2><p>Keep incoming ideas useful and the public boards readable.</p></div></div>
+        <div class="steps">
+          <div class="step"><span class="step-n">1</span><div><strong>Open Moderation</strong><p>In the workspace manager, select <span class="click">Moderation</span>. The queue shows posts under review or hidden across the workspace.</p></div></div>
+          <div class="step"><span class="step-n">2</span><div><strong>Choose an action on a post</strong><p>For a post under review, click <span class="click">Plan</span> or <span class="click">Decline</span>. Click <span class="click">Hide</span> to remove a post from public view; click <span class="click">Show</span> to restore a hidden post.</p></div></div>
+        </div>
+      </section>
+
+      <section class="doc-section" id="users">
+        <div class="section-head"><span class="section-number">06</span><div><h2>Manage public users</h2><p>Workspace staff can restrict a customer from participating across every board in this workspace.</p></div></div>
+        <div class="steps">
+          <div class="step"><span class="step-n">1</span><div><strong>Open Users</strong><p>Choose <span class="click">Users</span> in <span class="click">Manage workspace</span> to see customers who have joined this workspace through its public boards.</p></div></div>
+          <div class="step"><span class="step-n">2</span><div><strong>Select the restriction and explain why</strong><p>On the person’s row, choose <span class="click">Temporary suspension</span> and a duration (1, 7, 30, or 90 days), or <span class="click">Ban until lifted</span>. Enter a reason.</p></div></div>
+          <div class="step"><span class="step-n">3</span><div><strong>Click Apply</strong><p>The restriction takes effect across this workspace’s boards. To restore access, click <span class="click">Lift restriction</span>.</p></div></div>
+        </div>
+        <div class="note"><strong>Workspace-wide action.</strong> A suspension or ban applies to all boards in the workspace, not just the board where the person first posted.</div>
+      </section>
+
+      <section class="doc-section" id="sso">
+        <div class="section-head"><span class="section-number">07</span><div><h2>Connect an existing customer login (optional)</h2><p>Customers can use Howllo accounts. If your product already has accounts, you can connect your own sign-in flow instead.</p></div></div>
+        <div class="steps">
+          <div class="step"><span class="step-n">1</span><div><strong>Open Sign-in (SSO)</strong><p>Select <span class="click">Sign-in (SSO)</span> in the workspace manager and click <span class="click">Enable SSO</span>.</p></div></div>
+          <div class="step"><span class="step-n">2</span><div><strong>Use the workspace secret only on your server</strong><p>Your backend signs a short-lived user token and exchanges it with Howllo to start a board session. Follow the code example in the SSO tab and <a href="https://github.com/theparitt/howllo/blob/main/docs/auth/README.md">the authentication docs</a>.</p></div></div>
+        </div>
+        <div class="note warning"><strong>Never put the workspace secret in browser code.</strong> Treat it like a password. Rotate it if it is exposed.</div>
+      </section>
+
+      <section class="doc-section" id="public-site">
+        <div class="section-head"><span class="section-number">08</span><div><h2>What customers see</h2><p>Give customers the workspace link or a direct link to a board. The public site uses your workspace branding.</p></div></div>
+        <div class="mock" aria-label="Illustration of a customer-facing feedback workspace"><div class="mock-bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="mock-title">Howllo Web · your-product</span></div><div class="mock-body"><div class="mock-nav"><span class="selected">Dashboard</span><span>Roadmap</span><span>Sign in</span></div><div class="mock-panel"><h4>Your product boards</h4><p>Pick a board to browse and share feedback.</p><div class="mock-row"><span><strong>Feature requests</strong><br><small>Suggest an idea or vote on a request</small></span><small>Open board →</small></div><div class="mock-row"><span><strong>Bug reports</strong><br><small>Report an issue for the team</small></span><small>Open board →</small></div></div></div></div>
+        <div class="task-grid">
+          <article class="task-card"><h3>Dashboard</h3><p>Browse this workspace’s boards and featured activity. Click a board to see its posts.</p></article>
+          <article class="task-card"><h3>Board feed</h3><p>Read reports and ideas, search or filter posts, open a post for details, and add your own post with the board’s <span class="click">Share feedback</span> action.</p></article>
+          <article class="task-card"><h3>Roadmap</h3><p>See posts the team has planned, started, or completed. The workspace owner can hide the roadmap from Public branding.</p></article>
+          <article class="task-card"><h3>Account and activity</h3><p>Sign in to vote, comment, and follow updates. Use your account menu to edit your public profile or see your activity.</p></article>
+        </div>
+        <h3>Typical customer journey</h3>
+        <div class="steps"><div class="step"><span class="step-n">1</span><div><strong>Open the workspace or board link</strong><p>The workspace link opens the board directory; a direct board link opens that board.</p></div></div><div class="step"><span class="step-n">2</span><div><strong>Browse before signing in</strong><p>Customers can read public feedback and the roadmap. Private boards require workspace membership.</p></div></div><div class="step"><span class="step-n">3</span><div><strong>Sign in to participate</strong><p>Choose <span class="click">Sign in</span> to create or access a Howllo customer account. RooIAM is for tenant staff; it is not the customer login.</p></div></div><div class="step"><span class="step-n">4</span><div><strong>Post, vote, and follow up</strong><p>Open a board to submit a bug or idea, vote on existing requests, and check status changes later.</p></div></div></div>
+      </section>
+
+      <section class="doc-section" id="account">
+        <div class="section-head"><span class="section-number">09</span><div><h2>Create a customer account</h2><p>Howllo Web accounts are for people using the public boards. They are separate from RooIAM staff accounts.</p></div></div>
+        <div class="steps"><div class="step"><span class="step-n">1</span><div><strong>Click Sign in on the public site</strong><p>Enter your email and create a password in the Howllo sign-in panel.</p></div></div><div class="step"><span class="step-n">2</span><div><strong>Save the recovery code shown after registration</strong><p>The recovery code is shown once. Store it somewhere safe; it is required to recover the account if you forget the password.</p></div></div><div class="step"><span class="step-n">3</span><div><strong>Return to the board</strong><p>After signing in, you can post, vote, comment, and manage your profile from the customer account menu.</p></div></div></div>
+      </section>
+
+      <section class="doc-section" id="platform-admin">
+        <div class="section-head"><span class="section-number">10</span><div><h2>Use Howllo Admin (platform operators)</h2><p>This surface is for the operator of the Howllo service. Tenant staff should use Howllo App instead.</p></div></div>
+        <div class="note warning"><strong>Howllo Admin can affect the whole installation.</strong> Give access only to trusted platform operators. It is separate from tenant owner and staff accounts.</div>
+        <div class="table-wrap" style="margin-top:18px"><table><thead><tr><th>Menu</th><th>What it does</th><th>When to open it</th></tr></thead><tbody><tr><td>Dashboard</td><td>Summary of platform activity</td><td>Check overall service status and activity</td></tr><tr><td>Workspaces</td><td>List and inspect tenant workspaces</td><td>Support an organization or investigate a workspace</td></tr><tr><td>Platform</td><td>Global platform configuration</td><td>Change installation-wide settings</td></tr><tr><td>Boards</td><td>Inspect boards across the platform</td><td>Operator support and troubleshooting</td></tr><tr><td>Roadmap / Content</td><td>Review roadmap items and content</td><td>Platform-level support or moderation</td></tr><tr><td>Tags / Members</td><td>Manage platform taxonomies and member records</td><td>Maintain shared platform data</td></tr><tr><td>Integrations</td><td>Inspect connected integrations</td><td>Diagnose provider or webhook setup</td></tr><tr><td>Audit</td><td>Review recorded administrative events</td><td>Trace who changed platform data</td></tr><tr><td>Settings</td><td>Installation settings</td><td>Configure the running Howllo instance</td></tr></tbody></table></div>
+        <h3>First-time platform sign-in</h3><p>Open <a href="https://admin.howllo.dev/">admin.howllo.dev</a>. On a fresh installation, enter the server’s bootstrap key and set the admin password. After setup, sign in with that password. The bootstrap key belongs in the server environment; it is not a workspace invitation code.</p>
+      </section>
+
+      <section class="doc-section" id="next-steps">
+        <div class="section-head"><span class="section-number">↗</span><div><h2>Keep learning</h2><p>Use these links when you need more detail than the UI walkthroughs.</p></div></div>
+        <div class="task-grid"><article class="task-card"><h3>Self-host Howllo</h3><p>Install the server and connect your database and object storage.</p><a href="https://github.com/theparitt/howllo#local-development">Installation notes on GitHub ↗</a></article><article class="task-card"><h3>Authentication setup</h3><p>Configure local accounts, RooIAM staff sign-in, or another OIDC provider.</p><a href="https://github.com/theparitt/howllo/tree/main/docs/auth">Authentication docs ↗</a></article></div>
+      </section>
+
+      <footer class="footer"><span>Howllo Guides · Open source under Apache 2.0</span><a href="https://github.com/theparitt/howllo/blob/main/LICENSE">View license ↗</a></footer>
+    </main>
+  </div>
+  <script>
+    const guideLinks = [...document.querySelectorAll('.side-nav a')];
+    const guideSections = guideLinks.map(link => document.querySelector(link.hash)).filter(Boolean);
+    const guideObserver = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        guideLinks.forEach(link => link.classList.toggle('active', link.hash === `#${entry.target.id}`));
+      }
+    }, { rootMargin: '-18% 0px -70% 0px' });
+    guideSections.forEach(section => guideObserver.observe(section));
+  </script>
+</body>
+</html>

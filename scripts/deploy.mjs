@@ -30,7 +30,7 @@ const env = {
   ...process.env,
   VITE_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL,
 };
-const targets = ["howllo-app", "howllo-web", "howllo-admin", "howllo-landing"];
+const targets = ["howllo-app", "howllo-web", "howllo-admin", "howllo-landing", "howllo-docs"];
 for (const target of targets) {
   const targetEnv = {
     ...env,

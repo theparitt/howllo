@@ -19,7 +19,7 @@ howllo/
   howllo-app/         # Next.js (tenant management, RooIAM login)              :7702
   howllo-web/         # Next.js (public boards, local accounts)                 :7703
   howllo-landing/     # Marketing site                             :5114
-  howllo-docs/        # Documentation site                         :5116
+  howllo-docs/        # Product guides and user tutorials           :5116
   shared/             # code shared across the frontends (npm @howllo/* packages)
     api-client/       # Typed client over the server REST API
     types/            # Shared TS types mirroring server DTOs
@@ -109,6 +109,7 @@ feedback.howllo.dev  -> howllo-web (public boards)
 admin.howllo.dev     -> howllo-admin (platform operators)
 howllo.dev           -> howllo-landing
 www.howllo.dev       -> howllo-landing
+docs.howllo.dev      -> howllo-docs
 ```
 
 ## Deploy frontends to Cloudflare Workers
@@ -120,9 +121,9 @@ the RooIAM widget workspace and client IDs. The root deployment script reads
 gitignored. Keep the API URL reachable from both browsers and Cloudflare
 Workers; `192.168.x.x` and `localhost` are not public origins.
 
-Run `npm run deploy:check` to build all four frontends and perform Wrangler
-dry runs. Run `npm run deploy` to publish four separate Workers: `howllo-app`,
-`howllo-web`, `howllo-admin`, and `howllo-landing`. Authenticate Wrangler with
+Run `npm run deploy:check` to build all frontends and perform Wrangler
+dry runs. Run `npm run deploy` to publish separate Workers for `howllo-app`,
+`howllo-web`, `howllo-admin`, `howllo-landing`, and `howllo-docs`. Authenticate Wrangler with
 `npx wrangler login` (or a Cloudflare API token in CI). Wrangler binds the
 production domains above as Worker custom domains. Register
 `https://app.howllo.dev/auth/callback` (or your chosen App domain) with RooIAM,
@@ -137,8 +138,9 @@ deploy them.
 
 The two Next.js Workers use OpenNext. Their `NEXT_PUBLIC_*` values are baked
 into browser bundles at build time, so rebuild after changing domains. The
-Admin and Landing Workers serve static assets. The docs site is outside
-this command because `howllo-docs` has no buildable package yet.
+Admin, Landing, and Guides Workers serve static assets. Read the product
+tutorials at [docs.howllo.dev](https://docs.howllo.dev), or run `npm run
+dev:docs` while developing locally.
 
 See [docs/architecture.md](docs/architecture.md) for the full architecture and
 [docs/internal/](docs/internal/) for deeper design notes. The current MVP

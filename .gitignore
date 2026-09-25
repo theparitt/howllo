@@ -20,7 +20,9 @@
 /howllo-app/.open-next
 /howllo-web/.open-next
 /howllo-landing/dist
+/howllo-docs/dist
 /howllo-app/.wrangler
 /howllo-web/.wrangler
 /howllo-admin/.wrangler
 /howllo-landing/.wrangler
+/howllo-docs/.wrangler

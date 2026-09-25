@@ -1,0 +1,12 @@
+{
+  "name": "howllo-docs",
+  "version": "1.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Howllo product guides and user tutorials",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "deploy": "npm run build && wrangler deploy",
+    "dev": "node scripts/dev.mjs"
+  }
+}
