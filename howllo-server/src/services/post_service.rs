@@ -1,4 +1,6 @@
 use actix_web::HttpRequest;
+use chrono::{DateTime, Duration, Utc};
+use sqlx::Row;
 use uuid::Uuid;
 
 use crate::auth::{maybe_authenticated_user, require_permission};
@@ -10,7 +12,7 @@ use crate::dto::{
 };
 use crate::errors::AppError;
 use crate::memberships;
-use crate::repositories::post_repository;
+use crate::repositories::{post_repository, tenant_branding_repository};
 use crate::statuses::FeedbackStatus;
 
 pub struct BoardPostListInput<'a> {
@@ -255,12 +257,86 @@ pub async fn create_post(
         .await
         .map_err(|_| AppError::Forbidden)?;
 
-    let created = post_repository::create_post(pool, board.tenant_id, board.board_id, user_id, title, body, attachments)
+    let approval_required = tenant_branding_repository::get_by_tenant_slug(pool, tenant_slug)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, tenant_slug, "error fetching post approval setting");
+            AppError::InternalServerError
+        })?
+        .ok_or(AppError::NotFound)?
+        .require_post_approval;
+
+    // Serialize writes by account and workspace so concurrent requests cannot
+    // bypass the database-backed posting limits.
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
+    let lock_key = format!("post:{}:{}", board.tenant_id, user_id);
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(&lock_key)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
+    let activity = sqlx::query(
+        r#"SELECT
+            count(*) FILTER (WHERE created_at > now() - interval '1 hour')::bigint AS last_hour,
+            count(*) FILTER (WHERE created_at > now() - interval '1 day')::bigint AS last_day,
+            max(created_at) AS latest
+        FROM posts WHERE tenant_id = $1 AND user_id = $2"#,
+    )
+    .bind(board.tenant_id)
+    .bind(user_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|_| AppError::InternalServerError)?;
+    let last_hour: i64 = activity.get("last_hour");
+    let last_day: i64 = activity.get("last_day");
+    let latest: Option<DateTime<Utc>> = activity.get("latest");
+    if last_hour >= 3
+        || last_day >= 10
+        || latest.is_some_and(|at| at > Utc::now() - Duration::seconds(30))
+    {
+        return Err(AppError::TooManyRequests(
+            "Please wait before posting again.".to_string(),
+        ));
+    }
+
+    let duplicate: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM posts WHERE tenant_id = $1 AND lower(title) = lower($2) AND created_at > now() - interval '1 day')",
+    )
+    .bind(board.tenant_id)
+    .bind(title.trim())
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|_| AppError::InternalServerError)?;
+    let links = body.matches("https://").count() + body.matches("http://").count();
+    let review_reason = if approval_required {
+        Some("Workspace approval required")
+    } else if duplicate {
+        Some("Similar post title")
+    } else if links >= 2 {
+        Some("Multiple links")
+    } else if last_day == 0 && links > 0 {
+        Some("New member posted a link")
+    } else {
+        None
+    };
+    let review_state = if review_reason.is_some() {
+        "pending"
+    } else {
+        "approved"
+    };
+
+    let created = post_repository::create_post(&mut tx, board.tenant_id, board.board_id, user_id, title, body, attachments, review_state, review_reason)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, tenant_id = %board.tenant_id, board_slug = board_slug, user_id = %user_id, "error creating post");
             AppError::InternalServerError
         })?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
 
     // The author follows their own post so activity on it reaches them.
     let _ = crate::repositories::subscription_repository::ensure_follow(pool, created.id, user_id)

@@ -565,32 +565,40 @@ pub async fn update_duplicate_post_tx(
 }
 
 pub async fn create_post(
-    pool: &DbPool,
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     tenant_id: Uuid,
     board_id: Uuid,
     user_id: Uuid,
     title: &str,
     body: &str,
     attachments: &[String],
+    review_state: &str,
+    review_reason: Option<&str>,
 ) -> Result<crate::dto::PostCreatedDto, sqlx::Error> {
     let attachments_json =
         serde_json::to_value(attachments).unwrap_or_else(|_| serde_json::json!([]));
-    sqlx::query_as!(
-        crate::dto::PostCreatedDto,
+    let row = sqlx::query(
         r#"
-        INSERT INTO posts (tenant_id, board_id, user_id, title, body, attachments)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id
+        INSERT INTO posts (tenant_id, board_id, user_id, title, body, attachments, is_hidden, review_state, review_reason)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING id, review_state
         "#,
-        tenant_id,
-        board_id,
-        user_id,
-        title,
-        body,
-        attachments_json
     )
-    .fetch_one(pool)
-    .await
+    .bind(tenant_id)
+    .bind(board_id)
+    .bind(user_id)
+    .bind(title)
+    .bind(body)
+    .bind(attachments_json)
+    .bind(review_state == "pending")
+    .bind(review_state)
+    .bind(review_reason)
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(crate::dto::PostCreatedDto {
+        id: row.get("id"),
+        review_state: row.get("review_state"),
+    })
 }
 
 pub async fn get_editable_post(
@@ -643,7 +651,7 @@ pub async fn count_moderation_queue(
         "#,
     );
     builder.push_bind(tenant_id);
-    builder.push(" AND (p.is_hidden = TRUE OR p.status = 'under_review') ");
+    builder.push(" AND p.deleted_at IS NULL AND (p.review_state = 'pending' OR (p.is_hidden = TRUE AND p.review_state = 'approved')) ");
 
     if let Some(slug) = board_slug {
         builder.push(" AND b.slug = ");
@@ -663,7 +671,7 @@ pub async fn list_moderation_queue(
 ) -> Result<Vec<crate::dto::ModerationQueueItemDto>, sqlx::Error> {
     let mut builder = QueryBuilder::<sqlx::Postgres>::new(
         r#"
-        SELECT p.id, p.title, b.slug AS board_slug, p.status, p.is_hidden, p.deleted_at,
+        SELECT p.id, p.title, p.body, b.slug AS board_slug, p.status, p.is_hidden, p.review_state, p.review_reason, p.deleted_at,
                p.vote_count,
                (SELECT count(*) FROM comments c WHERE c.post_id = p.id AND c.is_hidden = false) AS comment_count,
                p.duplicate_of_post_id, p.created_at, u.display_name AS author_display_name
@@ -674,7 +682,7 @@ pub async fn list_moderation_queue(
         "#,
     );
     builder.push_bind(tenant_id);
-    builder.push(" AND (p.is_hidden = TRUE OR p.status = 'under_review') ");
+    builder.push(" AND p.deleted_at IS NULL AND (p.review_state = 'pending' OR (p.is_hidden = TRUE AND p.review_state = 'approved')) ");
 
     if let Some(slug) = board_slug {
         builder.push(" AND b.slug = ");

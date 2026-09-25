@@ -4,8 +4,8 @@ type StatusPillProps = {
 
 const LABELS: Record<string, string> = {
   open: "Open",
-  under_review: "Under review",
-  "under-review": "Under review",
+  under_review: "New",
+  "under-review": "New",
   planned: "Planned",
   in_progress: "In progress",
   "in-progress": "In progress",

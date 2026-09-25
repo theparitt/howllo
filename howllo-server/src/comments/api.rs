@@ -177,6 +177,57 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn comments_have_account_limit_even_without_ip_limiter() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+        sqlx::query(
+            "UPDATE comments SET created_at = now() - interval '2 days' WHERE user_id = $1",
+        )
+        .bind(seed.member_user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+        let token = bearer_for(
+            &seed.member_subject,
+            "member@example.com",
+            "Member",
+            &settings.rooiam_jwt_secret,
+        );
+        let path = format!("/api/posts/{}/comments", seed.canonical_post_id);
+        let request = test::TestRequest::post()
+            .uri(&path)
+            .insert_header(("Authorization", token.clone()))
+            .set_json(json!({"body": "First new comment"}))
+            .to_request();
+        assert_eq!(
+            test::call_service(&app, request).await.status(),
+            StatusCode::CREATED
+        );
+        let request = test::TestRequest::post()
+            .uri(&path)
+            .insert_header(("Authorization", token))
+            .set_json(json!({"body": "Second new comment"}))
+            .to_request();
+        assert_eq!(
+            test::call_service(&app, request).await.status(),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+    }
+
+    #[actix_web::test]
     async fn hidden_comments_are_excluded_from_public_list() {
         let settings = test_settings();
         let _guard = lock_test_db().await;

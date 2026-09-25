@@ -11,6 +11,11 @@ use actix_web::{get, patch, web, HttpResponse, Responder};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
+pub struct ReviewPostRequest {
+    pub action: String,
+}
+
+#[derive(Deserialize)]
 pub struct ModerationQueueQuery {
     pub tenant_slug: String,
     pub board_slug: Option<String>,
@@ -73,6 +78,25 @@ pub async fn update_post_visibility(
 ) -> Result<impl Responder, AppError> {
     moderation_service::update_post_visibility(pool.get_ref(), path.into_inner(), &body, auth.0.id)
         .await?;
+    Ok(HttpResponse::Ok().finish())
+}
+
+#[patch("/api/admin/posts/{post_id}/review")]
+pub async fn review_post(
+    pool: web::Data<DbPool>,
+    hub: web::Data<Hub>,
+    path: web::Path<uuid::Uuid>,
+    body: web::Json<ReviewPostRequest>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    moderation_service::review_post(
+        pool.get_ref(),
+        hub.get_ref(),
+        path.into_inner(),
+        &body.action,
+        auth.0.id,
+    )
+    .await?;
     Ok(HttpResponse::Ok().finish())
 }
 

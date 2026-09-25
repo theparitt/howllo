@@ -24,6 +24,219 @@ pub struct PostListQuery {
     pub include_hidden: Option<bool>,
 }
 
+#[cfg(test)]
+mod review_tests {
+    use actix_web::{http::StatusCode, test, web, App};
+    use serde_json::json;
+
+    use crate::db;
+    use crate::http::test_support::{
+        bearer_for, lock_test_db, read_json, reset_db, seed_basic_tenant, test_settings,
+    };
+    use crate::startup;
+
+    #[actix_web::test]
+    async fn held_post_is_private_until_approved_and_burst_is_limited() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+        sqlx::query("UPDATE posts SET created_at = now() - interval '2 days' WHERE user_id = $1")
+            .bind(seed.member_user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO tenant_branding (tenant_id, require_post_approval) SELECT id, TRUE FROM tenants WHERE slug = $1")
+            .bind(&seed.tenant_slug)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+        let member = bearer_for(
+            &seed.member_subject,
+            "member@example.com",
+            "Member",
+            &settings.rooiam_jwt_secret,
+        );
+        let moderator = bearer_for(
+            &seed.moderator_subject,
+            "moderator@example.com",
+            "Moderator",
+            &settings.rooiam_jwt_secret,
+        );
+
+        let path = format!("/api/boards/{}/posts", seed.board_slug);
+        let request = test::TestRequest::post().uri(&path)
+            .insert_header(("Authorization", member.clone()))
+            .set_json(json!({"tenant_slug": seed.tenant_slug, "title": "Please add export", "body": "Export would help our team."}))
+            .to_request();
+        let response = test::call_service(&app, request).await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let created = read_json(response).await;
+        assert_eq!(created["review_state"], "pending");
+        let id = created["id"].as_str().unwrap();
+
+        let request = test::TestRequest::get()
+            .uri(&format!("/api/posts/{id}?tenant_slug={}", seed.tenant_slug))
+            .to_request();
+        assert_eq!(
+            test::call_service(&app, request).await.status(),
+            StatusCode::NOT_FOUND
+        );
+
+        let request = test::TestRequest::post().uri(&path)
+            .insert_header(("Authorization", member.clone()))
+            .set_json(json!({"tenant_slug": seed.tenant_slug, "title": "Another request", "body": "Another idea."}))
+            .to_request();
+        assert_eq!(
+            test::call_service(&app, request).await.status(),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+
+        let request = test::TestRequest::get()
+            .uri(&format!(
+                "/api/admin/moderation/queue?tenant_slug={}",
+                seed.tenant_slug
+            ))
+            .insert_header(("Authorization", moderator.clone()))
+            .to_request();
+        let queue = read_json(test::call_service(&app, request).await).await;
+        assert!(queue["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["id"] == id));
+
+        let request = test::TestRequest::patch()
+            .uri(&format!("/api/admin/posts/{id}/review"))
+            .insert_header(("Authorization", moderator))
+            .set_json(json!({"action": "approve"}))
+            .to_request();
+        assert_eq!(
+            test::call_service(&app, request).await.status(),
+            StatusCode::OK
+        );
+        let request = test::TestRequest::get()
+            .uri("/api/notifications")
+            .insert_header(("Authorization", member))
+            .to_request();
+        let notifications = read_json(test::call_service(&app, request).await).await;
+        assert!(notifications
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["event_type"] == "post_approved"));
+        let request = test::TestRequest::get()
+            .uri(&format!("/api/posts/{id}?tenant_slug={}", seed.tenant_slug))
+            .to_request();
+        assert_eq!(
+            test::call_service(&app, request).await.status(),
+            StatusCode::OK
+        );
+    }
+
+    #[actix_web::test]
+    async fn normal_post_publishes_but_link_heavy_post_waits_for_review() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+        sqlx::query("UPDATE posts SET created_at = now() - interval '2 days' WHERE user_id = $1")
+            .bind(seed.member_user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+        let token = bearer_for(
+            &seed.member_subject,
+            "member@example.com",
+            "Member",
+            &settings.rooiam_jwt_secret,
+        );
+        let path = format!("/api/boards/{}/posts", seed.board_slug);
+
+        let request = test::TestRequest::post().uri(&path)
+            .insert_header(("Authorization", token.clone()))
+            .set_json(json!({"tenant_slug": seed.tenant_slug, "title": "Ordinary idea", "body": "This would help."}))
+            .to_request();
+        let response = test::call_service(&app, request).await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let created = read_json(response).await;
+        assert_eq!(created["review_state"], "approved");
+
+        let approved_id = created["id"].as_str().unwrap();
+        let request = test::TestRequest::get()
+            .uri(&format!(
+                "/api/posts/{approved_id}?tenant_slug={}",
+                seed.tenant_slug
+            ))
+            .to_request();
+        assert_eq!(
+            test::call_service(&app, request).await.status(),
+            StatusCode::OK
+        );
+
+        sqlx::query("UPDATE posts SET created_at = now() - interval '1 minute' WHERE id = $1")
+            .bind(uuid::Uuid::parse_str(approved_id).unwrap())
+            .execute(&pool)
+            .await
+            .unwrap();
+        let request = test::TestRequest::post().uri(&path)
+            .insert_header(("Authorization", token))
+            .set_json(json!({"tenant_slug": seed.tenant_slug, "title": "Links to check", "body": "https://example.com and https://example.org"}))
+            .to_request();
+        let response = test::call_service(&app, request).await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let held = read_json(response).await;
+        assert_eq!(held["review_state"], "pending");
+
+        let moderator = bearer_for(
+            &seed.moderator_subject,
+            "moderator@example.com",
+            "Moderator",
+            &settings.rooiam_jwt_secret,
+        );
+        let request = test::TestRequest::get()
+            .uri(&format!(
+                "/api/admin/moderation/queue?tenant_slug={}",
+                seed.tenant_slug
+            ))
+            .insert_header(("Authorization", moderator))
+            .to_request();
+        let queue = read_json(test::call_service(&app, request).await).await;
+        assert!(queue["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["id"] == held["id"]));
+        assert!(!queue["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["id"] == approved_id));
+    }
+}
+
 #[derive(Deserialize)]
 pub struct PostDetailQuery {
     pub tenant_slug: String,
@@ -133,7 +346,8 @@ pub async fn create_post(
     )
     .await?;
 
-    if let Some(scope) = post_repository::find_post_access(pool.get_ref(), post.id, None)
+    if post.review_state == "approved" {
+        if let Some(scope) = post_repository::find_post_access(pool.get_ref(), post.id, None)
         .await
         .map_err(|error| {
             tracing::error!(error = %error, post_id = %post.id, "error loading post scope for realtime");
@@ -148,6 +362,7 @@ pub async fn create_post(
                 post_id: Some(post.id),
             },
         );
+    }
     }
 
     Ok(HttpResponse::Created().json(post))

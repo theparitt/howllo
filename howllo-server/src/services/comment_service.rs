@@ -1,4 +1,6 @@
 use actix_web::HttpRequest;
+use chrono::{DateTime, Duration, Utc};
+use sqlx::Row;
 use uuid::Uuid;
 
 use crate::auth::maybe_authenticated_user;
@@ -27,12 +29,41 @@ pub async fn create_comment(
 ) -> Result<CommentCreatedDto, AppError> {
     let access = post_service::ensure_post_interaction_access(pool, post_id, user_id, true).await?;
 
-    let created = comment_repository::create_comment(pool, post_id, user_id, body)
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
+    let lock_key = format!("comment:{}:{}", access.tenant_id, user_id);
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(&lock_key)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
+    let activity = sqlx::query(
+        "SELECT count(*)::bigint AS last_hour, max(c.created_at) AS latest FROM comments c JOIN posts p ON p.id = c.post_id WHERE p.tenant_id = $1 AND c.user_id = $2 AND c.created_at > now() - interval '1 hour'",
+    )
+    .bind(access.tenant_id)
+    .bind(user_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|_| AppError::InternalServerError)?;
+    let last_hour: i64 = activity.get("last_hour");
+    let latest: Option<DateTime<Utc>> = activity.get("latest");
+    if last_hour >= 15 || latest.is_some_and(|at| at > Utc::now() - Duration::seconds(10)) {
+        return Err(AppError::TooManyRequests(
+            "Please wait before commenting again.".to_string(),
+        ));
+    }
+
+    let created = comment_repository::create_comment(&mut tx, post_id, user_id, body)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, post_id = %post_id, user_id = %user_id, "error creating comment");
             AppError::InternalServerError
         })?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
 
     // The commenter now follows the post (never resets existing prefs).
     let _ = subscription_repository::ensure_follow(pool, post_id, user_id).await;

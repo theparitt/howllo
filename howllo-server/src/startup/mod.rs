@@ -147,6 +147,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(moderation::api::update_post_status)
         .service(moderation::api::update_post_duplicate)
         .service(moderation::api::update_post_visibility)
+        .service(moderation::api::review_post)
         .service(moderation::api::soft_delete_post)
         .service(moderation::api::restore_post)
         .service(moderation::api::update_post_lock)

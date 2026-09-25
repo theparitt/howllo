@@ -27,6 +27,7 @@ export type TenantBranding = {
   show_roadmap: boolean;
   show_boards: boolean;
   show_feed: boolean;
+  require_post_approval: boolean;
 };
 
 export type WorkspaceAuthConfig = {
@@ -208,9 +209,12 @@ export type WorkspaceParticipant = {
 export type ModerationQueueItem = {
   id: string;
   title: string;
+  body: string;
   board_slug: string;
   status: string;
   is_hidden: boolean;
+  review_state: "approved" | "pending" | "rejected";
+  review_reason: string | null;
   author_display_name: string;
   created_at: string;
 };

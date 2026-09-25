@@ -1,4 +1,5 @@
 use serde_json::json;
+use sqlx::Row;
 use uuid::Uuid;
 
 use crate::audit::{record_in_tx, AuditEntry};
@@ -14,7 +15,7 @@ use crate::dto::{
 use crate::errors::AppError;
 use crate::notifications::{self, FollowNotification};
 use crate::realtime::{Hub, RealtimeEvent};
-use crate::repositories::{comment_repository, post_repository};
+use crate::repositories::{comment_repository, notification_repository, post_repository};
 use crate::webhooks;
 
 pub async fn get_moderation_queue(
@@ -191,6 +192,111 @@ pub async fn update_post_status(
     Ok(())
 }
 
+pub async fn review_post(
+    pool: &DbPool,
+    hub: &Hub,
+    post_id: Uuid,
+    action: &str,
+    user_id: Uuid,
+) -> Result<(), AppError> {
+    let approved = match action {
+        "approve" => true,
+        "reject" => false,
+        _ => {
+            return Err(AppError::Validation(
+                "action must be approve or reject".to_string(),
+            ))
+        }
+    };
+    let tenant_id = post_repository::get_post_tenant(pool, post_id)
+        .await
+        .map_err(|_| AppError::InternalServerError)?
+        .ok_or(AppError::NotFound)?;
+    require_permission(pool, tenant_id, user_id, Permission::HidePost).await?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
+    let result = sqlx::query(
+        "UPDATE posts SET review_state = $1, is_hidden = $2, updated_at = now() WHERE id = $3 AND review_state = 'pending' AND deleted_at IS NULL",
+    )
+    .bind(if approved { "approved" } else { "rejected" })
+    .bind(!approved)
+    .bind(post_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| AppError::InternalServerError)?;
+    if result.rows_affected() == 0 {
+        return Err(AppError::Validation(
+            "Post is no longer waiting for review.".to_string(),
+        ));
+    }
+    record_in_tx(
+        &mut tx,
+        AuditEntry {
+            tenant_id,
+            actor_user_id: user_id,
+            entity_type: "post",
+            entity_id: post_id,
+            action: if approved {
+                "post_approved"
+            } else {
+                "post_rejected"
+            },
+            old_value: Some(json!({ "review_state": "pending" })),
+            new_value: Some(
+                json!({ "review_state": if approved { "approved" } else { "rejected" } }),
+            ),
+            reason: None,
+        },
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
+    if let Ok(Some(author)) = sqlx::query("SELECT user_id, title FROM posts WHERE id = $1")
+        .bind(post_id)
+        .fetch_optional(pool)
+        .await
+    {
+        let title: String = author.get("title");
+        if let Err(error) = notification_repository::create_notification(
+            pool,
+            tenant_id,
+            author.get("user_id"),
+            if approved {
+                "post_approved"
+            } else {
+                "post_rejected"
+            },
+            if approved {
+                "Your post was published"
+            } else {
+                "Your post was not published"
+            },
+            &title,
+            if approved { Some(post_id) } else { None },
+        )
+        .await
+        {
+            tracing::warn!(%error, %post_id, "failed to notify author of review decision");
+        }
+    }
+    if approved {
+        if let Ok(Some(scope)) = post_repository::find_post_access(pool, post_id, None).await {
+            hub.broadcast(
+                tenant_id,
+                RealtimeEvent {
+                    event_type: "post.created".to_string(),
+                    board_id: Some(scope.board_id),
+                    post_id: Some(post_id),
+                },
+            );
+        }
+    }
+    Ok(())
+}
+
 pub async fn update_post_visibility(
     pool: &DbPool,
     post_id: Uuid,
@@ -206,6 +312,20 @@ pub async fn update_post_visibility(
         .ok_or(AppError::NotFound)?;
 
     require_permission(pool, tenant_id, user_id, Permission::HidePost).await?;
+
+    if !body.is_hidden {
+        let review_state: String =
+            sqlx::query_scalar("SELECT review_state FROM posts WHERE id = $1")
+                .bind(post_id)
+                .fetch_one(pool)
+                .await
+                .map_err(|_| AppError::InternalServerError)?;
+        if review_state != "approved" {
+            return Err(AppError::Validation(
+                "Use the review action for posts awaiting approval.".to_string(),
+            ));
+        }
+    }
 
     let previous = post_repository::get_post_state(pool, post_id)
         .await

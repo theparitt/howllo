@@ -297,6 +297,15 @@ pub mod test_support {
                 ADD COLUMN IF NOT EXISTS show_boards BOOLEAN NOT NULL DEFAULT TRUE,
                 ADD COLUMN IF NOT EXISTS show_feed BOOLEAN NOT NULL DEFAULT TRUE;
 
+            ALTER TABLE tenant_branding
+                ADD COLUMN IF NOT EXISTS require_post_approval BOOLEAN NOT NULL DEFAULT FALSE;
+
+            ALTER TABLE posts
+                ADD COLUMN IF NOT EXISTS review_state TEXT NOT NULL DEFAULT 'approved';
+
+            ALTER TABLE posts
+                ADD COLUMN IF NOT EXISTS review_reason TEXT;
+
             ALTER TABLE boards
                 ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 

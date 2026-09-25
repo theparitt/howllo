@@ -146,24 +146,24 @@ pub async fn update_comment_visibility_tx(
 }
 
 pub async fn create_comment(
-    pool: &DbPool,
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     post_id: Uuid,
     user_id: Uuid,
     body: &str,
 ) -> Result<CommentCreatedDto, sqlx::Error> {
-    sqlx::query_as!(
-        CommentCreatedDto,
+    let id = sqlx::query_scalar(
         r#"
         INSERT INTO comments (post_id, user_id, body)
         VALUES ($1, $2, $3)
         RETURNING id
         "#,
-        post_id,
-        user_id,
-        body
     )
-    .fetch_one(pool)
-    .await
+    .bind(post_id)
+    .bind(user_id)
+    .bind(body)
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(CommentCreatedDto { id })
 }
 
 pub async fn list_visible_comments(

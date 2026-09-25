@@ -193,6 +193,11 @@ mod tests {
             .unwrap();
         reset_db(&pool).await;
         let seed = seed_basic_tenant(&pool).await;
+        sqlx::query("UPDATE posts SET created_at = now() - interval '2 days' WHERE user_id = $1")
+            .bind(seed.member_user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
 
         let app = test::init_service(
             App::new()

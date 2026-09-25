@@ -96,7 +96,7 @@ export async function getTenantBranding(tenantSlug: string): Promise<TenantBrand
 export async function managerUpdateTenantBranding(
   tenantSlug: string,
   token: string,
-  input: Pick<TenantBranding, "site_name" | "logo_url" | "accent_color" | "background_color" | "show_powered_by" | "show_roadmap" | "show_boards" | "show_feed">,
+  input: Pick<TenantBranding, "site_name" | "logo_url" | "accent_color" | "background_color" | "show_powered_by" | "show_roadmap" | "show_boards" | "show_feed" | "require_post_approval">,
 ): Promise<TenantBranding> {
   const response = await apiFetch(
     buildUrl(`/api/admin/tenant-branding?tenant_slug=${encodeURIComponent(tenantSlug)}`),
@@ -444,6 +444,10 @@ export async function moderateVisibility(postId: string, isHidden: boolean, toke
   await managerWrite(`/api/admin/posts/${postId}/visibility`, "PATCH", token, { is_hidden: isHidden });
 }
 
+export async function moderateReview(postId: string, action: "approve" | "reject", token: string): Promise<void> {
+  await managerWrite(`/api/admin/posts/${postId}/review`, "PATCH", token, { action });
+}
+
 export async function moderateLock(postId: string, isLocked: boolean, token: string): Promise<void> {
   await managerWrite(`/api/admin/posts/${postId}/lock`, "PATCH", token, { is_locked: isLocked });
 }
@@ -648,7 +652,7 @@ export async function createPost(input: {
       }),
     },
   );
-  return unwrap<{ id: string }>(response);
+  return unwrap<{ id: string; review_state: "approved" | "pending" }>(response);
 }
 
 /** Upload an image (base64) and return its public URL. */

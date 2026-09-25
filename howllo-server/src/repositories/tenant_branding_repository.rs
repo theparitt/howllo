@@ -16,6 +16,7 @@ pub struct TenantBrandingRecord {
     pub show_roadmap: bool,
     pub show_boards: bool,
     pub show_feed: bool,
+    pub require_post_approval: bool,
 }
 
 pub async fn get_by_tenant_slug(
@@ -35,7 +36,8 @@ pub async fn get_by_tenant_slug(
             COALESCE(b.show_powered_by, TRUE) AS show_powered_by,
             COALESCE(b.show_roadmap, TRUE) AS show_roadmap,
             COALESCE(b.show_boards, TRUE) AS show_boards,
-            COALESCE(b.show_feed, TRUE) AS show_feed
+            COALESCE(b.show_feed, TRUE) AS show_feed,
+            COALESCE(b.require_post_approval, FALSE) AS require_post_approval
         FROM tenants t
         LEFT JOIN tenant_branding b ON b.tenant_id = t.id
         WHERE t.slug = $1
@@ -60,6 +62,7 @@ pub async fn upsert(
     show_roadmap: bool,
     show_boards: Option<bool>,
     show_feed: Option<bool>,
+    require_post_approval: Option<bool>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
@@ -72,9 +75,10 @@ pub async fn upsert(
             show_powered_by,
             show_roadmap,
             show_boards,
-            show_feed
+            show_feed,
+            require_post_approval
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, TRUE), COALESCE($9, TRUE))
+        VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, TRUE), COALESCE($9, TRUE), COALESCE($10, FALSE))
         ON CONFLICT (tenant_id)
         DO UPDATE SET
             site_name = EXCLUDED.site_name,
@@ -85,6 +89,7 @@ pub async fn upsert(
             show_roadmap = EXCLUDED.show_roadmap,
             show_boards = COALESCE($8, tenant_branding.show_boards),
             show_feed = COALESCE($9, tenant_branding.show_feed),
+            require_post_approval = COALESCE($10, tenant_branding.require_post_approval),
             updated_at = NOW()
         "#,
     )
@@ -97,6 +102,7 @@ pub async fn upsert(
     .bind(show_roadmap)
     .bind(show_boards)
     .bind(show_feed)
+    .bind(require_post_approval)
     .execute(pool)
     .await?;
 
@@ -116,5 +122,6 @@ fn map_branding_row(row: sqlx::postgres::PgRow) -> TenantBrandingRecord {
         show_roadmap: row.get("show_roadmap"),
         show_boards: row.get("show_boards"),
         show_feed: row.get("show_feed"),
+        require_post_approval: row.get("require_post_approval"),
     }
 }

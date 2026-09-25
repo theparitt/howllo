@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { createPost, uploadImage } from "@/lib/api";
 import { readStoredBearerToken } from "@/components/dev-auth-panel";
 import { buildTenantPath } from "@/lib/default-tenant";
@@ -10,6 +11,15 @@ type CreatePostFormProps = {
   tenantSlug: string;
   boardSlug: string;
 };
+
+function submissionMessage(error: unknown): string {
+  if (!(error instanceof Error)) return "Failed to create post.";
+  try {
+    const response = JSON.parse(error.message) as { error?: { message?: string } };
+    if (response.error?.message) return response.error.message;
+  } catch { /* Plain-text error. */ }
+  return error.message;
+}
 
 export function CreatePostForm({ tenantSlug, boardSlug }: CreatePostFormProps) {
   const router = useRouter();
@@ -20,6 +30,7 @@ export function CreatePostForm({ tenantSlug, boardSlug }: CreatePostFormProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [submittedForReview, setSubmittedForReview] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function onPickFiles(event: React.ChangeEvent<HTMLInputElement>) {
@@ -69,19 +80,25 @@ export function CreatePostForm({ tenantSlug, boardSlug }: CreatePostFormProps) {
         attachments,
         token,
       });
+      if (created.review_state === "pending") {
+        setSubmittedForReview(true);
+        return;
+      }
       const nextSearch = new URLSearchParams(searchParams.toString());
       nextSearch.delete("tenant");
       router.push(buildTenantPath(`/posts/${created.id}`, tenantSlug, tenantSlug, nextSearch));
     } catch (submissionError) {
-      setError(
-        submissionError instanceof Error
-          ? submissionError.message
-          : "Failed to create post.",
-      );
+      setError(submissionMessage(submissionError));
     } finally {
       setPending(false);
     }
   }
+
+  if (submittedForReview) return <section className="panel empty-state" role="status">
+    <h2 className="empty-state__title">Post sent for review</h2>
+    <p className="empty-state__copy">It will appear on the board after a moderator approves it. We’ll notify you of the decision.</p>
+    <Link className="button" href={buildTenantPath(`/boards/${boardSlug}`, tenantSlug, tenantSlug)}>Back to board</Link>
+  </section>;
 
   return (
     <form className="panel field-grid" onSubmit={onSubmit}>

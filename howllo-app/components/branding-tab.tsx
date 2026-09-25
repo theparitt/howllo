@@ -14,7 +14,7 @@ const PRESETS = [
   { name: "Violet", accent: "#674bac", background: "#f3effb" },
 ];
 const COLOR = /^#[0-9a-fA-F]{6}$/;
-type BrandingUpdate = Pick<TenantBranding, "site_name" | "logo_url" | "accent_color" | "background_color" | "show_powered_by" | "show_roadmap" | "show_boards" | "show_feed">;
+type BrandingUpdate = Pick<TenantBranding, "site_name" | "logo_url" | "accent_color" | "background_color" | "show_powered_by" | "show_roadmap" | "show_boards" | "show_feed" | "require_post_approval">;
 
 export function BrandingTab({ tenant }: { tenant: string }) {
   const [siteName, setSiteName] = useState("");
@@ -25,6 +25,7 @@ export function BrandingTab({ tenant }: { tenant: string }) {
   const [showBoards, setShowBoards] = useState(true);
   const [showFeed, setShowFeed] = useState(true);
   const [showPoweredBy, setShowPoweredBy] = useState(true);
+  const [requirePostApproval, setRequirePostApproval] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -44,6 +45,7 @@ export function BrandingTab({ tenant }: { tenant: string }) {
       setShowBoards(branding.show_boards);
       setShowFeed(branding.show_feed);
       setShowPoweredBy(branding.show_powered_by);
+      setRequirePostApproval(branding.require_post_approval);
     } catch (cause) {
       setLoadError(cause instanceof Error ? cause.message : "Could not load public site settings.");
     } finally { setLoading(false); }
@@ -73,6 +75,7 @@ export function BrandingTab({ tenant }: { tenant: string }) {
       show_feed: current.show_feed,
       show_roadmap: current.show_roadmap,
       show_powered_by: current.show_powered_by,
+      require_post_approval: current.require_post_approval,
       ...changes,
     });
   };
@@ -81,8 +84,8 @@ export function BrandingTab({ tenant }: { tenant: string }) {
     event.preventDefault();
     setBusy(true); setPageError(""); setPageNotice("");
     try {
-      await saveChanges({ show_boards: showBoards, show_feed: showFeed, show_roadmap: showRoadmap });
-      setPageNotice("Public pages updated.");
+      await saveChanges({ show_boards: showBoards, show_feed: showFeed, show_roadmap: showRoadmap, require_post_approval: requirePostApproval });
+      setPageNotice("Settings updated.");
     } catch (cause) { setPageError(cause instanceof Error ? cause.message : "Could not save pages."); }
     finally { setBusy(false); }
   };
@@ -113,8 +116,11 @@ export function BrandingTab({ tenant }: { tenant: string }) {
         <label className="manage-check"><input type="checkbox" checked={showBoards} disabled={busy} onChange={(event) => setShowBoards(event.target.checked)} /> Boards</label>
         <label className="manage-check"><input type="checkbox" checked={showFeed} disabled={busy} onChange={(event) => setShowFeed(event.target.checked)} /> Feed</label>
         <label className="manage-check"><input type="checkbox" checked={showRoadmap} disabled={busy} onChange={(event) => setShowRoadmap(event.target.checked)} /> Roadmap</label>
+        <h3 className="section-title">Posts</h3>
+        <label className="manage-check"><input type="checkbox" checked={requirePostApproval} disabled={busy} onChange={(event) => setRequirePostApproval(event.target.checked)} /> Approve every post before publishing</label>
+        <p className="section-subtitle">When off, regular posts publish immediately. Suspicious posts still wait for review.</p>
         <div className="manage-row__actions">
-          <button className="button button--cta" type="submit" disabled={busy}>{busy ? "Saving…" : "Save pages"}</button>
+          <button className="button button--cta" type="submit" disabled={busy}>{busy ? "Saving…" : "Save settings"}</button>
           <a className="ghost-button" href={`${(process.env.NEXT_PUBLIC_HOWLLO_PUBLIC_WEB_URL || "http://localhost:7703").replace(/\/$/, "")}/${encodeURIComponent(tenant)}`} target="_blank" rel="noreferrer">View public site ↗</a>
         </div>
       </form>

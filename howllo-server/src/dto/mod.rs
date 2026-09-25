@@ -159,6 +159,7 @@ pub struct UpdatePostRequest {
 #[derive(Debug, Serialize)]
 pub struct PostCreatedDto {
     pub id: Uuid,
+    pub review_state: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -396,9 +397,12 @@ impl UpdateTagRequest {
 pub struct ModerationQueueItemDto {
     pub id: Uuid,
     pub title: String,
+    pub body: String,
     pub board_slug: String,
     pub status: String,
     pub is_hidden: bool,
+    pub review_state: String,
+    pub review_reason: Option<String>,
     pub deleted_at: Option<DateTime<Utc>>,
     pub vote_count: i32,
     pub comment_count: i64,

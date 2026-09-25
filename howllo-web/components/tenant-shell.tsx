@@ -37,6 +37,7 @@ const DEFAULT_BRANDING: TenantBranding = {
   show_roadmap: false,
   show_boards: true,
   show_feed: false,
+  require_post_approval: false,
 };
 
 function getTenantSlugFromPath(pathname: string): string | null {

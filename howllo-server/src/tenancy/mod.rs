@@ -38,6 +38,7 @@ pub struct TenantBrandingDto {
     pub show_roadmap: bool,
     pub show_boards: bool,
     pub show_feed: bool,
+    pub require_post_approval: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,6 +58,8 @@ pub struct UpdateTenantBrandingRequest {
     pub show_boards: Option<bool>,
     #[serde(default)]
     pub show_feed: Option<bool>,
+    #[serde(default)]
+    pub require_post_approval: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -406,6 +409,7 @@ pub async fn update_tenant_branding(
         body.show_roadmap,
         body.show_boards,
         body.show_feed,
+        body.require_post_approval,
     )
     .await
     .map_err(|error| {
@@ -599,6 +603,7 @@ async fn fetch_tenant_branding(
         show_roadmap: record.show_roadmap,
         show_boards: record.show_boards,
         show_feed: record.show_feed,
+        require_post_approval: record.require_post_approval,
     })
 }
 
