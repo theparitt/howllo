@@ -180,8 +180,7 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
                   className="brand__logo"
                   style={{ height: "2rem", maxWidth: "7rem" }}
                 />
-              ) : null}
-              <span className="tenant-brand-wordmark">{branding.site_name}</span>
+              ) : <span className="tenant-brand-wordmark">{branding.site_name}</span>}
             </Link>
             {managerMode ? <div className="brand__meta">Howllo App · Workspace management</div> : null}
           </div>
