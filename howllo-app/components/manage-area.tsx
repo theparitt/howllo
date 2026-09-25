@@ -86,7 +86,7 @@ export function ManageArea() {
     if (tenant && !readStoredBearerToken(tenant).trim() && ENABLED_AUTH_PROVIDERS.length === 1 && ENABLED_AUTH_PROVIDERS[0] === "rooiam") {
       return <section className="rooiam-inline-login" aria-label="Workspace staff sign in">
         <h1 className="rooiam-inline-login__title">Workspace staff sign in</h1>
-        <p className="section-subtitle">Use your RooIAM account to manage this workspace as an owner, admin or moderator.</p>
+        <p className="section-subtitle">Sign in with RooIAM.</p>
         <RooiamInlineLogin tenantSlug={tenant} />
       </section>;
     }

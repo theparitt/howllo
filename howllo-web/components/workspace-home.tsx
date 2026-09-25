@@ -111,7 +111,7 @@ export function WorkspaceHome({ publicWebOrigin, staffSignIn = false }: { public
       return (
         <section className="rooiam-inline-login" aria-label={staffSignIn ? "Workspace staff sign in" : "Sign in to Howllo"}>
           <h1 className="rooiam-inline-login__title">{staffSignIn ? "Workspace staff sign in" : "Sign in to Howllo"}</h1>
-          {staffSignIn ? <p className="section-subtitle">For workspace owners, admins and moderators. Continue with your RooIAM account.</p> : null}
+          {staffSignIn ? <p className="section-subtitle">Sign in with RooIAM.</p> : null}
           <RooiamInlineLogin />
         </section>
       );
