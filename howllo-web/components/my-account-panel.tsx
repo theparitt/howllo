@@ -115,7 +115,7 @@ export function MyAccountPanel({ howlloUser, tenantSlug }: MyAccountPanelProps) 
     setError("");
     setMessage("");
     try {
-      const url = await uploadImage(file, token);
+      const url = await uploadImage(file, token, tenantSlug);
       const updated = await updateMe({ token, displayName, avatarUrl: url });
       setAvatarUrl(updated.avatar_url ?? "");
       setMessage("Avatar updated.");

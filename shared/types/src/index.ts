@@ -9,6 +9,7 @@ export * from "./status";
 export * from "./role";
 export * from "./tag";
 export * from "./storage";
+export * from "./policy";
 export * from "./notification";
 export * from "./webhook";
 export * from "./api-token";

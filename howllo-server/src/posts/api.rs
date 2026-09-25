@@ -249,7 +249,7 @@ mod review_tests {
             .execute(&pool)
             .await
             .unwrap();
-        sqlx::query("INSERT INTO tenant_branding (tenant_id, board_posts_per_10m) SELECT id, 1 FROM tenants WHERE slug = $1")
+        sqlx::query("INSERT INTO workspace_policies (tenant_id, overrides) SELECT id, '{\"board_posts_per_10m\":1}'::jsonb FROM tenants WHERE slug = $1")
             .bind(&seed.tenant_slug).execute(&pool).await.unwrap();
         let app = test::init_service(
             App::new()
@@ -312,7 +312,7 @@ mod review_tests {
             .execute(&pool)
             .await
             .unwrap();
-        sqlx::query("INSERT INTO tenant_branding (tenant_id, posts_per_hour) SELECT id, 1 FROM tenants WHERE slug = $1")
+        sqlx::query("INSERT INTO workspace_policies (tenant_id, overrides) SELECT id, '{\"posts_per_hour\":1}'::jsonb FROM tenants WHERE slug = $1")
             .bind(&seed.tenant_slug).execute(&pool).await.unwrap();
         let app = test::init_service(
             App::new()

@@ -19,6 +19,7 @@ pub mod moderation;
 pub mod moderation_notes;
 pub mod notifications;
 pub mod platform;
+pub mod policy;
 pub mod posts;
 pub mod preflight;
 pub mod realtime;

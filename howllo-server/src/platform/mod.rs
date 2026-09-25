@@ -6,7 +6,7 @@
 //! These are guarded by `local_admin::is_local_admin_user` — same gate the
 //! platform tenant endpoints use.
 
-use actix_web::{get, post, web, HttpResponse, Responder};
+use actix_web::{get, post, web, HttpRequest, HttpResponse, Responder};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
@@ -35,6 +35,7 @@ fn ensure_platform_admin(auth: &AuthenticatedUser) -> Result<(), AppError> {
 
 #[derive(Deserialize)]
 pub struct UploadRequest {
+    pub tenant_slug: String,
     /// Original filename (used only to pick an extension).
     pub filename: String,
     /// MIME type, e.g. "image/png". Must be an image.
@@ -52,11 +53,23 @@ const MAX_UPLOAD_BYTES: usize = 8 * 1024 * 1024; // 8 MB
 
 #[post("/api/uploads")]
 pub async fn upload_image(
+    req: HttpRequest,
     pool: web::Data<DbPool>,
     auth: AuthenticatedUser,
     body: web::Json<UploadRequest>,
 ) -> Result<impl Responder, AppError> {
-    let _ = auth; // any authenticated user may upload
+    let tenant_id = crate::repositories::membership_repository::resolve_tenant_id(
+        pool.get_ref(),
+        &body.tenant_slug,
+    )
+    .await?;
+    crate::policy::enforce_ip_policy(&req, pool.get_ref(), tenant_id).await?;
+    if !local_admin::is_local_admin_user(&auth.0) {
+        crate::memberships::check_membership(pool.get_ref(), tenant_id, auth.0.id)
+            .await
+            .map_err(|_| AppError::Forbidden)?;
+    }
+    let policy = crate::policy::workspace_policy(pool.get_ref(), tenant_id).await?;
     use base64::Engine;
 
     let content_type = body.content_type.trim().to_lowercase();
@@ -83,10 +96,52 @@ pub async fn upload_image(
         "image/webp" => "webp",
         _ => "bin",
     };
-    let relative = format!("posts/{}.{}", uuid::Uuid::new_v4(), ext);
+    let relative = format!(
+        "workspaces/{tenant_id}/uploads/{}.{}",
+        uuid::Uuid::new_v4(),
+        ext
+    );
+
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(format!("workspace-storage:{tenant_id}"))
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
+    reconcile_workspace_assets(pool.get_ref(), &mut tx, tenant_id).await?;
+    let used: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(sum(size_bytes), 0)::bigint FROM workspace_assets WHERE tenant_id = $1",
+    )
+    .bind(tenant_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|_| AppError::InternalServerError)?;
+    if used.saturating_add(bytes.len() as i64)
+        > i64::from(policy.effective.storage_mb) * 1024 * 1024
+    {
+        return Err(AppError::Validation(
+            "Workspace storage is full. Ask a workspace admin to increase the storage limit."
+                .into(),
+        ));
+    }
 
     let url = crate::storage::store_public_asset(pool.get_ref(), &relative, &bytes, &content_type)
         .await?;
+    sqlx::query(
+        "INSERT INTO workspace_assets (tenant_id, relative_path, size_bytes) VALUES ($1, $2, $3)",
+    )
+    .bind(tenant_id)
+    .bind(&relative)
+    .bind(bytes.len() as i64)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| AppError::InternalServerError)?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
 
     Ok(HttpResponse::Ok().json(UploadResponse { url }))
 }
@@ -552,6 +607,75 @@ async fn asset_size_bytes(
     Some(size)
 }
 
+async fn reconcile_workspace_assets(
+    pool: &DbPool,
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: Uuid,
+) -> Result<(), AppError> {
+    let complete: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM workspace_asset_reconciliations WHERE tenant_id = $1)",
+    )
+    .bind(tenant_id)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(|_| AppError::InternalServerError)?;
+    if complete {
+        return Ok(());
+    }
+
+    let cfg = load_platform_storage_config(pool).await?;
+    let urls = sqlx::query_scalar::<_, String>(
+        "SELECT logo_url FROM tenant_branding WHERE tenant_id = $1 AND logo_url IS NOT NULL
+         UNION SELECT icon_url FROM boards WHERE tenant_id = $1 AND icon_url IS NOT NULL
+         UNION SELECT jsonb_array_elements_text(attachments) FROM posts WHERE tenant_id = $1",
+    )
+    .bind(tenant_id)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|_| AppError::InternalServerError)?;
+    let mut cache = HashMap::new();
+    for url in urls {
+        let Some(relative) = url
+            .strip_prefix(cfg.public_base_url.trim_end_matches('/'))
+            .map(|s| s.trim_start_matches('/'))
+        else {
+            continue;
+        };
+        if relative.is_empty() || relative.contains("..") {
+            continue;
+        }
+        let size = asset_size_bytes(&cfg, &url, &mut cache)
+            .await
+            .ok_or_else(|| {
+                AppError::InternalServerError
+                    .with_log(format!("could not measure existing workspace asset: {url}"))
+            })?;
+        sqlx::query("INSERT INTO workspace_assets (tenant_id, relative_path, size_bytes) VALUES ($1, $2, $3) ON CONFLICT (tenant_id, relative_path) DO NOTHING")
+            .bind(tenant_id).bind(relative).bind(size as i64)
+            .execute(&mut **tx).await.map_err(|_| AppError::InternalServerError)?;
+    }
+    sqlx::query("INSERT INTO workspace_asset_reconciliations (tenant_id) VALUES ($1) ON CONFLICT DO NOTHING")
+        .bind(tenant_id).execute(&mut **tx).await.map_err(|_| AppError::InternalServerError)?;
+    Ok(())
+}
+
+pub async fn ensure_workspace_assets_reconciled(
+    pool: &DbPool,
+    tenant_id: Uuid,
+) -> Result<(), AppError> {
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(format!("workspace-storage:{tenant_id}"))
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
+    reconcile_workspace_assets(pool, &mut tx, tenant_id).await?;
+    tx.commit().await.map_err(|_| AppError::InternalServerError)
+}
+
 async fn database_status_check(pool: &DbPool) -> PlatformStatusCheck {
     match sqlx::query_scalar::<_, i32>("SELECT 1")
         .fetch_one(pool)
@@ -636,6 +760,76 @@ async fn storage_status_check(pool: &DbPool) -> PlatformStatusCheck {
             message: "Storage backend check failed.".to_string(),
             detail: Some(format!("{detail}. {error}")),
         },
+    }
+}
+
+#[cfg(test)]
+mod quota_tests {
+    use crate::db;
+    use crate::http::test_support::{
+        bearer_for, lock_test_db, reset_db, seed_basic_tenant, test_settings,
+    };
+    use crate::startup;
+    use actix_web::{http::StatusCode, test, web, App};
+    use base64::Engine;
+    use serde_json::json;
+
+    #[actix_web::test]
+    async fn workspace_upload_quota_rejects_extra_bytes() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+        let root = std::env::temp_dir().join(format!("howllo-quota-test-{}", uuid::Uuid::new_v4()));
+        for (key, value) in [
+            ("storage_backend", "local".to_string()),
+            ("storage_local_path", root.to_string_lossy().to_string()),
+            (
+                "storage_public_base_url",
+                "http://localhost:7700/uploads".to_string(),
+            ),
+        ] {
+            sqlx::query("INSERT INTO system_settings (key, value) VALUES ($1, $2)")
+                .bind(key)
+                .bind(value)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        sqlx::query("INSERT INTO workspace_policies (tenant_id, overrides) SELECT id, '{\"storage_mb\":1}'::jsonb FROM tenants WHERE slug = $1")
+            .bind(&seed.tenant_slug).execute(&pool).await.unwrap();
+        let app = test::init_service(
+            App::new()
+                .app_data(web::JsonConfig::default().limit(12 * 1024 * 1024))
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+        let member = bearer_for(
+            &seed.member_subject,
+            "member@example.com",
+            "Member",
+            &settings.rooiam_jwt_secret,
+        );
+        let data = base64::engine::general_purpose::STANDARD.encode(vec![1u8; 700 * 1024]);
+        for expected in [StatusCode::OK, StatusCode::UNPROCESSABLE_ENTITY] {
+            let request = test::TestRequest::post().uri("/api/uploads")
+                .insert_header(("Authorization", member.clone()))
+                .set_json(json!({"tenant_slug": seed.tenant_slug, "filename": "test.png", "content_type": "image/png", "data": data}))
+                .to_request();
+            assert_eq!(test::call_service(&app, request).await.status(), expected);
+        }
+        let bytes: i64 = sqlx::query_scalar("SELECT sum(size_bytes)::bigint FROM workspace_assets")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(bytes, 700 * 1024);
+        let _ = std::fs::remove_dir_all(root);
     }
 }
 

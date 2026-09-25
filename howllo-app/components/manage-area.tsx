@@ -30,6 +30,7 @@ import { uploadImage } from "@/lib/api";
 import { ParticipantsTab } from "./participants-tab";
 import { ModerationTab } from "./moderation-tab";
 import { BrandingTab } from "./branding-tab";
+import { SecurityTab } from "./security-tab";
 import { prepareBrandImage } from "../lib/prepare-brand-image";
 
 const INVITE_ROLES = ["admin", "moderator"];
@@ -50,7 +51,7 @@ function statusTone(status: string): string {
 export function ManageArea() {
   const [tenant, setTenant] = useState<string | null>(null);
   const [role, setRole] = useState<string | null | undefined>(undefined);
-  const [tab, setTab] = useState<"team" | "boards" | "branding" | "signin" | "participants" | "moderation">("boards");
+  const [tab, setTab] = useState<"team" | "boards" | "branding" | "security" | "signin" | "participants" | "moderation">("boards");
 
   useEffect(() => {
     const resolve = () => setTenant(getCurrentWorkspaceSlug());
@@ -113,6 +114,7 @@ export function ManageArea() {
           Boards
         </button>
         <button type="button" className={`feed-chip${tab === "branding" ? " feed-chip--active" : ""}`} onClick={() => setTab("branding")}>Public site</button>
+        <button type="button" className={`feed-chip${tab === "security" ? " feed-chip--active" : ""}`} onClick={() => setTab("security")}>Security</button>
         <button type="button" className={`feed-chip${tab === "participants" ? " feed-chip--active" : ""}`} onClick={() => setTab("participants")}>Users</button>
         <button type="button" className={`feed-chip${tab === "signin" ? " feed-chip--active" : ""}`} onClick={() => setTab("signin")}>
           Sign-in (SSO)
@@ -128,6 +130,8 @@ export function ManageArea() {
           <ParticipantsTab tenant={tenant} />
         ) : tab === "branding" ? (
           <BrandingTab tenant={tenant} />
+        ) : tab === "security" ? (
+          <SecurityTab tenant={tenant} />
         ) : tab === "team" ? (
           <TeamTab tenant={tenant} myRole={role!} />
         ) : tab === "boards" ? (
@@ -470,7 +474,7 @@ function BoardEditor({ board, tenant, onSaved }: { board: ManageBoard; tenant: s
             setBusy(true); setError(null);
             try {
               const prepared = await prepareBrandImage(file, 512, 512);
-              setIconUrl(await uploadImage(prepared, readStoredBearerToken(tenant).trim()));
+              setIconUrl(await uploadImage(prepared, readStoredBearerToken(tenant).trim(), tenant));
               setNotice("Icon uploaded. Save changes to publish it.");
             } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not upload icon."); }
             finally { setBusy(false); }

@@ -321,6 +321,26 @@ pub mod test_support {
                 PRIMARY KEY (tenant_id, user_id)
             );
 
+            CREATE TABLE IF NOT EXISTS workspace_policies (
+                tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+                overrides JSONB NOT NULL DEFAULT '{}'::jsonb,
+                storage_cap_mb INT
+            );
+
+            CREATE TABLE IF NOT EXISTS workspace_assets (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                relative_path TEXT NOT NULL,
+                size_bytes BIGINT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (tenant_id, relative_path)
+            );
+
+            CREATE TABLE IF NOT EXISTS workspace_asset_reconciliations (
+                tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+                reconciled_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+
             ALTER TABLE posts
                 ADD COLUMN IF NOT EXISTS review_state TEXT NOT NULL DEFAULT 'approved';
 
@@ -435,6 +455,10 @@ pub mod test_support {
                 post_votes,
                 board_write_cooldowns,
                 workspace_spam_flags,
+                workspace_assets,
+                workspace_asset_reconciliations,
+                workspace_policies,
+                system_settings,
                 comments,
                 posts,
                 workspace_invitations,

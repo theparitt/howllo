@@ -3,8 +3,8 @@ use actix_web::{get, web, HttpResponse, Responder};
 
 use crate::{
     ai, api_tokens, audit, auth, boards, comments, exports, invitations, me, memberships,
-    moderation, moderation_notes, notifications, platform, posts, realtime, search, subscriptions,
-    tags, tenancy, votes, webhooks,
+    moderation, moderation_notes, notifications, platform, policy, posts, realtime, search,
+    subscriptions, tags, tenancy, votes, webhooks,
 };
 
 #[get("/api/health")]
@@ -56,6 +56,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(platform::test_database)
         .service(platform::upload_image)
         .service(platform::serve_upload)
+        .service(policy::get_platform_policy)
+        .service(policy::put_platform_policy)
+        .service(policy::get_workspace_policy)
+        .service(policy::put_workspace_policy)
+        .service(policy::put_workspace_storage_cap)
+        .service(policy::get_platform_workspace_policy)
         .service(tenancy::get_bootstrap_tenant)
         .service(tenancy::list_admin_tenants)
         .service(tenancy::create_admin_tenant)

@@ -21,6 +21,8 @@ import type {
   WorkspaceStorageUsageResponse,
   PlatformStatusResponse,
   BuildInfoResponse,
+  PlatformPolicy,
+  WorkspacePolicy,
 } from "@howllo/types";
 import type { HowlloClient } from "./client";
 
@@ -249,6 +251,10 @@ export const admin = (client: HowlloClient) => ({
     }),
 
   // Platform settings (local-admin only)
+  getPlatformPolicy: () => client.request<PlatformPolicy>(`/api/admin/platform/policy`, { withTenant: false }),
+  savePlatformPolicy: (input: PlatformPolicy) => client.request<PlatformPolicy>(`/api/admin/platform/policy`, { method: "PUT", withTenant: false, body: JSON.stringify(input) }),
+  getPlatformWorkspacePolicy: (slug: string) => client.request<WorkspacePolicy>(`/api/admin/platform/workspaces/${encodeURIComponent(slug)}/policy`, { withTenant: false }),
+  saveWorkspaceStorageCap: (slug: string, storage_cap_mb: number | null) => client.request<WorkspacePolicy>(`/api/admin/platform/workspaces/${encodeURIComponent(slug)}/storage-cap`, { method: "PUT", withTenant: false, body: JSON.stringify({ storage_cap_mb }) }),
   getStorageConfig: () =>
     client.request<PlatformStorageConfig>(`/api/admin/platform/storage`, {
       withTenant: false,

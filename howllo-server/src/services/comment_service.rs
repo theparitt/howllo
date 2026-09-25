@@ -9,6 +9,7 @@ use crate::dto::{CommentCreatedDto, CommentListItemDto};
 use crate::errors::AppError;
 use crate::memberships;
 use crate::notifications::{self, FollowNotification};
+use crate::policy;
 use crate::repositories::{comment_repository, subscription_repository};
 use crate::services::post_service;
 use crate::services::spam_guard;
@@ -23,23 +24,17 @@ fn snippet(body: &str) -> String {
 }
 
 pub async fn create_comment(
+    req: &HttpRequest,
     pool: &DbPool,
     post_id: Uuid,
     user_id: Uuid,
     body: &str,
 ) -> Result<CommentCreatedDto, AppError> {
     let access = post_service::ensure_post_interaction_access(pool, post_id, user_id, true).await?;
-    let settings = sqlx::query("SELECT comments_per_hour, board_comments_per_10m FROM tenant_branding WHERE tenant_id = $1")
-        .bind(access.tenant_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| AppError::InternalServerError)?;
-    let comments_per_hour: i32 = settings
-        .as_ref()
-        .map_or(15, |row| row.get("comments_per_hour"));
-    let board_comments_per_10m: i32 = settings
-        .as_ref()
-        .map_or(60, |row| row.get("board_comments_per_10m"));
+    policy::enforce_ip_policy(req, pool, access.tenant_id).await?;
+    let limits = policy::workspace_policy(pool, access.tenant_id)
+        .await?
+        .effective;
 
     let mut tx = pool
         .begin()
@@ -52,7 +47,7 @@ pub async fn create_comment(
         .await
         .map_err(|_| AppError::InternalServerError)?;
     let activity = sqlx::query(
-        "SELECT count(*)::bigint AS last_hour, max(c.created_at) AS latest FROM comments c JOIN posts p ON p.id = c.post_id WHERE p.tenant_id = $1 AND c.user_id = $2 AND c.created_at > now() - interval '1 hour'",
+        "SELECT count(*) FILTER (WHERE c.created_at > now() - interval '1 hour')::bigint AS last_hour, count(*)::bigint AS last_day, max(c.created_at) AS latest FROM comments c JOIN posts p ON p.id = c.post_id WHERE p.tenant_id = $1 AND c.user_id = $2 AND c.created_at > now() - interval '1 day'",
     )
     .bind(access.tenant_id)
     .bind(user_id)
@@ -60,8 +55,11 @@ pub async fn create_comment(
     .await
     .map_err(|_| AppError::InternalServerError)?;
     let last_hour: i64 = activity.get("last_hour");
+    let last_day: i64 = activity.get("last_day");
     let latest: Option<DateTime<Utc>> = activity.get("latest");
-    if last_hour >= i64::from(comments_per_hour) {
+    if last_hour >= i64::from(limits.comments_per_hour)
+        || last_day >= i64::from(limits.comments_per_day)
+    {
         spam_guard::flag_account(
             &mut tx,
             access.tenant_id,
@@ -76,13 +74,18 @@ pub async fn create_comment(
             "You have reached the comment limit. Please try again later.".to_string(),
         ));
     }
-    if latest.is_some_and(|at| at > Utc::now() - Duration::seconds(10)) {
+    if latest.is_some_and(|at| at > Utc::now() - Duration::seconds(2)) {
         return Err(AppError::TooManyRequests(
             "Please wait before commenting again.".to_string(),
         ));
     }
-    if spam_guard::board_is_paused(&mut tx, access.board_id, "comment", board_comments_per_10m)
-        .await?
+    if spam_guard::board_is_paused(
+        &mut tx,
+        access.board_id,
+        "comment",
+        limits.board_comments_per_10m,
+    )
+    .await?
     {
         tx.commit()
             .await

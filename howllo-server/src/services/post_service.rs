@@ -12,6 +12,7 @@ use crate::dto::{
 };
 use crate::errors::AppError;
 use crate::memberships;
+use crate::policy;
 use crate::repositories::{post_repository, tenant_branding_repository};
 use crate::services::spam_guard;
 use crate::statuses::FeedbackStatus;
@@ -255,6 +256,7 @@ pub async fn create_post(
     user_id: Uuid,
 ) -> Result<PostCreatedDto, AppError> {
     let board = ensure_board_access(req, pool, tenant_slug, board_slug).await?;
+    policy::enforce_ip_policy(req, pool, board.tenant_id).await?;
     memberships::check_membership(pool, board.tenant_id, user_id)
         .await
         .map_err(|_| AppError::Forbidden)?;
@@ -267,6 +269,9 @@ pub async fn create_post(
         })?
         .ok_or(AppError::NotFound)?;
     let approval_required = spam_settings.require_post_approval;
+    let limits = policy::workspace_policy(pool, board.tenant_id)
+        .await?
+        .effective;
 
     // Serialize writes by account and workspace so concurrent requests cannot
     // bypass the database-backed posting limits.
@@ -295,8 +300,7 @@ pub async fn create_post(
     let last_hour: i64 = activity.get("last_hour");
     let last_day: i64 = activity.get("last_day");
     let latest: Option<DateTime<Utc>> = activity.get("latest");
-    if last_hour >= i64::from(spam_settings.posts_per_hour)
-        || last_day >= i64::from(spam_settings.posts_per_hour) * 4
+    if last_hour >= i64::from(limits.posts_per_hour) || last_day >= i64::from(limits.posts_per_day)
     {
         spam_guard::flag_account(&mut tx, board.tenant_id, user_id, "Posting rate exceeded")
             .await?;
@@ -307,18 +311,13 @@ pub async fn create_post(
             "You have reached the posting limit. Please try again later.".to_string(),
         ));
     }
-    if latest.is_some_and(|at| at > Utc::now() - Duration::seconds(30)) {
+    if latest.is_some_and(|at| at > Utc::now() - Duration::seconds(10)) {
         return Err(AppError::TooManyRequests(
             "Please wait before posting again.".to_string(),
         ));
     }
-    if spam_guard::board_is_paused(
-        &mut tx,
-        board.board_id,
-        "post",
-        spam_settings.board_posts_per_10m,
-    )
-    .await?
+    if spam_guard::board_is_paused(&mut tx, board.board_id, "post", limits.board_posts_per_10m)
+        .await?
     {
         tx.commit()
             .await

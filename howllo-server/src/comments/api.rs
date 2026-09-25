@@ -39,7 +39,7 @@ pub async fn create_comment(
     }
 
     let comment =
-        comment_service::create_comment(pool.get_ref(), post_id, user_id, &body.body).await?;
+        comment_service::create_comment(&req, pool.get_ref(), post_id, user_id, &body.body).await?;
 
     if let Some(scope) = post_repository::find_post_access(pool.get_ref(), post_id, None)
         .await
@@ -240,7 +240,7 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
-        sqlx::query("INSERT INTO tenant_branding (tenant_id, board_comments_per_10m) SELECT id, 1 FROM tenants WHERE slug = $1")
+        sqlx::query("INSERT INTO workspace_policies (tenant_id, overrides) SELECT id, '{\"board_comments_per_10m\":1}'::jsonb FROM tenants WHERE slug = $1")
             .bind(&seed.tenant_slug).execute(&pool).await.unwrap();
         let app = test::init_service(
             App::new()

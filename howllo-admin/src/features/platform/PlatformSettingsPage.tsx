@@ -9,8 +9,9 @@ import type {
 } from "@howllo/types";
 import { useSession } from "../../lib/session";
 import { Panel } from "../../components/Panel";
+import { PlatformPolicyTab } from "./PlatformPolicyTab";
 
-type Tab = "status" | "storage" | "database";
+type Tab = "status" | "storage" | "database" | "limits";
 
 export function PlatformSettingsPage() {
   const [tab, setTab] = useState<Tab>("status");
@@ -42,12 +43,15 @@ export function PlatformSettingsPage() {
         >
           Database
         </button>
+        <button className={tab === "limits" ? "seg-tab active" : "seg-tab"} onClick={() => setTab("limits")}>Limits</button>
       </div>
 
       {tab === "status" ? (
         <StatusTab />
       ) : tab === "storage" ? (
         <StorageTab />
+      ) : tab === "limits" ? (
+        <PlatformPolicyTab />
       ) : (
         <DatabaseTab />
       )}

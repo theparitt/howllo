@@ -136,6 +136,8 @@ other `api.howllo.dev` paths to the Rust API. The backend `howllo-server`,
 PostgreSQL, and MinIO remain on your own infrastructure; this command does not
 deploy them.
 
+Platform administrators set workspace rate defaults and ceilings in **Admin → Platform settings → Limits**. They can also set a hard storage cap for each workspace. Workspace owners and admins use **App → Security** to set their own limits; empty fields inherit the platform default. Defaults allow 6 posts and 60 comments per member per hour, with daily limits of 30 and 300. Board bursts pause new writes for five minutes. The default workspace storage quota is 500 MB. Uploads belong to a workspace; existing referenced logos, board icons, and post attachments are measured when its policy is first viewed or an upload is attempted. IP and country rules apply to posts, comments, and uploads. Country rules require Cloudflare's `CF-IPCountry` header.
+
 The two Next.js Workers use OpenNext. Their `NEXT_PUBLIC_*` values are baked
 into browser bundles at build time, so rebuild after changing domains. The
 Admin, Landing, and Guides Workers serve static assets. Read the product

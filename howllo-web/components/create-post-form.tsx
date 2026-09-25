@@ -45,7 +45,7 @@ export function CreatePostForm({ tenantSlug, boardSlug }: CreatePostFormProps) {
     setUploading(true);
     setError(null);
     try {
-      const urls = await Promise.all(files.map((file) => uploadImage(file, token)));
+      const urls = await Promise.all(files.map((file) => uploadImage(file, token, tenantSlug)));
       setAttachments((current) => [...current, ...urls]);
     } catch (uploadError) {
       setError(

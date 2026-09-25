@@ -20,6 +20,8 @@ import type {
   Tag,
   TenantBranding,
   TenantManagementSettings,
+  PolicyOverrides,
+  WorkspacePolicyView,
   WorkspaceAuthConfig,
   WebhookEndpoint,
 } from "@/lib/types";
@@ -68,7 +70,12 @@ async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
 async function unwrap<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const text = await response.text();
-    throw new ApiError(response.status, text || `Request failed with ${response.status}`);
+    let message = text || `Request failed with ${response.status}`;
+    try {
+      const parsed = JSON.parse(text) as { error?: { message?: string } };
+      if (parsed.error?.message) message = parsed.error.message;
+    } catch { /* The server returned plain text. */ }
+    throw new ApiError(response.status, message);
   }
   return response.json() as Promise<T>;
 }
@@ -116,6 +123,20 @@ export async function getTenantManagementSettings(tenantSlug: string, token: str
     { headers: { Authorization: token }, cache: "no-store" },
   );
   return unwrap<TenantManagementSettings>(response);
+}
+
+export async function getWorkspacePolicy(tenantSlug: string, token: string): Promise<WorkspacePolicyView> {
+  return unwrap<WorkspacePolicyView>(await apiFetch(
+    buildUrl(`/api/admin/workspace-policy?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { headers: { Authorization: token }, cache: "no-store" },
+  ));
+}
+
+export async function saveWorkspacePolicy(tenantSlug: string, token: string, input: PolicyOverrides): Promise<WorkspacePolicyView> {
+  return unwrap<WorkspacePolicyView>(await apiFetch(
+    buildUrl(`/api/admin/workspace-policy?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { method: "PUT", headers: { Authorization: token, "content-type": "application/json" }, body: JSON.stringify(input) },
+  ));
 }
 
 export async function getWorkspaceAuthConfig(
@@ -665,7 +686,7 @@ export async function createPost(input: {
 }
 
 /** Upload an image (base64) and return its public URL. */
-export async function uploadImage(file: File, token: string): Promise<string> {
+export async function uploadImage(file: File, token: string, tenantSlug: string): Promise<string> {
   if (file.size > 8 * 1024 * 1024) {
     throw new Error("Image exceeds the 8 MB upload limit.");
   }
@@ -680,6 +701,7 @@ export async function uploadImage(file: File, token: string): Promise<string> {
     method: "POST",
     headers: { "content-type": "application/json", Authorization: token },
     body: JSON.stringify({
+      tenant_slug: tenantSlug,
       filename: file.name,
       content_type: file.type,
       data: base64,

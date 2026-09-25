@@ -37,6 +37,31 @@ export type TenantManagementSettings = TenantBranding & {
   board_comments_per_10m: number;
 };
 
+export type PolicyLimits = {
+  posts_per_hour: number;
+  posts_per_day: number;
+  comments_per_hour: number;
+  comments_per_day: number;
+  board_posts_per_10m: number;
+  board_comments_per_10m: number;
+  storage_mb: number;
+};
+
+export type PolicyOverrides = { [K in keyof PolicyLimits]: number | null } & {
+  ip_allowlist: string[];
+  ip_blocklist: string[];
+  blocked_countries: string[];
+};
+
+export type WorkspacePolicyView = {
+  effective: PolicyLimits;
+  defaults: PolicyLimits;
+  caps: PolicyLimits;
+  overrides: PolicyOverrides;
+  storage_cap_mb: number | null;
+  storage_used_bytes: number;
+};
+
 export type WorkspaceAuthConfig = {
   tenant_slug: string;
   provider: string;

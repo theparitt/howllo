@@ -124,6 +124,7 @@ export class HowlloClient {
    * URL. Used for workspace logos and post screenshots.
    */
   async uploadImage(file: File): Promise<string> {
+    if (!this.tenant) throw new Error("Select a workspace before uploading an image.");
     const dataUrl: string = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
@@ -135,6 +136,7 @@ export class HowlloClient {
       method: "POST",
       withTenant: false,
       body: JSON.stringify({
+        tenant_slug: this.tenant,
         filename: file.name,
         content_type: file.type,
         data: base64,
