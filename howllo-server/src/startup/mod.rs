@@ -68,6 +68,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(tenancy::delete_admin_tenant)
         .service(tenancy::get_tenant_branding)
         .service(tenancy::get_tenant_management_settings)
+        .service(tenancy::set_workspace_publication)
         .service(tenancy::get_sso_config)
         .service(tenancy::regenerate_sso_secret)
         .service(tenancy::disable_sso)

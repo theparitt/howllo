@@ -5,6 +5,7 @@ use crate::db::DbPool;
 
 #[derive(Debug, Clone)]
 pub struct TenantBrandingRecord {
+    pub is_published: bool,
     pub tenant_id: Uuid,
     pub tenant_slug: String,
     pub tenant_name: String,
@@ -33,6 +34,7 @@ pub async fn get_by_tenant_slug(
             t.id AS tenant_id,
             t.slug AS tenant_slug,
             t.name AS tenant_name,
+            t.is_published,
             b.site_name,
             b.logo_url,
             b.accent_color,
@@ -135,6 +137,7 @@ pub async fn upsert(
 
 fn map_branding_row(row: sqlx::postgres::PgRow) -> TenantBrandingRecord {
     TenantBrandingRecord {
+        is_published: row.get("is_published"),
         tenant_id: row.get("tenant_id"),
         tenant_slug: row.get("tenant_slug"),
         tenant_name: row.get("tenant_name"),

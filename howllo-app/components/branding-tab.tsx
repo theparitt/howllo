@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getTenantManagementSettings, managerUpdateTenantBranding, uploadImage } from "@/lib/api";
+import { getTenantManagementSettings, managerUpdateTenantBranding, setWorkspacePublication, uploadImage } from "@/lib/api";
 import { readStoredBearerToken } from "@/components/dev-auth-panel";
 import { prepareBrandImage } from "../lib/prepare-brand-image";
 import { contrastInk } from "@/lib/theme";
@@ -22,6 +22,7 @@ export function BrandingTab({ tenant }: { tenant: string }) {
   const [accent, setAccent] = useState("#e0522f");
   const [background, setBackground] = useState("#fff3ec");
   const [showRoadmap, setShowRoadmap] = useState(true);
+  const [isPublished, setIsPublished] = useState(false);
   const [showBoards, setShowBoards] = useState(true);
   const [showFeed, setShowFeed] = useState(true);
   const [showPoweredBy, setShowPoweredBy] = useState(true);
@@ -42,6 +43,7 @@ export function BrandingTab({ tenant }: { tenant: string }) {
       setAccent(branding.accent_color ?? "#e0522f");
       setBackground(branding.background_color ?? "#fff3ec");
       setShowRoadmap(branding.show_roadmap);
+      setIsPublished(branding.is_published);
       setShowBoards(branding.show_boards);
       setShowFeed(branding.show_feed);
       setShowPoweredBy(branding.show_powered_by);
@@ -109,10 +111,25 @@ export function BrandingTab({ tenant }: { tenant: string }) {
     finally { setBusy(false); }
   };
 
+  const togglePublication = async () => {
+    setBusy(true); setPageError(""); setPageNotice("");
+    try {
+      const updated = await setWorkspacePublication(tenant, readStoredBearerToken(tenant).trim(), !isPublished);
+      setIsPublished(updated.is_published);
+      setPageNotice(updated.is_published ? "Workspace is live." : "Workspace is now a draft.");
+    } catch (cause) { setPageError(cause instanceof Error ? cause.message : "Could not update publication."); }
+    finally { setBusy(false); }
+  };
+
   if (loading) return <section className="panel"><p>Loading…</p></section>;
   if (loadError) return <section className="panel"><p className="error-text" role="alert">{loadError}</p></section>;
 
   return <div className="page-stack">
+    <section className="panel">
+      <h2 className="section-title">{isPublished ? "Workspace is live" : "Workspace is a draft"}</h2>
+      <p className="section-subtitle">{isPublished ? "Visitors can see your published boards." : "Create a board, set it to published, then publish this workspace."}</p>
+      <button type="button" className="button button--cta" disabled={busy} onClick={() => void togglePublication()} style={{ marginTop: "1rem" }}>{isPublished ? "Unpublish workspace" : "Publish workspace"}</button>
+    </section>
     <section className="panel">
       <h2 className="section-title">Public pages</h2>
       <p className="section-subtitle">Choose what visitors see in this workspace.</p>

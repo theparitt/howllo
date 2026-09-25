@@ -6,6 +6,7 @@ import { ENABLED_AUTH_PROVIDERS } from "@/lib/auth-provider";
 import {
   disableSso,
   getMyWorkspaceRole,
+  getTenantManagementSettings,
   getSsoConfig,
   regenerateSsoSecret,
   type SsoConfig,
@@ -306,6 +307,7 @@ function MemberRow({
 
 function BoardsTab({ tenant }: { tenant: string }) {
   const [boards, setBoards] = useState<ManageBoard[]>([]);
+  const [workspacePublished, setWorkspacePublished] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -323,8 +325,9 @@ function BoardsTab({ tenant }: { tenant: string }) {
     const t = token();
     if (!t) return;
     try {
-      const list = await managerListBoards(tenant, t);
+      const [list, settings] = await Promise.all([managerListBoards(tenant, t), getTenantManagementSettings(tenant, t)]);
       setBoards(list);
+      setWorkspacePublished(settings.is_published);
       setSelected((cur) => cur ?? list[0]?.id ?? null);
       setError(null);
     } catch (cause) {
@@ -374,7 +377,7 @@ function BoardsTab({ tenant }: { tenant: string }) {
         <div className="manage-board-heading">
           <div>
             <h2 className="section-title">Your boards</h2>
-            <p className="section-subtitle">Public boards appear at <a className="text-link" href={`${PUBLIC_WEB_URL}/${encodeURIComponent(tenant)}`}>{PUBLIC_WEB_URL}/{tenant}</a>. Private boards are for workspace members.</p>
+            <p className="section-subtitle">Create boards one at a time. Each starts as a draft until you publish it.</p>
           </div>
           <button className="button button--cta" type="button" onClick={() => setCreating((value) => !value)}>{creating ? "Cancel" : "Create board"}</button>
         </div>
@@ -392,15 +395,16 @@ function BoardsTab({ tenant }: { tenant: string }) {
       <section className="panel">
         <h2 className="section-title">Boards</h2>
         <div className="list-stack" style={{ marginTop: "1rem" }}>
+          {boards.length === 0 ? <p className="section-subtitle">No boards yet. Create your first board above.</p> : null}
           {boards.map((b) => (
             <button type="button" key={b.id} className={`manage-board-tab${b.id === selected ? " manage-board-tab--active" : ""}`} onClick={() => setSelected(b.id)}>
               <strong>{b.name}</strong>
-              <span className="section-subtitle">{b.board_type}{b.is_private ? " · private" : ""}{!b.is_enabled ? " · disabled" : ""}</span>
+              <span className="section-subtitle">{b.board_type}{b.is_private ? " · private" : ""}{!b.is_enabled ? " · draft" : ""}</span>
             </button>
           ))}
         </div>
       </section>
-      {board ? <BoardEditor key={board.id} board={board} tenant={tenant} onSaved={reload} /> : (
+      {board ? <BoardEditor key={board.id} board={board} tenant={tenant} workspacePublished={workspacePublished} onSaved={reload} /> : (
         <section className="panel"><p className="section-subtitle">Select a board to edit.</p></section>
       )}
       </section>
@@ -408,7 +412,7 @@ function BoardsTab({ tenant }: { tenant: string }) {
   );
 }
 
-function BoardEditor({ board, tenant, onSaved }: { board: ManageBoard; tenant: string; onSaved: () => void }) {
+function BoardEditor({ board, tenant, workspacePublished, onSaved }: { board: ManageBoard; tenant: string; workspacePublished: boolean; onSaved: () => void }) {
   const [name, setName] = useState(board.name);
   const [description, setDescription] = useState(board.description ?? "");
   const [boardType, setBoardType] = useState(board.board_type);
@@ -446,11 +450,11 @@ function BoardEditor({ board, tenant, onSaved }: { board: ManageBoard; tenant: s
     <section className="panel">
       <h2 className="section-title">{board.name}</h2>
       <div className="manage-board-links">
-        {board.is_enabled ? <a className="button" href={publicBoardUrl(tenant, board.slug)}>Open board ↗</a> : null}
-        {!board.is_private && board.is_enabled ? <button className="button" type="button" onClick={() => {
+        {board.is_enabled && workspacePublished ? <a className="button" href={publicBoardUrl(tenant, board.slug)}>Open board ↗</a> : null}
+        {!board.is_private && board.is_enabled && workspacePublished ? <button className="button" type="button" onClick={() => {
           const url = publicBoardUrl(tenant, board.slug);
           void navigator.clipboard.writeText(url).then(() => setNotice("Public board link copied.")).catch(() => setError("Could not copy link. Open the board and copy its URL."));
-        }}>Copy public link</button> : <span className="section-subtitle">{!board.is_enabled ? "Disabled: public route returns 404" : "Private: workspace members only"}</span>}
+        }}>Copy public link</button> : <span className="section-subtitle">{!board.is_enabled ? "Draft board" : !workspacePublished ? "Publish this workspace in Public site to share its boards." : "Private: workspace members only"}</span>}
       </div>
       <div className="manage-fields" style={{ marginTop: "1rem" }}>
         <label className="manage-label">Name<input className="manage-input" value={name} onChange={(e) => setName(e.target.value)} /></label>
@@ -483,7 +487,7 @@ function BoardEditor({ board, tenant, onSaved }: { board: ManageBoard; tenant: s
           {iconUrl ? <button type="button" className="ghost-button" disabled={busy} onClick={() => setIconUrl(null)}>Remove icon</button> : null}
         </div>
         <label className="manage-check"><input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} /> Private board (members only)</label>
-        <label className="manage-check"><input type="checkbox" checked={isEnabled} onChange={(e) => setIsEnabled(e.target.checked)} /> Board enabled (show on public site)</label>
+        <label className="manage-check"><input type="checkbox" checked={isEnabled} onChange={(e) => setIsEnabled(e.target.checked)} /> Publish board</label>
       </div>
       <div style={{ marginTop: "1rem", display: "flex", gap: "0.6rem", alignItems: "center" }}>
         <button type="button" className="button button--cta" disabled={busy || !name.trim()} onClick={save}>{busy ? "Saving…" : "Save changes"}</button>

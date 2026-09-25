@@ -13,7 +13,7 @@ pub async fn list_public_boards(
         SELECT b.id, b.slug, b.name, b.description, b.board_type, b.icon_url, b.background_color, b.dashboard_sections, b.is_enabled
         FROM boards b
         JOIN tenants t ON b.tenant_id = t.id
-        WHERE t.slug = $1 AND b.is_private = false AND b.is_enabled = true
+        WHERE t.slug = $1 AND t.is_published = TRUE AND b.is_private = false AND b.is_enabled = true
         ORDER BY b.created_at ASC
         "#,
     )
@@ -66,7 +66,7 @@ pub async fn get_public_board_by_slug(
         SELECT b.id, b.slug, b.name, b.description, b.board_type, b.is_private, b.is_enabled, b.icon_url, b.background_color, b.dashboard_sections
         FROM boards b
         JOIN tenants t ON b.tenant_id = t.id
-        WHERE t.slug = $1 AND b.slug = $2
+        WHERE t.slug = $1 AND t.is_published = TRUE AND b.slug = $2
         "#,
     )
     .bind(tenant_slug)
@@ -107,8 +107,8 @@ pub async fn create_board(
 ) -> Result<BoardDetailDto, sqlx::Error> {
     sqlx::query_as::<_, BoardDetailDto>(
         r#"
-        INSERT INTO boards (tenant_id, slug, name, description, board_type, is_private, icon_url, background_color, dashboard_sections)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        INSERT INTO boards (tenant_id, slug, name, description, board_type, is_private, icon_url, background_color, dashboard_sections, is_enabled)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE)
         RETURNING id, slug, name, description, board_type, is_private, is_enabled, icon_url, background_color, dashboard_sections
         "#,
     )

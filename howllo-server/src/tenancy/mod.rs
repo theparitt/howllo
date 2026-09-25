@@ -8,7 +8,6 @@ use crate::auth::{require_permission, AuthenticatedUser};
 use crate::db::DbPool;
 use crate::domain::permission::Permission;
 use crate::errors::AppError;
-use crate::repositories::board_repository;
 use crate::repositories::{membership_repository, tenant_branding_repository};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,6 +27,7 @@ pub struct BootstrapTenantDto {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TenantBrandingDto {
+    pub is_published: bool,
     pub tenant_slug: String,
     pub tenant_name: String,
     pub site_name: String,
@@ -100,6 +100,11 @@ pub struct DeleteWorkspaceRequest {
     pub confirm_slug: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SetWorkspacePublicationRequest {
+    pub is_published: bool,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, sqlx::FromRow)]
 pub struct AdminTenantSummaryDto {
     pub id: Uuid,
@@ -107,28 +112,25 @@ pub struct AdminTenantSummaryDto {
     pub name: String,
     pub board_count: i64,
     pub member_count: i64,
+    pub is_published: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
 pub async fn ensure_bootstrap_tenant(pool: &DbPool) -> Result<BootstrapTenantDto, sqlx::Error> {
     if let Some(existing) = get_first_tenant(pool).await? {
-        board_repository::ensure_default_board_for_tenant_slug(pool, &existing.default_tenant_slug)
-            .await?;
         return Ok(existing);
     }
 
     let slug = format!("howllo-demo-{}", &Uuid::new_v4().simple().to_string()[..6]);
     let tenant_id = Uuid::new_v4();
 
-    sqlx::query("INSERT INTO tenants (id, slug, name) VALUES ($1, $2, $3)")
+    sqlx::query("INSERT INTO tenants (id, slug, name, default_board_enabled, is_published) VALUES ($1, $2, $3, FALSE, FALSE)")
         .bind(tenant_id)
         .bind(&slug)
         .bind("Howllo Demo")
         .execute(pool)
         .await?;
-
-    board_repository::ensure_default_board_for_tenant_slug(pool, &slug).await?;
 
     Ok(BootstrapTenantDto {
         default_tenant_slug: slug,
@@ -183,6 +185,7 @@ pub async fn list_admin_tenants(
             t.name,
             COUNT(DISTINCT b.id)::BIGINT AS board_count,
             COUNT(DISTINCT m.user_id)::BIGINT AS member_count,
+            t.is_published,
             t.created_at,
             t.updated_at
         FROM tenants t
@@ -193,7 +196,7 @@ pub async fn list_admin_tenants(
                 SELECT account_id FROM account_memberships
                 WHERE user_id = $1 AND role IN ('owner', 'admin')
            )
-        GROUP BY t.id, t.slug, t.name, t.created_at, t.updated_at
+        GROUP BY t.id, t.slug, t.name, t.is_published, t.created_at, t.updated_at
         ORDER BY t.created_at ASC
         "#,
     )
@@ -232,15 +235,15 @@ pub async fn create_admin_tenant(
         AppError::InternalServerError
     })?;
 
-    let row = sqlx::query!(
+    let row = sqlx::query(
         r#"
-        INSERT INTO tenants (slug, name)
-        VALUES ($1, $2)
+        INSERT INTO tenants (slug, name, default_board_enabled, is_published)
+        VALUES ($1, $2, FALSE, FALSE)
         RETURNING id, slug, name, created_at, updated_at
         "#,
-        final_slug,
-        name,
     )
+    .bind(&final_slug)
+    .bind(name)
     .fetch_one(&mut *tx)
     .await
     .map_err(|error| {
@@ -248,10 +251,16 @@ pub async fn create_admin_tenant(
         AppError::InternalServerError
     })?;
 
-    membership_repository::upsert_membership(&mut tx, row.id, auth.0.id, "owner")
+    let row_id: Uuid = row.get("id");
+    let row_slug: String = row.get("slug");
+    let row_name: String = row.get("name");
+    let row_created_at: DateTime<Utc> = row.get("created_at");
+    let row_updated_at: DateTime<Utc> = row.get("updated_at");
+
+    membership_repository::upsert_membership(&mut tx, row_id, auth.0.id, "owner")
         .await
         .map_err(|error| {
-            tracing::error!(error = %error, tenant_id = %row.id, user_id = %auth.0.id, "error assigning workspace owner");
+            tracing::error!(error = %error, tenant_id = %row_id, user_id = %auth.0.id, "error assigning workspace owner");
             AppError::InternalServerError
         })?;
 
@@ -270,34 +279,28 @@ pub async fn create_admin_tenant(
 
     sqlx::query("UPDATE tenants SET account_id = $1 WHERE id = $2")
         .bind(account_id)
-        .bind(row.id)
+        .bind(row_id)
         .execute(&mut *tx)
         .await
         .map_err(|error| {
-            tracing::error!(error = %error, tenant_id = %row.id, account_id = %account_id, "error linking workspace to account");
+            tracing::error!(error = %error, tenant_id = %row_id, account_id = %account_id, "error linking workspace to account");
             AppError::InternalServerError
         })?;
 
     tx.commit().await.map_err(|error| {
-        tracing::error!(error = %error, tenant_id = %row.id, "error committing workspace creation");
+        tracing::error!(error = %error, tenant_id = %row_id, "error committing workspace creation");
         AppError::InternalServerError
     })?;
 
-    board_repository::ensure_default_board_for_tenant_slug(pool.get_ref(), &row.slug)
-        .await
-        .map_err(|error| {
-            tracing::error!(error = %error, tenant_slug = row.slug.as_str(), "error bootstrapping workspace boards");
-            AppError::InternalServerError
-        })?;
-
     Ok(HttpResponse::Created().json(AdminTenantSummaryDto {
-        id: row.id,
-        slug: row.slug,
-        name: row.name,
-        board_count: 3,
+        id: row_id,
+        slug: row_slug,
+        name: row_name,
+        board_count: 0,
         member_count: 1,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
+        is_published: false,
+        created_at: row_created_at,
+        updated_at: row_updated_at,
     }))
 }
 
@@ -363,6 +366,9 @@ pub async fn get_tenant_branding(
     query: web::Query<TenantBrandingQuery>,
 ) -> Result<impl Responder, AppError> {
     let branding = fetch_tenant_branding(pool.get_ref(), &query.tenant_slug).await?;
+    if !branding.is_published {
+        return Err(AppError::NotFound);
+    }
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "tenant_slug": branding.tenant_slug,
         "tenant_name": branding.tenant_name,
@@ -376,6 +382,51 @@ pub async fn get_tenant_branding(
         "show_feed": branding.show_feed,
         "require_post_approval": branding.require_post_approval,
     })))
+}
+
+#[patch("/api/admin/workspace-publication")]
+pub async fn set_workspace_publication(
+    pool: web::Data<DbPool>,
+    query: web::Query<TenantBrandingQuery>,
+    body: web::Json<SetWorkspacePublicationRequest>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    let tenant_id =
+        membership_repository::resolve_tenant_id(pool.get_ref(), &query.tenant_slug).await?;
+    require_permission(
+        pool.get_ref(),
+        tenant_id,
+        auth.0.id,
+        Permission::ManageSettings,
+    )
+    .await?;
+    if body.is_published {
+        let ready: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM boards WHERE tenant_id = $1 AND is_enabled = TRUE AND is_private = FALSE)"
+        )
+        .bind(tenant_id)
+        .fetch_one(pool.get_ref())
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, %tenant_id, "error checking workspace publication readiness");
+            AppError::InternalServerError
+        })?;
+        if !ready {
+            return Err(AppError::Validation(
+                "Publish at least one public board before publishing the workspace.".to_string(),
+            ));
+        }
+    }
+    sqlx::query("UPDATE tenants SET is_published = $1, updated_at = NOW() WHERE id = $2")
+        .bind(body.is_published)
+        .bind(tenant_id)
+        .execute(pool.get_ref())
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, %tenant_id, "error updating workspace publication");
+            AppError::InternalServerError
+        })?;
+    Ok(HttpResponse::Ok().json(fetch_tenant_branding(pool.get_ref(), &query.tenant_slug).await?))
 }
 
 #[get("/api/admin/tenant-branding")]
@@ -648,6 +699,7 @@ async fn fetch_tenant_branding(
         .ok_or(AppError::NotFound)?;
 
     Ok(TenantBrandingDto {
+        is_published: record.is_published,
         tenant_slug: record.tenant_slug,
         tenant_name: record.tenant_name.clone(),
         site_name: record.site_name.unwrap_or(record.tenant_name),
@@ -827,13 +879,86 @@ mod tests {
 
         let second_req = test::TestRequest::post()
             .uri("/api/admin/tenants")
-            .insert_header(("Authorization", token))
+            .insert_header(("Authorization", token.clone()))
             .set_json(json!({ "name": "Acme Support" }))
             .to_request();
         let second = read_json(test::call_service(&app, second_req).await).await;
 
         let first_slug = first.get("slug").and_then(|v| v.as_str()).unwrap();
         let second_slug = second.get("slug").and_then(|v| v.as_str()).unwrap();
+        assert_eq!(first["board_count"], 0);
+        assert_eq!(first["is_published"], false);
+
+        let admin_list = test::TestRequest::get()
+            .uri(&format!("/api/admin/boards?tenant_slug={first_slug}"))
+            .insert_header(("Authorization", token.clone()))
+            .to_request();
+        let admin_boards = read_json(test::call_service(&app, admin_list).await).await;
+        assert_eq!(admin_boards, json!([]));
+
+        let before_publish = test::TestRequest::get()
+            .uri(&format!("/api/tenant-branding?tenant_slug={first_slug}"))
+            .to_request();
+        assert_eq!(
+            test::call_service(&app, before_publish).await.status(),
+            actix_web::http::StatusCode::NOT_FOUND
+        );
+
+        let premature_publish = test::TestRequest::patch()
+            .uri(&format!(
+                "/api/admin/workspace-publication?tenant_slug={first_slug}"
+            ))
+            .insert_header(("Authorization", token.clone()))
+            .set_json(json!({"is_published": true}))
+            .to_request();
+        assert_eq!(
+            test::call_service(&app, premature_publish).await.status(),
+            actix_web::http::StatusCode::UNPROCESSABLE_ENTITY
+        );
+
+        let create_board = test::TestRequest::post()
+            .uri("/api/admin/boards")
+            .insert_header(("Authorization", token.clone()))
+            .set_json(json!({"tenant_slug": first_slug, "slug": "ideas", "name": "Ideas", "description": "Product ideas", "board_type": "feedback", "is_private": false}))
+            .to_request();
+        let draft_board = read_json(test::call_service(&app, create_board).await).await;
+        assert_eq!(draft_board["is_enabled"], false);
+        let board_id = draft_board["id"].as_str().unwrap();
+
+        let update_board = test::TestRequest::patch()
+            .uri(&format!("/api/admin/boards/{board_id}"))
+            .insert_header(("Authorization", token.clone()))
+            .set_json(json!({"name": "Ideas", "description": "Product ideas", "board_type": "feedback", "is_private": false, "is_enabled": true}))
+            .to_request();
+        assert_eq!(
+            test::call_service(&app, update_board).await.status(),
+            actix_web::http::StatusCode::OK
+        );
+
+        let public_list = test::TestRequest::get()
+            .uri(&format!("/api/boards?tenant_slug={first_slug}"))
+            .to_request();
+        assert_eq!(
+            read_json(test::call_service(&app, public_list).await).await,
+            json!([])
+        );
+
+        let publish = test::TestRequest::patch()
+            .uri(&format!(
+                "/api/admin/workspace-publication?tenant_slug={first_slug}"
+            ))
+            .insert_header(("Authorization", token.clone()))
+            .set_json(json!({"is_published": true}))
+            .to_request();
+        assert_eq!(
+            test::call_service(&app, publish).await.status(),
+            actix_web::http::StatusCode::OK
+        );
+        let public_list = test::TestRequest::get()
+            .uri(&format!("/api/boards?tenant_slug={first_slug}"))
+            .to_request();
+        let public_boards = read_json(test::call_service(&app, public_list).await).await;
+        assert_eq!(public_boards.as_array().unwrap().len(), 1);
 
         // Both workspaces are linked to accounts...
         let account_ids: Vec<uuid::Uuid> = sqlx::query_scalar(

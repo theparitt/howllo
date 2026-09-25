@@ -42,7 +42,7 @@ pub async fn search_posts(
 
     builder.push(" WHERE t.slug = ");
     builder.push_bind(tenant_slug);
-    builder.push(" AND p.is_hidden = false AND p.deleted_at IS NULL ");
+    builder.push(" AND t.is_published = TRUE AND b.is_enabled = TRUE AND p.is_hidden = false AND p.deleted_at IS NULL ");
 
     if use_fts {
         builder.push(" AND p.search_vector @@ plainto_tsquery('english', ");

@@ -125,6 +125,15 @@ export async function getTenantManagementSettings(tenantSlug: string, token: str
   return unwrap<TenantManagementSettings>(response);
 }
 
+export async function setWorkspacePublication(tenantSlug: string, token: string, isPublished: boolean): Promise<TenantManagementSettings> {
+  const response = await apiFetch(buildUrl(`/api/admin/workspace-publication?tenant_slug=${encodeURIComponent(tenantSlug)}`), {
+    method: "PATCH",
+    headers: { "content-type": "application/json", Authorization: token },
+    body: JSON.stringify({ is_published: isPublished }),
+  });
+  return unwrap<TenantManagementSettings>(response);
+}
+
 export async function getWorkspacePolicy(tenantSlug: string, token: string): Promise<WorkspacePolicyView> {
   return unwrap<WorkspacePolicyView>(await apiFetch(
     buildUrl(`/api/admin/workspace-policy?tenant_slug=${encodeURIComponent(tenantSlug)}`),

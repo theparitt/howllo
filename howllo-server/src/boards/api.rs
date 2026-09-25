@@ -420,7 +420,7 @@ mod tests {
     }
 
     #[actix_web::test]
-    async fn listing_boards_bootstraps_default_board_set() {
+    async fn listing_boards_does_not_create_default_boards() {
         let settings = test_settings();
         let _guard = lock_test_db().await;
         let pool = db::establish_connection(&settings.database_url)
@@ -453,15 +453,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = read_json(response).await;
         let boards = body.as_array().unwrap();
-        assert_eq!(boards.len(), 3);
-        let slugs = boards
-            .iter()
-            .map(|board| board.get("slug").and_then(|value| value.as_str()).unwrap())
-            .collect::<std::collections::BTreeSet<_>>();
-        assert_eq!(
-            slugs,
-            std::collections::BTreeSet::from(["bug-reports", "feature-requests", "general",])
-        );
+        assert!(boards.is_empty());
     }
 
     #[actix_web::test]
@@ -481,6 +473,11 @@ mod tests {
         sqlx::query("INSERT INTO tenants (id, slug, name) VALUES ($1, $2, 'Tenant')")
             .bind(tenant_id)
             .bind(&tenant_slug)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO boards (tenant_id, slug, name, board_type, is_default) VALUES ($1, 'general', 'General', 'general', TRUE)")
+            .bind(tenant_id)
             .execute(&pool)
             .await
             .unwrap();
@@ -542,7 +539,7 @@ mod tests {
         assert_eq!(public_list_response.status(), StatusCode::OK);
         let public_list_body = read_json(public_list_response).await;
         let remaining = public_list_body.as_array().unwrap();
-        assert_eq!(remaining.len(), 2);
+        assert_eq!(remaining.len(), 0);
         let remaining_ids = remaining
             .iter()
             .map(|board| board.get("id").and_then(|value| value.as_str()).unwrap())

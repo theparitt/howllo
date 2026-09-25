@@ -31,6 +31,7 @@ export type TenantBranding = {
 };
 
 export type TenantManagementSettings = TenantBranding & {
+  is_published: boolean;
   posts_per_hour: number;
   comments_per_hour: number;
   board_posts_per_10m: number;

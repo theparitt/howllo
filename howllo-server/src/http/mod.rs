@@ -499,15 +499,13 @@ pub mod test_support {
         let moderator_email = format!("{moderator_subject}@example.com");
         let member_email = format!("{member_subject}@example.com");
 
-        sqlx::query!(
-            "INSERT INTO tenants (id, slug, name) VALUES ($1, $2, $3)",
-            tenant_id,
-            tenant_slug,
-            "Acme"
-        )
-        .execute(pool)
-        .await
-        .unwrap();
+        sqlx::query("INSERT INTO tenants (id, slug, name, is_published) VALUES ($1, $2, $3, TRUE)")
+            .bind(tenant_id)
+            .bind(&tenant_slug)
+            .bind("Acme")
+            .execute(pool)
+            .await
+            .unwrap();
 
         sqlx::query!(
             "INSERT INTO users (id, rooiam_subject, email, display_name) VALUES ($1, $2, $3, $4), ($5, $6, $7, $8), ($9, $10, $11, $12)",

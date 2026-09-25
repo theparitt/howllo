@@ -51,13 +51,6 @@ pub async fn list_boards(
     pool: &DbPool,
     tenant_slug: &str,
 ) -> Result<Vec<BoardListItemDto>, AppError> {
-    board_repository::ensure_default_board_for_tenant_slug(pool, tenant_slug)
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, tenant_slug = tenant_slug, "error ensuring default board");
-            AppError::InternalServerError
-        })?;
-
     board_repository::list_public_boards(pool, tenant_slug)
         .await
         .map_err(|e| {
@@ -107,13 +100,6 @@ pub async fn list_admin_boards(
     user_id: Uuid,
 ) -> Result<Vec<BoardDetailDto>, AppError> {
     let tenant_id = require_admin_by_tenant_slug(pool, tenant_slug, user_id).await?;
-
-    board_repository::ensure_default_board_for_tenant_slug(pool, tenant_slug)
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, tenant_slug = tenant_slug, "error ensuring default admin board");
-            AppError::InternalServerError
-        })?;
 
     board_repository::list_admin_boards(pool, tenant_id)
         .await

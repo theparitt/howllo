@@ -71,7 +71,7 @@ pub async fn find_board_access(
         SELECT b.id, b.is_private, t.id as tenant_id
         FROM boards b
         JOIN tenants t ON b.tenant_id = t.id
-        WHERE t.slug = $1 AND b.slug = $2 AND b.is_enabled = TRUE
+        WHERE t.slug = $1 AND t.is_published = TRUE AND b.slug = $2 AND b.is_enabled = TRUE
         "#,
     )
     .bind(tenant_slug)
@@ -98,7 +98,7 @@ pub async fn find_post_access(
             FROM posts p
             JOIN boards b ON p.board_id = b.id
             JOIN tenants t ON p.tenant_id = t.id
-            WHERE p.id = $1 AND t.slug = $2 AND b.is_enabled = TRUE
+            WHERE p.id = $1 AND t.slug = $2 AND t.is_published = TRUE AND b.is_enabled = TRUE
             "#,
         )
         .bind(post_id)
@@ -111,7 +111,8 @@ pub async fn find_post_access(
             SELECT p.tenant_id, p.board_id, p.is_hidden, p.deleted_at, p.is_locked, b.is_private
             FROM posts p
             JOIN boards b ON p.board_id = b.id
-            WHERE p.id = $1 AND b.is_enabled = TRUE
+            JOIN tenants t ON p.tenant_id = t.id
+            WHERE p.id = $1 AND t.is_published = TRUE AND b.is_enabled = TRUE
             "#,
         )
         .bind(post_id)
