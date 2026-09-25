@@ -230,6 +230,18 @@ select {
   font-weight: 700;
 }
 
+.board-list__item,
+.board-page-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.board-list__item { min-width: 0; }
+.board-list__icon { width: 2rem; height: 2rem; object-fit: contain; flex: none; }
+.board-page-heading { justify-content: space-between; flex-wrap: wrap; padding: 0.9rem 1rem; border-radius: var(--radius-md); }
+.board-page-heading .page-lead { margin-top: 0.35rem; }
+
 .manage-board-heading,
 .manage-board-links {
   display: flex;

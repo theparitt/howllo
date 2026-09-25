@@ -154,7 +154,6 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
 
   const roadmapHref = buildTenantPath("/roadmap", branding.tenant_slug, branding.tenant_slug);
   const feedHref = buildTenantPath("/feed", branding.tenant_slug, branding.tenant_slug);
-  const boardsHref = buildTenantPath("/", branding.tenant_slug, branding.tenant_slug);
   const myHref = buildTenantPath(
     "/my/account",
     branding.tenant_slug,
@@ -184,17 +183,12 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
               ) : null}
               <span className="tenant-brand-wordmark">{branding.site_name}</span>
             </Link>
-            <div className="brand__meta">
-              {managerMode ? "Howllo App · Workspace management" : branding.site_name === branding.tenant_name
-                ? "Feedback & feature requests, out in the open."
-                : `${branding.tenant_name} feedback space`}
-            </div>
+            {managerMode ? <div className="brand__meta">Howllo App · Workspace management</div> : null}
           </div>
           {managerMode ? <nav className="nav" aria-label="Workspace management">
             <Link href={homeHref} className="nav__link">View public boards ↗</Link>
             <AuthControl myHref={myHref} />
           </nav> : !loginHome ? <nav className="nav">
-            {branding.show_boards ? <Link href={boardsHref} className="nav__link">Boards</Link> : null}
             {branding.show_feed ? <Link href={feedHref} className="nav__link">Feed</Link> : null}
             {branding.show_roadmap ? <Link href={roadmapHref} className="nav__link">Roadmap</Link> : null}
             {canManage ? <a href={externalAppHref} className="nav__link">Howllo App ↗</a> : null}

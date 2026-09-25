@@ -10,7 +10,6 @@ import { ApiUnavailable } from "@/components/api-unavailable";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { StatusPill } from "@/components/status-pill";
 import { WorkspaceState } from "@/components/workspace-state";
-import { themedSurfaceStyle } from "@/lib/theme";
 import { countLabel } from "@/lib/format";
 import { ApiError } from "@/lib/api";
 import { notFound } from "next/navigation";
@@ -64,56 +63,14 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
     return (
       <div className="page-stack">
         <RealtimeRefresh boardId={board.id} tenantSlug={tenant} />
-        <section
-          className="hero board-hero board-themed-surface"
-          style={themedSurfaceStyle(board.background_color)}
-        >
-          <div className="board-hero__topline">
-            <Link className="back-link" href={buildTenantPath("/", tenant, defaultTenantSlug)}>
-              ← Boards
-            </Link>
-            <div className="board-hero__chips">
-              <span className="chip">{posts.length} posts</span>
-              {board.is_private ? <span className="chip" data-tone="blue">Private</span> : null}
+        <section className="page-head">
+          <Link className="back-link" href={buildTenantPath("/", tenant, defaultTenantSlug)}>← All boards</Link>
+          <div className="board-page-heading" style={board.background_color ? { backgroundColor: board.background_color } : undefined}>
+            <div>
+              <h1 className="page-title">{board.name}</h1>
+              {board.description ? <p className="page-lead">{board.description}</p> : null}
             </div>
-          </div>
-          <div className="board-hero__body">
-            <div className="board-hero__identity">
-              <span
-                className={`board-hero-icon${board.icon_url ? "" : " board-hero-icon--default"}`}
-              >
-                {board.icon_url ? <img src={board.icon_url} alt="" /> : <span className="board-hero-icon__letter">{board.name.trim().charAt(0).toUpperCase()}</span>}
-              </span>
-              <div className="stack stack--tight">
-                <div className="eyebrow-row">
-                  <span className="kicker">{board.board_type}</span>
-                </div>
-                <h1 className="page-title">{board.name}</h1>
-                {board.description ? (
-                  <p className="page-lead">{board.description}</p>
-                ) : (
-                  <p className="page-lead">
-                    Ideas, requests, and issues for this board live here.
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="board-hero__actions">
-              <Link
-                className="button button--cta"
-                href={buildTenantPath(`/boards/${board.slug}/new`, tenant, defaultTenantSlug)}
-              >
-                New post
-              </Link>
-              <Link
-                className="ghost-button"
-                href={buildTenantPath("/dashboard", tenant, defaultTenantSlug, new URLSearchParams({
-                  board: board.slug,
-                }))}
-              >
-                Board overview
-              </Link>
-            </div>
+            <Link className="button" href={buildTenantPath(`/boards/${board.slug}/new`, tenant, defaultTenantSlug)}>New post</Link>
           </div>
         </section>
 

@@ -13,11 +13,11 @@ export function WorkspaceState({ kind, workspaceSlug }: WorkspaceStateProps) {
         </h1>
         <p className="empty-state__copy">
           {kind === "missing"
-            ? "Open Howllo with a workspace URL such as /your-workspace/dashboard or /your-workspace/boards/general."
+            ? "Open Howllo with a workspace URL such as /your-workspace or /your-workspace/boards/general."
             : `There is no workspace with slug or id "${workspaceSlug}". Check the workspace URL and try again.`}
         </p>
         <p className="workspace-state__hint">
-          Example: <code>/howllo-6soj/dashboard</code>
+          Example: <code>/howllo-6soj</code>
         </p>
       </section>
     </div>

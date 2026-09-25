@@ -1,4 +1,4 @@
-import DashboardPage from "@/app/dashboard/page";
+import { redirect } from "next/navigation";
 
 type TenantDashboardPageProps = {
   params: Promise<{
@@ -16,10 +16,6 @@ export default async function TenantDashboardPage({
   const { tenantSlug } = await params;
   const query = await searchParams;
 
-  return DashboardPage({
-    searchParams: Promise.resolve({
-      tenant: tenantSlug,
-      board: query.board,
-    }),
-  });
+  const home = `/${encodeURIComponent(tenantSlug)}`;
+  redirect(query.board ? `${home}/boards/${encodeURIComponent(query.board)}` : home);
 }

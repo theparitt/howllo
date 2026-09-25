@@ -24,7 +24,7 @@ import {
   readStoredBearerToken,
   subscribeToBearerTokenChange,
 } from "@/components/dev-auth-panel";
-import type { DashboardSection, ManageBoard, MyInvitation, WorkspaceMember } from "@/lib/types";
+import type { ManageBoard, MyInvitation, WorkspaceMember } from "@/lib/types";
 import { API_BASE_URL } from "@/lib/config";
 import { uploadImage } from "@/lib/api";
 import { ParticipantsTab } from "./participants-tab";
@@ -35,11 +35,6 @@ import { prepareBrandImage } from "../lib/prepare-brand-image";
 const INVITE_ROLES = ["admin", "moderator"];
 const MEMBER_ROLES = ["owner", "admin", "moderator", "member"];
 const BOARD_TYPES = ["feature-requests", "bug-reports", "discussions", "announcements"];
-const SECTIONS: { id: DashboardSection; label: string }[] = [
-  { id: "progress", label: "Progress" },
-  { id: "latest", label: "Latest" },
-  { id: "top", label: "Top requests" },
-];
 const PUBLIC_WEB_URL = (process.env.NEXT_PUBLIC_HOWLLO_PUBLIC_WEB_URL || "http://localhost:7703").replace(/\/$/, "");
 
 function publicBoardUrl(tenant: string, boardSlug: string): string {
@@ -417,13 +412,9 @@ function BoardEditor({ board, tenant, onSaved }: { board: ManageBoard; tenant: s
   const [isEnabled, setIsEnabled] = useState(board.is_enabled);
   const [bg, setBg] = useState(board.background_color ?? "#fff1ea");
   const [iconUrl, setIconUrl] = useState(board.icon_url);
-  const [sections, setSections] = useState<DashboardSection[]>(board.dashboard_sections ?? ["progress", "latest", "top"]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-
-  const toggle = (s: DashboardSection) =>
-    setSections((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : SECTIONS.map((x) => x.id).filter((x) => x === s || cur.includes(x))));
 
   const save = async () => {
     setBusy(true); setError(null); setNotice(null);
@@ -435,7 +426,7 @@ function BoardEditor({ board, tenant, onSaved }: { board: ManageBoard; tenant: s
         is_private: isPrivate,
         is_enabled: isEnabled,
         background_color: bg || undefined,
-        dashboard_sections: sections,
+        dashboard_sections: board.dashboard_sections,
         icon_url: iconUrl,
       }, readStoredBearerToken(tenant).trim());
       setNotice("Saved.");
@@ -489,16 +480,6 @@ function BoardEditor({ board, tenant, onSaved }: { board: ManageBoard; tenant: s
         </div>
         <label className="manage-check"><input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} /> Private board (members only)</label>
         <label className="manage-check"><input type="checkbox" checked={isEnabled} onChange={(e) => setIsEnabled(e.target.checked)} /> Board enabled (show on public site)</label>
-        <div className="manage-label">
-          Dashboard sections
-          <div className="manage-sections">
-            {SECTIONS.map((s) => (
-              <label key={s.id} className="manage-check">
-                <input type="checkbox" checked={sections.includes(s.id)} onChange={() => toggle(s.id)} /> {s.label}
-              </label>
-            ))}
-          </div>
-        </div>
       </div>
       <div style={{ marginTop: "1rem", display: "flex", gap: "0.6rem", alignItems: "center" }}>
         <button type="button" className="button button--cta" disabled={busy || !name.trim()} onClick={save}>{busy ? "Saving…" : "Save changes"}</button>

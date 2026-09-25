@@ -116,7 +116,7 @@ export function ActivityFeed() {
 
   const hrefFor = (n: Notification) => {
     const q = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
-    return n.post_id ? `/posts/${n.post_id}${q}` : `/dashboard${q}`;
+    return n.post_id ? `/posts/${n.post_id}${q}` : tenant ? `/${encodeURIComponent(tenant)}` : "/";
   };
 
   const openNotification = async (n: Notification) => {

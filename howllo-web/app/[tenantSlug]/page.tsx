@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ApiUnavailable } from "@/components/api-unavailable";
 import { ApiError, getBoards, getTenantBranding } from "@/lib/api";
-import { themedSurfaceStyle } from "@/lib/theme";
 import { notFound } from "next/navigation";
 
 type TenantRootPageProps = {
@@ -29,27 +28,27 @@ export default async function TenantRootPage({ params }: TenantRootPageProps) {
   return (
       <div className="page-stack">
         <section className="page-head">
-          <span className="kicker">Feedback workspace</span>
-          <h1 className="page-title">{branding.site_name} boards</h1>
-          <p className="page-lead">Choose a board to read updates, share an idea, or report a problem.</p>
+          <h1 className="page-title">Boards</h1>
+          <p className="page-lead">Choose where to post or read feedback.</p>
         </section>
-        {boards.length ? <section className="board-directory" aria-label="Public boards">
+        {boards.length ? <section className="list-stack" aria-label="Public boards">
           {boards.map((board) => (
             <Link
-              className="board-directory__card"
+              className="list-row"
               key={board.id}
               href={`/${encodeURIComponent(tenantSlug)}/boards/${encodeURIComponent(board.slug)}`}
-              style={themedSurfaceStyle(board.background_color)}
+              style={board.background_color ? { backgroundColor: board.background_color } : undefined}
             >
-              <span className="board-directory__identity">{board.icon_url ? <img src={board.icon_url} alt="" /> : <span className="board-directory__initial">{board.name.trim().charAt(0).toUpperCase()}</span>}<span className="kicker">{board.board_type}</span></span>
-              <h2>{board.name}</h2>
-              <p>{board.description || "Read and share feedback on this board."}</p>
-              <span className="board-directory__open">Open board →</span>
+              <span className="board-list__item">
+                {board.icon_url ? <img className="board-list__icon" src={board.icon_url} alt="" /> : null}
+                <span><strong>{board.name}</strong>{board.description ? <span className="section-subtitle">{board.description}</span> : null}</span>
+              </span>
+              <span aria-hidden="true">→</span>
             </Link>
           ))}
         </section> : <section className="panel empty-state">
           <h2 className="empty-state__title">No public boards yet</h2>
-          <p className="empty-state__copy">The workspace owner can add a public board from Manage → Boards.</p>
+          <p className="empty-state__copy">Check back soon.</p>
         </section>}
       </div>
   );

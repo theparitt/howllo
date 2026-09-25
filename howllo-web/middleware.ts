@@ -5,7 +5,7 @@ import { subdomainSlug } from "@/lib/subdomain";
 // On a workspace subdomain (`{slug}.<base>`), serve that workspace's public board
 // while keeping the clean URL: internally rewrite `/…` → `/{slug}/…` so the
 // [tenantSlug] routes render, but the browser still shows `{slug}.<base>/…`.
-// The bare/app host is untouched (tenant dashboard).
+// The bare/app host is untouched.
 export function middleware(req: NextRequest) {
   const slug = subdomainSlug(req.headers.get("host"));
   if (!slug) return NextResponse.next();
@@ -25,8 +25,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Root of the board → the board dashboard (no redirect, keeps the subdomain URL).
-  url.pathname = path === "/" ? `/${slug}/dashboard` : `/${slug}${path}`;
+  // Root opens the board list; each board opens its posts.
+  url.pathname = path === "/" ? `/${slug}` : `/${slug}${path}`;
   return NextResponse.rewrite(url);
 }
 

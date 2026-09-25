@@ -16,9 +16,6 @@ export function Header() {
           <div className="brand__meta">Feedback &amp; feature requests, out in the open.</div>
         </div>
         <nav className="nav">
-          <Link href="/dashboard" className="nav__link">
-            Dashboard
-          </Link>
           <Link href="/roadmap" className="nav__link">
             Roadmap
           </Link>

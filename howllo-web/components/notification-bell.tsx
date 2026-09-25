@@ -163,8 +163,7 @@ export function NotificationBell() {
   const hrefFor = (n: Notification) => {
     const q = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
     if (n.post_id) return `/posts/${n.post_id}${q}`;
-    if (n.event_type.startsWith("invitation")) return `/dashboard${q}`;
-    return `/dashboard${q}`;
+    return tenant ? `/${encodeURIComponent(tenant)}` : "/";
   };
 
   const openNotification = async (n: Notification) => {
