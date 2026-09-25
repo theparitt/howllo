@@ -30,6 +30,13 @@ export type TenantBranding = {
   require_post_approval: boolean;
 };
 
+export type TenantManagementSettings = TenantBranding & {
+  posts_per_hour: number;
+  comments_per_hour: number;
+  board_posts_per_10m: number;
+  board_comments_per_10m: number;
+};
+
 export type WorkspaceAuthConfig = {
   tenant_slug: string;
   provider: string;

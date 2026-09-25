@@ -235,6 +235,131 @@ mod review_tests {
             .iter()
             .any(|item| item["id"] == approved_id));
     }
+
+    #[actix_web::test]
+    async fn configurable_board_limit_pauses_everyone_on_that_board() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+        sqlx::query("UPDATE posts SET created_at = now() - interval '2 days'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO tenant_branding (tenant_id, board_posts_per_10m) SELECT id, 1 FROM tenants WHERE slug = $1")
+            .bind(&seed.tenant_slug).execute(&pool).await.unwrap();
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+        let path = format!("/api/boards/{}/posts", seed.board_slug);
+        let member = bearer_for(
+            &seed.member_subject,
+            "member@example.com",
+            "Member",
+            &settings.rooiam_jwt_secret,
+        );
+        let moderator = bearer_for(
+            &seed.moderator_subject,
+            "moderator@example.com",
+            "Moderator",
+            &settings.rooiam_jwt_secret,
+        );
+
+        let first = test::TestRequest::post().uri(&path)
+            .insert_header(("Authorization", member))
+            .set_json(json!({"tenant_slug": seed.tenant_slug, "title": "One idea", "body": "First request"}))
+            .to_request();
+        assert_eq!(
+            test::call_service(&app, first).await.status(),
+            StatusCode::CREATED
+        );
+
+        let second = test::TestRequest::post().uri(&path)
+            .insert_header(("Authorization", moderator))
+            .set_json(json!({"tenant_slug": seed.tenant_slug, "title": "Another idea", "body": "Second request"}))
+            .to_request();
+        let response = test::call_service(&app, second).await;
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        let body = read_json(response).await;
+        assert!(body["error"]["message"].as_str().unwrap().contains("board"));
+        let pauses: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM board_write_cooldowns WHERE kind = 'post' AND until_at > now()",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(pauses, 1);
+    }
+
+    #[actix_web::test]
+    async fn account_exceeding_limit_has_later_post_held_for_review() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+        sqlx::query("UPDATE posts SET created_at = now() - interval '2 days'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO tenant_branding (tenant_id, posts_per_hour) SELECT id, 1 FROM tenants WHERE slug = $1")
+            .bind(&seed.tenant_slug).execute(&pool).await.unwrap();
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+        let path = format!("/api/boards/{}/posts", seed.board_slug);
+        let member = bearer_for(
+            &seed.member_subject,
+            "member@example.com",
+            "Member",
+            &settings.rooiam_jwt_secret,
+        );
+
+        let make_request = |title: &str| {
+            test::TestRequest::post().uri(&path)
+            .insert_header(("Authorization", member.clone()))
+            .set_json(json!({"tenant_slug": seed.tenant_slug, "title": title, "body": "A useful request"}))
+            .to_request()
+        };
+        assert_eq!(
+            test::call_service(&app, make_request("First idea"))
+                .await
+                .status(),
+            StatusCode::CREATED
+        );
+        assert_eq!(
+            test::call_service(&app, make_request("Too fast"))
+                .await
+                .status(),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+        let flagged: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM workspace_spam_flags WHERE user_id = $1 AND until_at > now())")
+            .bind(seed.member_user_id).fetch_one(&pool).await.unwrap();
+        assert!(flagged);
+        sqlx::query("UPDATE posts SET created_at = now() - interval '2 hours' WHERE user_id = $1")
+            .bind(seed.member_user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let response = test::call_service(&app, make_request("Later idea")).await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+        assert_eq!(read_json(response).await["review_state"], "pending");
+    }
 }
 
 #[derive(Deserialize)]

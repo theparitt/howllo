@@ -300,6 +300,27 @@ pub mod test_support {
             ALTER TABLE tenant_branding
                 ADD COLUMN IF NOT EXISTS require_post_approval BOOLEAN NOT NULL DEFAULT FALSE;
 
+            ALTER TABLE tenant_branding
+                ADD COLUMN IF NOT EXISTS posts_per_hour INT NOT NULL DEFAULT 3,
+                ADD COLUMN IF NOT EXISTS comments_per_hour INT NOT NULL DEFAULT 15,
+                ADD COLUMN IF NOT EXISTS board_posts_per_10m INT NOT NULL DEFAULT 20,
+                ADD COLUMN IF NOT EXISTS board_comments_per_10m INT NOT NULL DEFAULT 60;
+
+            CREATE TABLE IF NOT EXISTS board_write_cooldowns (
+                board_id UUID NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL,
+                until_at TIMESTAMPTZ NOT NULL,
+                PRIMARY KEY (board_id, kind)
+            );
+
+            CREATE TABLE IF NOT EXISTS workspace_spam_flags (
+                tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                until_at TIMESTAMPTZ NOT NULL,
+                reason TEXT NOT NULL,
+                PRIMARY KEY (tenant_id, user_id)
+            );
+
             ALTER TABLE posts
                 ADD COLUMN IF NOT EXISTS review_state TEXT NOT NULL DEFAULT 'approved';
 
@@ -412,6 +433,8 @@ pub mod test_support {
                 post_tags,
                 tags,
                 post_votes,
+                board_write_cooldowns,
+                workspace_spam_flags,
                 comments,
                 posts,
                 workspace_invitations,

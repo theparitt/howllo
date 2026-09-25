@@ -17,6 +17,10 @@ pub struct TenantBrandingRecord {
     pub show_boards: bool,
     pub show_feed: bool,
     pub require_post_approval: bool,
+    pub posts_per_hour: i32,
+    pub comments_per_hour: i32,
+    pub board_posts_per_10m: i32,
+    pub board_comments_per_10m: i32,
 }
 
 pub async fn get_by_tenant_slug(
@@ -37,7 +41,11 @@ pub async fn get_by_tenant_slug(
             COALESCE(b.show_roadmap, TRUE) AS show_roadmap,
             COALESCE(b.show_boards, TRUE) AS show_boards,
             COALESCE(b.show_feed, TRUE) AS show_feed,
-            COALESCE(b.require_post_approval, FALSE) AS require_post_approval
+            COALESCE(b.require_post_approval, FALSE) AS require_post_approval,
+            COALESCE(b.posts_per_hour, 3) AS posts_per_hour,
+            COALESCE(b.comments_per_hour, 15) AS comments_per_hour,
+            COALESCE(b.board_posts_per_10m, 20) AS board_posts_per_10m,
+            COALESCE(b.board_comments_per_10m, 60) AS board_comments_per_10m
         FROM tenants t
         LEFT JOIN tenant_branding b ON b.tenant_id = t.id
         WHERE t.slug = $1
@@ -63,6 +71,10 @@ pub async fn upsert(
     show_boards: Option<bool>,
     show_feed: Option<bool>,
     require_post_approval: Option<bool>,
+    posts_per_hour: Option<i32>,
+    comments_per_hour: Option<i32>,
+    board_posts_per_10m: Option<i32>,
+    board_comments_per_10m: Option<i32>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
@@ -76,9 +88,13 @@ pub async fn upsert(
             show_roadmap,
             show_boards,
             show_feed,
-            require_post_approval
+            require_post_approval,
+            posts_per_hour,
+            comments_per_hour,
+            board_posts_per_10m,
+            board_comments_per_10m
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, TRUE), COALESCE($9, TRUE), COALESCE($10, FALSE))
+        VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, TRUE), COALESCE($9, TRUE), COALESCE($10, FALSE), COALESCE($11, 3), COALESCE($12, 15), COALESCE($13, 20), COALESCE($14, 60))
         ON CONFLICT (tenant_id)
         DO UPDATE SET
             site_name = EXCLUDED.site_name,
@@ -90,6 +106,10 @@ pub async fn upsert(
             show_boards = COALESCE($8, tenant_branding.show_boards),
             show_feed = COALESCE($9, tenant_branding.show_feed),
             require_post_approval = COALESCE($10, tenant_branding.require_post_approval),
+            posts_per_hour = COALESCE($11, tenant_branding.posts_per_hour),
+            comments_per_hour = COALESCE($12, tenant_branding.comments_per_hour),
+            board_posts_per_10m = COALESCE($13, tenant_branding.board_posts_per_10m),
+            board_comments_per_10m = COALESCE($14, tenant_branding.board_comments_per_10m),
             updated_at = NOW()
         "#,
     )
@@ -103,6 +123,10 @@ pub async fn upsert(
     .bind(show_boards)
     .bind(show_feed)
     .bind(require_post_approval)
+    .bind(posts_per_hour)
+    .bind(comments_per_hour)
+    .bind(board_posts_per_10m)
+    .bind(board_comments_per_10m)
     .execute(pool)
     .await?;
 
@@ -123,5 +147,9 @@ fn map_branding_row(row: sqlx::postgres::PgRow) -> TenantBrandingRecord {
         show_boards: row.get("show_boards"),
         show_feed: row.get("show_feed"),
         require_post_approval: row.get("require_post_approval"),
+        posts_per_hour: row.get("posts_per_hour"),
+        comments_per_hour: row.get("comments_per_hour"),
+        board_posts_per_10m: row.get("board_posts_per_10m"),
+        board_comments_per_10m: row.get("board_comments_per_10m"),
     }
 }

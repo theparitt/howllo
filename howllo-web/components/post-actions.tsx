@@ -10,6 +10,16 @@ type PostActionsProps = {
   postId: string;
 };
 
+function actionErrorMessage(cause: unknown, fallback: string): string {
+  if (!(cause instanceof Error)) return fallback;
+  try {
+    const response = JSON.parse(cause.message) as { error?: { message?: string } };
+    return response.error?.message || cause.message;
+  } catch {
+    return cause.message;
+  }
+}
+
 export function PostActions({ tenantSlug, postId }: PostActionsProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -31,11 +41,7 @@ export function PostActions({ tenantSlug, postId }: PostActionsProps) {
       await run(token);
       router.refresh();
     } catch (submissionError) {
-      setError(
-        submissionError instanceof Error
-          ? submissionError.message
-          : "Action failed.",
-      );
+      setError(actionErrorMessage(submissionError, "Action failed."));
     } finally {
       setBusy(null);
     }
@@ -84,7 +90,7 @@ export function CommentComposer({ tenantSlug, postId, isLocked }: PostActionsPro
           setError(null);
           createComment({ postId, body: comment.trim(), token })
             .then(() => { setComment(""); router.refresh(); })
-            .catch((cause) => setError(cause instanceof Error ? cause.message : "Could not post comment."))
+            .catch((cause) => setError(actionErrorMessage(cause, "Could not post comment.")))
             .finally(() => setBusy(false));
         }}
       >

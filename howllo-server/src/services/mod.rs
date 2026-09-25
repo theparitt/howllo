@@ -8,6 +8,7 @@ pub mod moderation_note_service;
 pub mod moderation_service;
 pub mod post_service;
 pub mod roadmap_service;
+pub mod spam_guard;
 pub mod subscription_service;
 pub mod tag_service;
 pub mod vote_service;

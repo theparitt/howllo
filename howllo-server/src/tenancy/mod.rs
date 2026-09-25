@@ -39,6 +39,10 @@ pub struct TenantBrandingDto {
     pub show_boards: bool,
     pub show_feed: bool,
     pub require_post_approval: bool,
+    pub posts_per_hour: i32,
+    pub comments_per_hour: i32,
+    pub board_posts_per_10m: i32,
+    pub board_comments_per_10m: i32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -60,6 +64,10 @@ pub struct UpdateTenantBrandingRequest {
     pub show_feed: Option<bool>,
     #[serde(default)]
     pub require_post_approval: Option<bool>,
+    pub posts_per_hour: Option<i32>,
+    pub comments_per_hour: Option<i32>,
+    pub board_posts_per_10m: Option<i32>,
+    pub board_comments_per_10m: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -355,6 +363,37 @@ pub async fn get_tenant_branding(
     query: web::Query<TenantBrandingQuery>,
 ) -> Result<impl Responder, AppError> {
     let branding = fetch_tenant_branding(pool.get_ref(), &query.tenant_slug).await?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "tenant_slug": branding.tenant_slug,
+        "tenant_name": branding.tenant_name,
+        "site_name": branding.site_name,
+        "logo_url": branding.logo_url,
+        "accent_color": branding.accent_color,
+        "background_color": branding.background_color,
+        "show_powered_by": branding.show_powered_by,
+        "show_roadmap": branding.show_roadmap,
+        "show_boards": branding.show_boards,
+        "show_feed": branding.show_feed,
+        "require_post_approval": branding.require_post_approval,
+    })))
+}
+
+#[get("/api/admin/tenant-branding")]
+pub async fn get_tenant_management_settings(
+    pool: web::Data<DbPool>,
+    query: web::Query<TenantBrandingQuery>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    let tenant_id =
+        membership_repository::resolve_tenant_id(pool.get_ref(), &query.tenant_slug).await?;
+    require_permission(
+        pool.get_ref(),
+        tenant_id,
+        auth.0.id,
+        Permission::ManageSettings,
+    )
+    .await?;
+    let branding = fetch_tenant_branding(pool.get_ref(), &query.tenant_slug).await?;
     Ok(HttpResponse::Ok().json(branding))
 }
 
@@ -397,6 +436,18 @@ pub async fn update_tenant_branding(
     if let Some(ref value) = background_color {
         validate_color(value, "background_color")?;
     }
+    for (name, value, max) in [
+        ("posts_per_hour", body.posts_per_hour, 100),
+        ("comments_per_hour", body.comments_per_hour, 300),
+        ("board_posts_per_10m", body.board_posts_per_10m, 500),
+        ("board_comments_per_10m", body.board_comments_per_10m, 1000),
+    ] {
+        if value.is_some_and(|n| n < 1 || n > max) {
+            return Err(AppError::Validation(format!(
+                "{name} must be between 1 and {max}"
+            )));
+        }
+    }
 
     tenant_branding_repository::upsert(
         pool.get_ref(),
@@ -410,6 +461,10 @@ pub async fn update_tenant_branding(
         body.show_boards,
         body.show_feed,
         body.require_post_approval,
+        body.posts_per_hour,
+        body.comments_per_hour,
+        body.board_posts_per_10m,
+        body.board_comments_per_10m,
     )
     .await
     .map_err(|error| {
@@ -604,6 +659,10 @@ async fn fetch_tenant_branding(
         show_boards: record.show_boards,
         show_feed: record.show_feed,
         require_post_approval: record.require_post_approval,
+        posts_per_hour: record.posts_per_hour,
+        comments_per_hour: record.comments_per_hour,
+        board_posts_per_10m: record.board_posts_per_10m,
+        board_comments_per_10m: record.board_comments_per_10m,
     })
 }
 
@@ -950,7 +1009,11 @@ mod tests {
                 "show_powered_by": false,
                 "show_roadmap": false,
                 "show_boards": false,
-                "show_feed": false
+                "show_feed": false,
+                "posts_per_hour": 5,
+                "comments_per_hour": 24,
+                "board_posts_per_10m": 30,
+                "board_comments_per_10m": 80
             }))
             .to_request();
         let update_response = test::call_service(&app, update_request).await;
@@ -994,5 +1057,19 @@ mod tests {
             get_body.get("show_feed").and_then(|value| value.as_bool()),
             Some(false)
         );
+        assert!(get_body.get("posts_per_hour").is_none());
+
+        let admin_get = test::TestRequest::get()
+            .uri(&format!(
+                "/api/admin/tenant-branding?tenant_slug={}",
+                seed.tenant_slug
+            ))
+            .insert_header(("Authorization", token))
+            .to_request();
+        let admin_response = test::call_service(&app, admin_get).await;
+        assert_eq!(admin_response.status(), StatusCode::OK);
+        let admin_body = read_json(admin_response).await;
+        assert_eq!(admin_body["posts_per_hour"], 5);
+        assert_eq!(admin_body["board_comments_per_10m"], 80);
     }
 }

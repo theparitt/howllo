@@ -11,6 +11,7 @@ use crate::memberships;
 use crate::notifications::{self, FollowNotification};
 use crate::repositories::{comment_repository, subscription_repository};
 use crate::services::post_service;
+use crate::services::spam_guard;
 
 fn snippet(body: &str) -> String {
     let trimmed = body.trim();
@@ -28,6 +29,17 @@ pub async fn create_comment(
     body: &str,
 ) -> Result<CommentCreatedDto, AppError> {
     let access = post_service::ensure_post_interaction_access(pool, post_id, user_id, true).await?;
+    let settings = sqlx::query("SELECT comments_per_hour, board_comments_per_10m FROM tenant_branding WHERE tenant_id = $1")
+        .bind(access.tenant_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
+    let comments_per_hour: i32 = settings
+        .as_ref()
+        .map_or(15, |row| row.get("comments_per_hour"));
+    let board_comments_per_10m: i32 = settings
+        .as_ref()
+        .map_or(60, |row| row.get("board_comments_per_10m"));
 
     let mut tx = pool
         .begin()
@@ -49,9 +61,34 @@ pub async fn create_comment(
     .map_err(|_| AppError::InternalServerError)?;
     let last_hour: i64 = activity.get("last_hour");
     let latest: Option<DateTime<Utc>> = activity.get("latest");
-    if last_hour >= 15 || latest.is_some_and(|at| at > Utc::now() - Duration::seconds(10)) {
+    if last_hour >= i64::from(comments_per_hour) {
+        spam_guard::flag_account(
+            &mut tx,
+            access.tenant_id,
+            user_id,
+            "Commenting rate exceeded",
+        )
+        .await?;
+        tx.commit()
+            .await
+            .map_err(|_| AppError::InternalServerError)?;
+        return Err(AppError::TooManyRequests(
+            "You have reached the comment limit. Please try again later.".to_string(),
+        ));
+    }
+    if latest.is_some_and(|at| at > Utc::now() - Duration::seconds(10)) {
         return Err(AppError::TooManyRequests(
             "Please wait before commenting again.".to_string(),
+        ));
+    }
+    if spam_guard::board_is_paused(&mut tx, access.board_id, "comment", board_comments_per_10m)
+        .await?
+    {
+        tx.commit()
+            .await
+            .map_err(|_| AppError::InternalServerError)?;
+        return Err(AppError::TooManyRequests(
+            "This board is receiving unusually high activity. Comments are paused for a few minutes; please try again shortly.".to_string(),
         ));
     }
 

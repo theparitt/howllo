@@ -228,6 +228,64 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn board_comment_flood_pauses_different_accounts() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+        sqlx::query("UPDATE comments SET created_at = now() - interval '2 days'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO tenant_branding (tenant_id, board_comments_per_10m) SELECT id, 1 FROM tenants WHERE slug = $1")
+            .bind(&seed.tenant_slug).execute(&pool).await.unwrap();
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+        let path = format!("/api/posts/{}/comments", seed.canonical_post_id);
+        let member = bearer_for(
+            &seed.member_subject,
+            "member@example.com",
+            "Member",
+            &settings.rooiam_jwt_secret,
+        );
+        let moderator = bearer_for(
+            &seed.moderator_subject,
+            "moderator@example.com",
+            "Moderator",
+            &settings.rooiam_jwt_secret,
+        );
+        let first = test::TestRequest::post()
+            .uri(&path)
+            .insert_header(("Authorization", member))
+            .set_json(json!({"body": "First comment"}))
+            .to_request();
+        assert_eq!(
+            test::call_service(&app, first).await.status(),
+            StatusCode::CREATED
+        );
+        let second = test::TestRequest::post()
+            .uri(&path)
+            .insert_header(("Authorization", moderator))
+            .set_json(json!({"body": "Second comment"}))
+            .to_request();
+        let response = test::call_service(&app, second).await;
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(read_json(response).await["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("board"));
+    }
+
+    #[actix_web::test]
     async fn hidden_comments_are_excluded_from_public_list() {
         let settings = test_settings();
         let _guard = lock_test_db().await;

@@ -13,6 +13,7 @@ use crate::dto::{
 use crate::errors::AppError;
 use crate::memberships;
 use crate::repositories::{post_repository, tenant_branding_repository};
+use crate::services::spam_guard;
 use crate::statuses::FeedbackStatus;
 
 pub struct BoardPostListInput<'a> {
@@ -30,6 +31,7 @@ pub struct BoardPostListInput<'a> {
 
 pub struct PostInteractionAccess {
     pub tenant_id: Uuid,
+    pub board_id: Uuid,
 }
 
 pub async fn ensure_board_access(
@@ -257,14 +259,14 @@ pub async fn create_post(
         .await
         .map_err(|_| AppError::Forbidden)?;
 
-    let approval_required = tenant_branding_repository::get_by_tenant_slug(pool, tenant_slug)
+    let spam_settings = tenant_branding_repository::get_by_tenant_slug(pool, tenant_slug)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, tenant_slug, "error fetching post approval setting");
             AppError::InternalServerError
         })?
-        .ok_or(AppError::NotFound)?
-        .require_post_approval;
+        .ok_or(AppError::NotFound)?;
+    let approval_required = spam_settings.require_post_approval;
 
     // Serialize writes by account and workspace so concurrent requests cannot
     // bypass the database-backed posting limits.
@@ -293,12 +295,36 @@ pub async fn create_post(
     let last_hour: i64 = activity.get("last_hour");
     let last_day: i64 = activity.get("last_day");
     let latest: Option<DateTime<Utc>> = activity.get("latest");
-    if last_hour >= 3
-        || last_day >= 10
-        || latest.is_some_and(|at| at > Utc::now() - Duration::seconds(30))
+    if last_hour >= i64::from(spam_settings.posts_per_hour)
+        || last_day >= i64::from(spam_settings.posts_per_hour) * 4
     {
+        spam_guard::flag_account(&mut tx, board.tenant_id, user_id, "Posting rate exceeded")
+            .await?;
+        tx.commit()
+            .await
+            .map_err(|_| AppError::InternalServerError)?;
+        return Err(AppError::TooManyRequests(
+            "You have reached the posting limit. Please try again later.".to_string(),
+        ));
+    }
+    if latest.is_some_and(|at| at > Utc::now() - Duration::seconds(30)) {
         return Err(AppError::TooManyRequests(
             "Please wait before posting again.".to_string(),
+        ));
+    }
+    if spam_guard::board_is_paused(
+        &mut tx,
+        board.board_id,
+        "post",
+        spam_settings.board_posts_per_10m,
+    )
+    .await?
+    {
+        tx.commit()
+            .await
+            .map_err(|_| AppError::InternalServerError)?;
+        return Err(AppError::TooManyRequests(
+            "This board is receiving unusually high activity. Posting is paused for a few minutes; please try again shortly.".to_string(),
         ));
     }
 
@@ -311,8 +337,11 @@ pub async fn create_post(
     .await
     .map_err(|_| AppError::InternalServerError)?;
     let links = body.matches("https://").count() + body.matches("http://").count();
+    let flagged = spam_guard::account_is_flagged(&mut tx, board.tenant_id, user_id).await?;
     let review_reason = if approval_required {
         Some("Workspace approval required")
+    } else if flagged {
+        Some("Account exceeded posting limit")
     } else if duplicate {
         Some("Similar post title")
     } else if links >= 2 {
@@ -407,5 +436,6 @@ pub async fn ensure_post_interaction_access(
 
     Ok(PostInteractionAccess {
         tenant_id: post.tenant_id,
+        board_id: post.board_id,
     })
 }

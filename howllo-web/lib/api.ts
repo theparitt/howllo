@@ -19,6 +19,7 @@ import type {
   StatusHistoryItem,
   Tag,
   TenantBranding,
+  TenantManagementSettings,
   WorkspaceAuthConfig,
   WebhookEndpoint,
 } from "@/lib/types";
@@ -96,8 +97,8 @@ export async function getTenantBranding(tenantSlug: string): Promise<TenantBrand
 export async function managerUpdateTenantBranding(
   tenantSlug: string,
   token: string,
-  input: Pick<TenantBranding, "site_name" | "logo_url" | "accent_color" | "background_color" | "show_powered_by" | "show_roadmap" | "show_boards" | "show_feed" | "require_post_approval">,
-): Promise<TenantBranding> {
+  input: Pick<TenantManagementSettings, "site_name" | "logo_url" | "accent_color" | "background_color" | "show_powered_by" | "show_roadmap" | "show_boards" | "show_feed" | "require_post_approval" | "posts_per_hour" | "comments_per_hour" | "board_posts_per_10m" | "board_comments_per_10m">,
+): Promise<TenantManagementSettings> {
   const response = await apiFetch(
     buildUrl(`/api/admin/tenant-branding?tenant_slug=${encodeURIComponent(tenantSlug)}`),
     {
@@ -106,7 +107,15 @@ export async function managerUpdateTenantBranding(
       body: JSON.stringify(input),
     },
   );
-  return unwrap<TenantBranding>(response);
+  return unwrap<TenantManagementSettings>(response);
+}
+
+export async function getTenantManagementSettings(tenantSlug: string, token: string): Promise<TenantManagementSettings> {
+  const response = await apiFetch(
+    buildUrl(`/api/admin/tenant-branding?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { headers: { Authorization: token }, cache: "no-store" },
+  );
+  return unwrap<TenantManagementSettings>(response);
 }
 
 export async function getWorkspaceAuthConfig(

@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getTenantBranding, managerUpdateTenantBranding, uploadImage } from "@/lib/api";
+import { getTenantManagementSettings, managerUpdateTenantBranding, uploadImage } from "@/lib/api";
 import { readStoredBearerToken } from "@/components/dev-auth-panel";
 import { prepareBrandImage } from "../lib/prepare-brand-image";
 import { contrastInk } from "@/lib/theme";
-import type { TenantBranding } from "@/lib/types";
+import type { TenantManagementSettings } from "@/lib/types";
 
 const PRESETS = [
   { name: "Coral", accent: "#e0522f", background: "#fff3ec" },
@@ -14,7 +14,7 @@ const PRESETS = [
   { name: "Violet", accent: "#674bac", background: "#f3effb" },
 ];
 const COLOR = /^#[0-9a-fA-F]{6}$/;
-type BrandingUpdate = Pick<TenantBranding, "site_name" | "logo_url" | "accent_color" | "background_color" | "show_powered_by" | "show_roadmap" | "show_boards" | "show_feed" | "require_post_approval">;
+type BrandingUpdate = Pick<TenantManagementSettings, "site_name" | "logo_url" | "accent_color" | "background_color" | "show_powered_by" | "show_roadmap" | "show_boards" | "show_feed" | "require_post_approval" | "posts_per_hour" | "comments_per_hour" | "board_posts_per_10m" | "board_comments_per_10m">;
 
 export function BrandingTab({ tenant }: { tenant: string }) {
   const [siteName, setSiteName] = useState("");
@@ -26,6 +26,10 @@ export function BrandingTab({ tenant }: { tenant: string }) {
   const [showFeed, setShowFeed] = useState(true);
   const [showPoweredBy, setShowPoweredBy] = useState(true);
   const [requirePostApproval, setRequirePostApproval] = useState(false);
+  const [postsPerHour, setPostsPerHour] = useState(3);
+  const [commentsPerHour, setCommentsPerHour] = useState(15);
+  const [boardPostsPer10m, setBoardPostsPer10m] = useState(20);
+  const [boardCommentsPer10m, setBoardCommentsPer10m] = useState(60);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -36,7 +40,7 @@ export function BrandingTab({ tenant }: { tenant: string }) {
 
   const load = useCallback(async () => {
     try {
-      const branding = await getTenantBranding(tenant);
+      const branding = await getTenantManagementSettings(tenant, readStoredBearerToken(tenant).trim());
       setSiteName(branding.site_name);
       setLogoUrl(branding.logo_url);
       setAccent(branding.accent_color ?? "#e0522f");
@@ -46,6 +50,10 @@ export function BrandingTab({ tenant }: { tenant: string }) {
       setShowFeed(branding.show_feed);
       setShowPoweredBy(branding.show_powered_by);
       setRequirePostApproval(branding.require_post_approval);
+      setPostsPerHour(branding.posts_per_hour);
+      setCommentsPerHour(branding.comments_per_hour);
+      setBoardPostsPer10m(branding.board_posts_per_10m);
+      setBoardCommentsPer10m(branding.board_comments_per_10m);
     } catch (cause) {
       setLoadError(cause instanceof Error ? cause.message : "Could not load public site settings.");
     } finally { setLoading(false); }
@@ -65,7 +73,7 @@ export function BrandingTab({ tenant }: { tenant: string }) {
   };
 
   const saveChanges = async (changes: Partial<BrandingUpdate>) => {
-    const current = await getTenantBranding(tenant);
+    const current = await getTenantManagementSettings(tenant, readStoredBearerToken(tenant).trim());
     await managerUpdateTenantBranding(tenant, readStoredBearerToken(tenant).trim(), {
       site_name: current.site_name,
       logo_url: current.logo_url,
@@ -76,6 +84,10 @@ export function BrandingTab({ tenant }: { tenant: string }) {
       show_roadmap: current.show_roadmap,
       show_powered_by: current.show_powered_by,
       require_post_approval: current.require_post_approval,
+      posts_per_hour: current.posts_per_hour,
+      comments_per_hour: current.comments_per_hour,
+      board_posts_per_10m: current.board_posts_per_10m,
+      board_comments_per_10m: current.board_comments_per_10m,
       ...changes,
     });
   };
@@ -84,7 +96,7 @@ export function BrandingTab({ tenant }: { tenant: string }) {
     event.preventDefault();
     setBusy(true); setPageError(""); setPageNotice("");
     try {
-      await saveChanges({ show_boards: showBoards, show_feed: showFeed, show_roadmap: showRoadmap, require_post_approval: requirePostApproval });
+      await saveChanges({ show_boards: showBoards, show_feed: showFeed, show_roadmap: showRoadmap, require_post_approval: requirePostApproval, posts_per_hour: postsPerHour, comments_per_hour: commentsPerHour, board_posts_per_10m: boardPostsPer10m, board_comments_per_10m: boardCommentsPer10m });
       setPageNotice("Settings updated.");
     } catch (cause) { setPageError(cause instanceof Error ? cause.message : "Could not save pages."); }
     finally { setBusy(false); }
@@ -119,6 +131,12 @@ export function BrandingTab({ tenant }: { tenant: string }) {
         <h3 className="section-title">Posts</h3>
         <label className="manage-check"><input type="checkbox" checked={requirePostApproval} disabled={busy} onChange={(event) => setRequirePostApproval(event.target.checked)} /> Approve every post before publishing</label>
         <p className="section-subtitle">When off, regular posts publish immediately. Suspicious posts still wait for review.</p>
+        <h3 className="section-title">Spam limits</h3>
+        <p className="section-subtitle">Limits apply separately to each member and board. When a board fills too quickly, posting or commenting pauses for 5 minutes.</p>
+        <label>Posts per member per hour<input className="manage-input" type="number" min="1" max="100" required value={postsPerHour} onChange={(event) => setPostsPerHour(Number(event.target.value))} /></label>
+        <label>Comments per member per hour<input className="manage-input" type="number" min="1" max="300" required value={commentsPerHour} onChange={(event) => setCommentsPerHour(Number(event.target.value))} /></label>
+        <label>Posts per board per 10 minutes<input className="manage-input" type="number" min="1" max="500" required value={boardPostsPer10m} onChange={(event) => setBoardPostsPer10m(Number(event.target.value))} /></label>
+        <label>Comments per board per 10 minutes<input className="manage-input" type="number" min="1" max="1000" required value={boardCommentsPer10m} onChange={(event) => setBoardCommentsPer10m(Number(event.target.value))} /></label>
         <div className="manage-row__actions">
           <button className="button button--cta" type="submit" disabled={busy}>{busy ? "Saving…" : "Save settings"}</button>
           <a className="ghost-button" href={`${(process.env.NEXT_PUBLIC_HOWLLO_PUBLIC_WEB_URL || "http://localhost:7703").replace(/\/$/, "")}/${encodeURIComponent(tenant)}`} target="_blank" rel="noreferrer">View public site ↗</a>
