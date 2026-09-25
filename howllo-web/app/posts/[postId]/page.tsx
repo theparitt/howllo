@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getComments, getPostDetail, getStatusHistory } from "@/lib/api";
+import { ApiError, getComments, getPostDetail, getStatusHistory } from "@/lib/api";
 import {
   WorkspaceContextError,
   buildTenantPath,
@@ -172,7 +172,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
       </div>
     );
   } catch (error) {
-    if (error instanceof Error && error.message.includes("404")) {
+    if (error instanceof ApiError && error.status === 404) {
       notFound();
     }
 

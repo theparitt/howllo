@@ -17,6 +17,8 @@ export type TenantBranding = {
   background_color: string | null;
   show_powered_by: boolean;
   show_roadmap: boolean;
+  show_boards: boolean;
+  show_feed: boolean;
 };
 
 export type AdminTenantSummary = {

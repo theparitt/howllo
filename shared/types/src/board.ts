@@ -24,6 +24,7 @@ export type Board = {
 
 export type BoardDetail = Board & {
   is_private: boolean;
+  is_enabled: boolean;
 };
 
 export type BoardSummary = {

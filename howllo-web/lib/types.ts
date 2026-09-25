@@ -25,6 +25,8 @@ export type TenantBranding = {
   background_color: string | null;
   show_powered_by: boolean;
   show_roadmap: boolean;
+  show_boards: boolean;
+  show_feed: boolean;
 };
 
 export type WorkspaceAuthConfig = {
@@ -45,6 +47,7 @@ export type PaginatedResponse<T> = {
 
 export type BoardDetail = Board & {
   is_private: boolean;
+  is_enabled: boolean;
 };
 
 export type PostListItem = {
@@ -219,6 +222,7 @@ export type ManageBoard = {
   description: string | null;
   board_type: string;
   is_private: boolean;
+  is_enabled: boolean;
   icon_url: string | null;
   background_color: string | null;
   dashboard_sections: DashboardSection[];

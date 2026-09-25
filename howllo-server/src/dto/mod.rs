@@ -17,6 +17,7 @@ pub struct BoardListItemDto {
     pub icon_url: Option<String>,
     pub background_color: Option<String>,
     pub dashboard_sections: Vec<String>,
+    pub is_enabled: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -27,6 +28,7 @@ pub struct BoardDetailDto {
     pub description: Option<String>,
     pub board_type: String,
     pub is_private: bool,
+    pub is_enabled: bool,
     pub icon_url: Option<String>,
     pub background_color: Option<String>,
     pub dashboard_sections: Vec<String>,
@@ -54,6 +56,8 @@ pub struct UpdateBoardRequest {
     pub description: Option<String>,
     pub board_type: String,
     pub is_private: bool,
+    #[serde(default)]
+    pub is_enabled: Option<bool>,
     #[serde(default)]
     pub icon_url: Option<String>,
     #[serde(default)]

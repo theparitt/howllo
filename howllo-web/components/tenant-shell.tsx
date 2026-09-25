@@ -35,6 +35,8 @@ const DEFAULT_BRANDING: TenantBranding = {
   background_color: null,
   show_powered_by: true,
   show_roadmap: true,
+  show_boards: true,
+  show_feed: true,
 };
 
 function getTenantSlugFromPath(pathname: string): string | null {
@@ -197,20 +199,12 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
             <Link href={homeHref} className="nav__link">View public boards ↗</Link>
             <AuthControl myHref={myHref} />
           </nav> : !loginHome ? <nav className="nav">
-            <Link href={boardsHref} className="nav__link">
-              Boards
-            </Link>
-            <Link href={feedHref} className="nav__link">
-              Feed
-            </Link>
+            {branding.show_boards ? <Link href={boardsHref} className="nav__link">Boards</Link> : null}
+            {branding.show_feed ? <Link href={feedHref} className="nav__link">Feed</Link> : null}
             <Link href={dashboardHref} className="nav__link">
               Dashboard
             </Link>
-            {branding.show_roadmap ? (
-              <Link href={roadmapHref} className="nav__link">
-                Roadmap
-              </Link>
-            ) : null}
+            {branding.show_roadmap ? <Link href={roadmapHref} className="nav__link">Roadmap</Link> : null}
             {canManage ? <a href={externalAppHref} className="nav__link">Howllo App ↗</a> : null}
             <NotificationBell />
             <AuthControl myHref={myHref} />

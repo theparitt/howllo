@@ -14,6 +14,8 @@ pub struct TenantBrandingRecord {
     pub background_color: Option<String>,
     pub show_powered_by: bool,
     pub show_roadmap: bool,
+    pub show_boards: bool,
+    pub show_feed: bool,
 }
 
 pub async fn get_by_tenant_slug(
@@ -31,7 +33,9 @@ pub async fn get_by_tenant_slug(
             b.accent_color,
             b.background_color,
             COALESCE(b.show_powered_by, TRUE) AS show_powered_by,
-            COALESCE(b.show_roadmap, TRUE) AS show_roadmap
+            COALESCE(b.show_roadmap, TRUE) AS show_roadmap,
+            COALESCE(b.show_boards, TRUE) AS show_boards,
+            COALESCE(b.show_feed, TRUE) AS show_feed
         FROM tenants t
         LEFT JOIN tenant_branding b ON b.tenant_id = t.id
         WHERE t.slug = $1
@@ -54,6 +58,8 @@ pub async fn upsert(
     background_color: Option<&str>,
     show_powered_by: bool,
     show_roadmap: bool,
+    show_boards: Option<bool>,
+    show_feed: Option<bool>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
@@ -64,9 +70,11 @@ pub async fn upsert(
             accent_color,
             background_color,
             show_powered_by,
-            show_roadmap
+            show_roadmap,
+            show_boards,
+            show_feed
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, TRUE), COALESCE($9, TRUE))
         ON CONFLICT (tenant_id)
         DO UPDATE SET
             site_name = EXCLUDED.site_name,
@@ -75,6 +83,8 @@ pub async fn upsert(
             background_color = EXCLUDED.background_color,
             show_powered_by = EXCLUDED.show_powered_by,
             show_roadmap = EXCLUDED.show_roadmap,
+            show_boards = COALESCE($8, tenant_branding.show_boards),
+            show_feed = COALESCE($9, tenant_branding.show_feed),
             updated_at = NOW()
         "#,
     )
@@ -85,6 +95,8 @@ pub async fn upsert(
     .bind(background_color)
     .bind(show_powered_by)
     .bind(show_roadmap)
+    .bind(show_boards)
+    .bind(show_feed)
     .execute(pool)
     .await?;
 
@@ -102,5 +114,7 @@ fn map_branding_row(row: sqlx::postgres::PgRow) -> TenantBrandingRecord {
         background_color: row.get("background_color"),
         show_powered_by: row.get("show_powered_by"),
         show_roadmap: row.get("show_roadmap"),
+        show_boards: row.get("show_boards"),
+        show_feed: row.get("show_feed"),
     }
 }

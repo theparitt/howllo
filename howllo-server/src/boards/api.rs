@@ -111,6 +111,7 @@ pub async fn update_board(
             .map(str::trim)
             .filter(|v| !v.is_empty()),
         body.dashboard_sections.clone(),
+        body.is_enabled,
         auth.0.id,
     )
     .await?;

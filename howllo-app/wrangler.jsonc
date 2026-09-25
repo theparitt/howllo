@@ -5,6 +5,7 @@
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-09-25",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "vars": { "NEXT_PUBLIC_API_BASE_URL": "https://api.howllo.dev" },
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
   "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "howllo-app" }]
 }

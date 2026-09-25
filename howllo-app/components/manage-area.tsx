@@ -396,7 +396,7 @@ function BoardsTab({ tenant }: { tenant: string }) {
           {boards.map((b) => (
             <button type="button" key={b.id} className={`manage-board-tab${b.id === selected ? " manage-board-tab--active" : ""}`} onClick={() => setSelected(b.id)}>
               <strong>{b.name}</strong>
-              <span className="section-subtitle">{b.board_type}{b.is_private ? " · private" : ""}</span>
+              <span className="section-subtitle">{b.board_type}{b.is_private ? " · private" : ""}{!b.is_enabled ? " · disabled" : ""}</span>
             </button>
           ))}
         </div>
@@ -414,6 +414,7 @@ function BoardEditor({ board, tenant, onSaved }: { board: ManageBoard; tenant: s
   const [description, setDescription] = useState(board.description ?? "");
   const [boardType, setBoardType] = useState(board.board_type);
   const [isPrivate, setIsPrivate] = useState(board.is_private);
+  const [isEnabled, setIsEnabled] = useState(board.is_enabled);
   const [bg, setBg] = useState(board.background_color ?? "#fff1ea");
   const [iconUrl, setIconUrl] = useState(board.icon_url);
   const [sections, setSections] = useState<DashboardSection[]>(board.dashboard_sections ?? ["progress", "latest", "top"]);
@@ -432,6 +433,7 @@ function BoardEditor({ board, tenant, onSaved }: { board: ManageBoard; tenant: s
         description: description.trim() || undefined,
         board_type: boardType,
         is_private: isPrivate,
+        is_enabled: isEnabled,
         background_color: bg || undefined,
         dashboard_sections: sections,
         icon_url: iconUrl,
@@ -449,11 +451,11 @@ function BoardEditor({ board, tenant, onSaved }: { board: ManageBoard; tenant: s
     <section className="panel">
       <h2 className="section-title">{board.name}</h2>
       <div className="manage-board-links">
-        <a className="button" href={publicBoardUrl(tenant, board.slug)}>Open board ↗</a>
-        {!board.is_private ? <button className="button" type="button" onClick={() => {
+        {board.is_enabled ? <a className="button" href={publicBoardUrl(tenant, board.slug)}>Open board ↗</a> : null}
+        {!board.is_private && board.is_enabled ? <button className="button" type="button" onClick={() => {
           const url = publicBoardUrl(tenant, board.slug);
           void navigator.clipboard.writeText(url).then(() => setNotice("Public board link copied.")).catch(() => setError("Could not copy link. Open the board and copy its URL."));
-        }}>Copy public link</button> : <span className="section-subtitle">Private: workspace members only</span>}
+        }}>Copy public link</button> : <span className="section-subtitle">{!board.is_enabled ? "Disabled: public route returns 404" : "Private: workspace members only"}</span>}
       </div>
       <div className="manage-fields" style={{ marginTop: "1rem" }}>
         <label className="manage-label">Name<input className="manage-input" value={name} onChange={(e) => setName(e.target.value)} /></label>
@@ -486,6 +488,7 @@ function BoardEditor({ board, tenant, onSaved }: { board: ManageBoard; tenant: s
           {iconUrl ? <button type="button" className="ghost-button" disabled={busy} onClick={() => setIconUrl(null)}>Remove icon</button> : null}
         </div>
         <label className="manage-check"><input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} /> Private board (members only)</label>
+        <label className="manage-check"><input type="checkbox" checked={isEnabled} onChange={(e) => setIsEnabled(e.target.checked)} /> Board enabled (show on public site)</label>
         <div className="manage-label">
           Dashboard sections
           <div className="manage-sections">

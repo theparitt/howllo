@@ -20,6 +20,8 @@ export function BrandingTab({ tenant }: { tenant: string }) {
   const [accent, setAccent] = useState("#e0522f");
   const [background, setBackground] = useState("#fff3ec");
   const [showRoadmap, setShowRoadmap] = useState(true);
+  const [showBoards, setShowBoards] = useState(true);
+  const [showFeed, setShowFeed] = useState(true);
   const [showPoweredBy, setShowPoweredBy] = useState(true);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -34,6 +36,8 @@ export function BrandingTab({ tenant }: { tenant: string }) {
       setAccent(branding.accent_color ?? "#e0522f");
       setBackground(branding.background_color ?? "#fff3ec");
       setShowRoadmap(branding.show_roadmap);
+      setShowBoards(branding.show_boards);
+      setShowFeed(branding.show_feed);
       setShowPoweredBy(branding.show_powered_by);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load public site branding.");
@@ -61,7 +65,8 @@ export function BrandingTab({ tenant }: { tenant: string }) {
     try {
       await managerUpdateTenantBranding(tenant, readStoredBearerToken(tenant).trim(), {
         site_name: siteName.trim(), logo_url: logoUrl, accent_color: accent,
-        background_color: background, show_roadmap: showRoadmap, show_powered_by: showPoweredBy,
+        background_color: background, show_boards: showBoards, show_feed: showFeed,
+        show_roadmap: showRoadmap, show_powered_by: showPoweredBy,
       });
       setNotice("Public site branding saved. Refresh the public Web to see the change.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save branding."); }
@@ -96,7 +101,12 @@ export function BrandingTab({ tenant }: { tenant: string }) {
       <label className="manage-label">Page background
         <div className="branding-color-field"><input type="color" value={COLOR.test(background) ? background : "#fff3ec"} onChange={(event) => setBackground(event.target.value)} /><input className="manage-input" value={background} onChange={(event) => setBackground(event.target.value)} maxLength={7} /></div>
       </label>
-      <label className="manage-check"><input type="checkbox" checked={showRoadmap} onChange={(event) => setShowRoadmap(event.target.checked)} /> Show roadmap</label>
+      <div className="manage-fields" style={{ gap: ".55rem" }}>
+        <label className="manage-check"><input type="checkbox" checked={showBoards} onChange={(event) => setShowBoards(event.target.checked)} /> Show board directory ({`/${tenant}`})</label>
+        <label className="manage-check"><input type="checkbox" checked={showFeed} onChange={(event) => setShowFeed(event.target.checked)} /> Show workspace feed ({`/${tenant}/feed`})</label>
+        <label className="manage-check"><input type="checkbox" checked={showRoadmap} onChange={(event) => setShowRoadmap(event.target.checked)} /> Show roadmap ({`/${tenant}/roadmap`})</label>
+      </div>
+      <p className="section-subtitle">Each board also has its own URL. Turn an individual board on or off in the Boards tab.</p>
       <label className="manage-check"><input type="checkbox" checked={showPoweredBy} onChange={(event) => setShowPoweredBy(event.target.checked)} /> Show “Powered by Howllo”</label>
       <div className="branding-preview" style={{ background }}>
         <span style={{ color: accent }}>LIVE PREVIEW</span>

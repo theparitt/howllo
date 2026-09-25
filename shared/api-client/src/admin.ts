@@ -226,6 +226,8 @@ export const admin = (client: HowlloClient) => ({
     background_color?: string;
     show_powered_by: boolean;
     show_roadmap: boolean;
+    show_boards?: boolean;
+    show_feed?: boolean;
   }) =>
     client.request<TenantBranding>(`/api/admin/tenant-branding`, {
       method: "PATCH",

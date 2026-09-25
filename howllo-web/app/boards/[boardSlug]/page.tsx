@@ -12,6 +12,8 @@ import { StatusPill } from "@/components/status-pill";
 import { WorkspaceState } from "@/components/workspace-state";
 import { themedSurfaceStyle } from "@/lib/theme";
 import { countLabel } from "@/lib/format";
+import { ApiError } from "@/lib/api";
+import { notFound } from "next/navigation";
 
 type BoardPageProps = {
   params: Promise<{
@@ -47,11 +49,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
 
   try {
     const [board, posts] = await Promise.all([
-      getBoardDetail(tenant, boardSlug, token).catch((error) => {
-        throw new Error(
-          error instanceof Error ? error.message : "Failed to load board detail.",
-        );
-      }),
+      getBoardDetail(tenant, boardSlug, token),
       getBoardPosts({
         tenantSlug: tenant,
         boardSlug,
@@ -60,10 +58,6 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
         page,
         perPage: 20,
         token,
-      }).catch((error) => {
-        throw new Error(
-          error instanceof Error ? error.message : "Failed to load board posts.",
-        );
       }),
     ]);
 
@@ -151,6 +145,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
       </div>
     );
   } catch (error) {
+    if (error instanceof ApiError && error.status === 404) notFound();
     return (
       <div className="page-stack">
         <ApiUnavailable

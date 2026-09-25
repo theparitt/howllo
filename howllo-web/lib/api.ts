@@ -96,7 +96,7 @@ export async function getTenantBranding(tenantSlug: string): Promise<TenantBrand
 export async function managerUpdateTenantBranding(
   tenantSlug: string,
   token: string,
-  input: Pick<TenantBranding, "site_name" | "logo_url" | "accent_color" | "background_color" | "show_powered_by" | "show_roadmap">,
+  input: Pick<TenantBranding, "site_name" | "logo_url" | "accent_color" | "background_color" | "show_powered_by" | "show_roadmap" | "show_boards" | "show_feed">,
 ): Promise<TenantBranding> {
   const response = await apiFetch(
     buildUrl(`/api/admin/tenant-branding?tenant_slug=${encodeURIComponent(tenantSlug)}`),
@@ -293,6 +293,7 @@ export async function managerCreateBoard(
     description?: string;
     board_type: string;
     is_private: boolean;
+    is_enabled?: boolean;
   },
   token: string,
 ): Promise<ManageBoard> {
@@ -311,6 +312,7 @@ export async function managerUpdateBoard(
     description?: string | null;
     board_type: string;
     is_private: boolean;
+    is_enabled?: boolean;
     background_color?: string | null;
     dashboard_sections?: string[];
     icon_url?: string | null;

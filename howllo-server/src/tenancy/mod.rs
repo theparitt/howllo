@@ -36,6 +36,8 @@ pub struct TenantBrandingDto {
     pub background_color: Option<String>,
     pub show_powered_by: bool,
     pub show_roadmap: bool,
+    pub show_boards: bool,
+    pub show_feed: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,6 +53,10 @@ pub struct UpdateTenantBrandingRequest {
     pub background_color: Option<String>,
     pub show_powered_by: bool,
     pub show_roadmap: bool,
+    #[serde(default)]
+    pub show_boards: Option<bool>,
+    #[serde(default)]
+    pub show_feed: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -398,6 +404,8 @@ pub async fn update_tenant_branding(
         background_color.as_deref(),
         body.show_powered_by,
         body.show_roadmap,
+        body.show_boards,
+        body.show_feed,
     )
     .await
     .map_err(|error| {
@@ -589,6 +597,8 @@ async fn fetch_tenant_branding(
         background_color: record.background_color,
         show_powered_by: record.show_powered_by,
         show_roadmap: record.show_roadmap,
+        show_boards: record.show_boards,
+        show_feed: record.show_feed,
     })
 }
 
@@ -933,7 +943,9 @@ mod tests {
                 "accent_color": "#f36949",
                 "background_color": "#e8f4ff",
                 "show_powered_by": false,
-                "show_roadmap": false
+                "show_roadmap": false,
+                "show_boards": false,
+                "show_feed": false
             }))
             .to_request();
         let update_response = test::call_service(&app, update_request).await;
@@ -965,6 +977,16 @@ mod tests {
             get_body
                 .get("show_roadmap")
                 .and_then(|value| value.as_bool()),
+            Some(false)
+        );
+        assert_eq!(
+            get_body
+                .get("show_boards")
+                .and_then(|value| value.as_bool()),
+            Some(false)
+        );
+        assert_eq!(
+            get_body.get("show_feed").and_then(|value| value.as_bool()),
             Some(false)
         );
     }

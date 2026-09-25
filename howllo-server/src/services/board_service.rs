@@ -80,6 +80,10 @@ pub async fn get_board_detail(
         })?
         .ok_or(AppError::NotFound)?;
 
+    if !board.is_enabled {
+        return Err(AppError::NotFound);
+    }
+
     if board.is_private {
         let user = maybe_authenticated_user(req)
             .await?
@@ -176,6 +180,7 @@ pub async fn create_board(
                 "description": board.description,
                 "board_type": board.board_type,
                 "is_private": board.is_private,
+                "is_enabled": board.is_enabled,
                 "background_color": board.background_color,
             })),
             reason: None,
@@ -202,6 +207,7 @@ pub async fn update_board(
     icon_url: Option<&str>,
     background_color: Option<&str>,
     dashboard_sections: Option<Vec<String>>,
+    is_enabled: Option<bool>,
     user_id: Uuid,
 ) -> Result<BoardDetailDto, AppError> {
     require_admin_by_board_id(pool, board_id, user_id).await?;
@@ -231,6 +237,7 @@ pub async fn update_board(
         icon_url,
         background_color,
         &dashboard_sections,
+        is_enabled,
     )
     .await
     .map_err(|e| {
@@ -252,6 +259,7 @@ pub async fn update_board(
                 "description": previous.description,
                 "board_type": previous.board_type,
                 "is_private": previous.is_private,
+                "is_enabled": previous.is_enabled,
                 "background_color": previous.background_color,
             })),
             new_value: Some(json!({
@@ -260,6 +268,7 @@ pub async fn update_board(
                 "description": board.description,
                 "board_type": board.board_type,
                 "is_private": board.is_private,
+                "is_enabled": board.is_enabled,
                 "background_color": board.background_color,
             })),
             reason: None,

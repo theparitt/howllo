@@ -29,7 +29,7 @@ pub async fn fetch_roadmap_items(
 
     builder.push(" WHERE t.slug = ");
     builder.push_bind(tenant_slug);
-    builder.push(" AND p.is_hidden = false AND p.deleted_at IS NULL ");
+    builder.push(" AND b.is_enabled = TRUE AND p.is_hidden = false AND p.deleted_at IS NULL ");
     builder.push(" AND p.status IN ('planned', 'in_progress', 'done') ");
     builder.push(" AND p.duplicate_of_post_id IS NULL ");
 

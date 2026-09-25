@@ -1,4 +1,4 @@
-import { getRoadmap, getTenantBranding } from "@/lib/api";
+import { ApiError, getRoadmap, getTenantBranding } from "@/lib/api";
 import {
   WorkspaceContextError,
   buildTenantPath,
@@ -9,6 +9,7 @@ import { ApiUnavailable } from "@/components/api-unavailable";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { RoadmapItemCard } from "@/components/roadmap-item-card";
 import { WorkspaceState } from "@/components/workspace-state";
+import { notFound } from "next/navigation";
 
 type RoadmapPageProps = {
   searchParams: Promise<{
@@ -33,24 +34,18 @@ export default async function RoadmapPage({ searchParams }: RoadmapPageProps) {
   }
 
   const token = await getServerBearerToken(tenant);
-  let items;
   let branding;
-
   try {
     branding = await getTenantBranding(tenant);
-    if (!branding.show_roadmap) {
-      return (
-        <div className="page-stack">
-          <section className="panel empty-state">
-            <h1 className="empty-state__title">Roadmap is hidden for this workspace</h1>
-            <p className="empty-state__copy">
-              This workspace has disabled its public roadmap.
-            </p>
-          </section>
-        </div>
-      );
-    }
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) notFound();
+    return <div className="page-stack"><ApiUnavailable message={error instanceof Error ? error.message : "Failed to load roadmap."} /></div>;
+  }
+  if (!branding.show_roadmap) notFound();
 
+  let items;
+
+  try {
     items = await getRoadmap(tenant, {
       status: query.status,
       tag: query.tag,

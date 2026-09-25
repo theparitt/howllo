@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ApiUnavailable } from "@/components/api-unavailable";
-import { getBoards, getTenantBranding } from "@/lib/api";
+import { ApiError, getBoards, getTenantBranding } from "@/lib/api";
 import { themedSurfaceStyle } from "@/lib/theme";
+import { notFound } from "next/navigation";
 
 type TenantRootPageProps = {
   params: Promise<{
@@ -11,13 +12,21 @@ type TenantRootPageProps = {
 
 export default async function TenantRootPage({ params }: TenantRootPageProps) {
   const { tenantSlug } = await params;
+  let branding;
+  let boards;
   try {
-    const [branding, boards] = await Promise.all([
+    [branding, boards] = await Promise.all([
       getTenantBranding(tenantSlug),
       getBoards(tenantSlug),
     ]);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) notFound();
+    return <ApiUnavailable message={error instanceof Error ? error.message : "Could not load this workspace."} />;
+  }
 
-    return (
+  if (!branding.show_boards) notFound();
+
+  return (
       <div className="page-stack">
         <section className="page-head">
           <span className="kicker">Feedback workspace</span>
@@ -43,8 +52,5 @@ export default async function TenantRootPage({ params }: TenantRootPageProps) {
           <p className="empty-state__copy">The workspace owner can add a public board from Manage → Boards.</p>
         </section>}
       </div>
-    );
-  } catch (error) {
-    return <ApiUnavailable message={error instanceof Error ? error.message : "Could not load this workspace."} />;
-  }
+  );
 }

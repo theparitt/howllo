@@ -2127,3 +2127,46 @@ textarea.manage-input { width: 100%; resize: vertical; }
   border-color: rgba(127, 109, 207, 0.4);
 }
 .ws-card strong { font-family: var(--font-display); font-size: 1.1rem; }
+
+/* ---------------------------------------------------------- Howllo 404 */
+.howl-not-found-wrap { min-height: min(68vh, 44rem); display: grid; align-items: center; }
+.howl-not-found {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(210px, .8fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: clamp(1.5rem, 6vw, 5rem);
+  max-width: 58rem;
+  margin: 0 auto;
+  padding: clamp(1.5rem, 5vw, 3.5rem);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--panel-strong) 92%, transparent);
+  box-shadow: var(--shadow-lg);
+}
+.howl-not-found__art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  max-width: 16rem;
+  width: 100%;
+  margin: auto;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 44%, #fff 0 34%, #fff0e8 35% 62%, transparent 63%);
+}
+.howl-not-found__art img { position: relative; z-index: 1; width: 62%; height: auto; border-radius: 20%; box-shadow: 0 14px 36px rgba(57, 41, 34, .13); }
+.howl-not-found__orbit { position: absolute; border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent); border-radius: 50%; }
+.howl-not-found__orbit--one { inset: 5%; transform: rotate(-28deg) scaleY(.58); }
+.howl-not-found__orbit--two { inset: 12%; transform: rotate(34deg) scaleY(.58); }
+.howl-not-found__paw { position: absolute; z-index: 2; right: 0; bottom: 7%; padding: .35rem .7rem; border: 3px solid var(--panel-strong); border-radius: 999px; background: var(--primary); color: var(--primary-ink, white); font-family: var(--font-display); font-size: .9rem; font-weight: 800; letter-spacing: .08em; }
+.howl-not-found__copy .page-title { margin: .45rem 0 .65rem; }
+.howl-not-found__copy .page-lead { max-width: 34rem; }
+.howl-not-found__copy .inline-actions { margin-top: 1.4rem; }
+@media (max-width: 640px) {
+  .howl-not-found-wrap { min-height: 60vh; }
+  .howl-not-found { grid-template-columns: 1fr; gap: 1rem; text-align: center; }
+  .howl-not-found__art { max-width: 11rem; }
+  .howl-not-found__copy .inline-actions { justify-content: center; }
+}

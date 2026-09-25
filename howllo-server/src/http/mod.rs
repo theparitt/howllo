@@ -284,12 +284,21 @@ pub mod test_support {
                 background_color VARCHAR(32),
                 show_powered_by BOOLEAN NOT NULL DEFAULT TRUE,
                 show_roadmap BOOLEAN NOT NULL DEFAULT TRUE,
+                show_boards BOOLEAN NOT NULL DEFAULT TRUE,
+                show_feed BOOLEAN NOT NULL DEFAULT TRUE,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
 
             ALTER TABLE tenant_branding
                 ADD COLUMN IF NOT EXISTS show_roadmap BOOLEAN NOT NULL DEFAULT TRUE;
+
+            ALTER TABLE tenant_branding
+                ADD COLUMN IF NOT EXISTS show_boards BOOLEAN NOT NULL DEFAULT TRUE,
+                ADD COLUMN IF NOT EXISTS show_feed BOOLEAN NOT NULL DEFAULT TRUE;
+
+            ALTER TABLE boards
+                ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 
             CREATE TABLE IF NOT EXISTS workspace_auth_configs (
                 tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,

@@ -90,6 +90,8 @@ export function SettingsPage() {
     background_color: "#f6e7df",
     show_powered_by: true,
     show_roadmap: true,
+    show_boards: true,
+    show_feed: true,
   });
   const [workspaceAuth, setWorkspaceAuth] = useState<WorkspaceAuthConfig>({
     tenant_slug: tenant,
