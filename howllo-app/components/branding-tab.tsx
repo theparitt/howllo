@@ -5,6 +5,7 @@ import { getTenantBranding, managerUpdateTenantBranding, uploadImage } from "@/l
 import { readStoredBearerToken } from "@/components/dev-auth-panel";
 import { prepareBrandImage } from "../lib/prepare-brand-image";
 import { contrastInk } from "@/lib/theme";
+import type { TenantBranding } from "@/lib/types";
 
 const PRESETS = [
   { name: "Coral", accent: "#e0522f", background: "#fff3ec" },
@@ -13,6 +14,7 @@ const PRESETS = [
   { name: "Violet", accent: "#674bac", background: "#f3effb" },
 ];
 const COLOR = /^#[0-9a-fA-F]{6}$/;
+type BrandingUpdate = Pick<TenantBranding, "site_name" | "logo_url" | "accent_color" | "background_color" | "show_powered_by" | "show_roadmap" | "show_boards" | "show_feed">;
 
 export function BrandingTab({ tenant }: { tenant: string }) {
   const [siteName, setSiteName] = useState("");
@@ -25,8 +27,11 @@ export function BrandingTab({ tenant }: { tenant: string }) {
   const [showPoweredBy, setShowPoweredBy] = useState(true);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [pageError, setPageError] = useState("");
+  const [pageNotice, setPageNotice] = useState("");
+  const [appearanceError, setAppearanceError] = useState("");
+  const [appearanceNotice, setAppearanceNotice] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -40,43 +45,86 @@ export function BrandingTab({ tenant }: { tenant: string }) {
       setShowFeed(branding.show_feed);
       setShowPoweredBy(branding.show_powered_by);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not load public site branding.");
+      setLoadError(cause instanceof Error ? cause.message : "Could not load public site settings.");
     } finally { setLoading(false); }
   }, [tenant]);
   useEffect(() => { void load(); }, [load]);
 
   const chooseLogo = async (file: File | undefined) => {
     if (!file) return;
-    setBusy(true); setError(""); setNotice("");
+    setBusy(true); setAppearanceError(""); setAppearanceNotice("");
     try {
       const prepared = await prepareBrandImage(file, 1200, 360);
       const url = await uploadImage(prepared, readStoredBearerToken(tenant).trim());
       setLogoUrl(url);
-      setNotice("Logo uploaded. Save changes to publish it.");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not upload logo."); }
+      setAppearanceNotice("Logo uploaded. Save appearance to publish it.");
+    } catch (cause) { setAppearanceError(cause instanceof Error ? cause.message : "Could not upload logo."); }
     finally { setBusy(false); }
   };
 
-  const save = async (event: React.FormEvent) => {
+  const saveChanges = async (changes: Partial<BrandingUpdate>) => {
+    const current = await getTenantBranding(tenant);
+    await managerUpdateTenantBranding(tenant, readStoredBearerToken(tenant).trim(), {
+      site_name: current.site_name,
+      logo_url: current.logo_url,
+      accent_color: current.accent_color,
+      background_color: current.background_color,
+      show_boards: current.show_boards,
+      show_feed: current.show_feed,
+      show_roadmap: current.show_roadmap,
+      show_powered_by: current.show_powered_by,
+      ...changes,
+    });
+  };
+
+  const savePages = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!siteName.trim() || siteName.trim().length > 120) { setError("Enter a public site name of 1–120 characters."); return; }
-    if (!COLOR.test(accent) || !COLOR.test(background)) { setError("Use six-digit colors such as #186789."); return; }
-    setBusy(true); setError(""); setNotice("");
+    setBusy(true); setPageError(""); setPageNotice("");
     try {
-      await managerUpdateTenantBranding(tenant, readStoredBearerToken(tenant).trim(), {
-        site_name: siteName.trim(), logo_url: logoUrl, accent_color: accent,
-        background_color: background, show_boards: showBoards, show_feed: showFeed,
-        show_roadmap: showRoadmap, show_powered_by: showPoweredBy,
-      });
-      setNotice("Public site branding saved. Refresh the public Web to see the change.");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save branding."); }
+      await saveChanges({ show_boards: showBoards, show_feed: showFeed, show_roadmap: showRoadmap });
+      setPageNotice("Public pages updated.");
+    } catch (cause) { setPageError(cause instanceof Error ? cause.message : "Could not save pages."); }
     finally { setBusy(false); }
   };
 
-  return <section className="panel">
-    <h2 className="section-title">Public site branding</h2>
-    <p className="section-subtitle">These settings change the end-user Web for this workspace. Howllo App keeps its own staff identity.</p>
-    {loading ? <p>Loading…</p> : <form className="manage-fields" style={{ marginTop: "1rem" }} onSubmit={(event) => void save(event)}>
+  const saveAppearance = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!siteName.trim() || siteName.trim().length > 120) { setAppearanceError("Enter a public site name of 1–120 characters."); return; }
+    if (!COLOR.test(accent) || !COLOR.test(background)) { setAppearanceError("Use six-digit colors such as #186789."); return; }
+    setBusy(true); setAppearanceError(""); setAppearanceNotice("");
+    try {
+      await saveChanges({
+        site_name: siteName.trim(), logo_url: logoUrl, accent_color: accent,
+        background_color: background, show_powered_by: showPoweredBy,
+      });
+      setAppearanceNotice("Appearance updated.");
+    } catch (cause) { setAppearanceError(cause instanceof Error ? cause.message : "Could not save appearance."); }
+    finally { setBusy(false); }
+  };
+
+  if (loading) return <section className="panel"><p>Loading…</p></section>;
+  if (loadError) return <section className="panel"><p className="error-text" role="alert">{loadError}</p></section>;
+
+  return <div className="page-stack">
+    <section className="panel">
+      <h2 className="section-title">Public pages</h2>
+      <p className="section-subtitle">Choose what visitors see in this workspace.</p>
+      <form className="manage-fields" style={{ marginTop: "1rem" }} onSubmit={(event) => void savePages(event)}>
+        <label className="manage-check"><input type="checkbox" checked={showBoards} disabled={busy} onChange={(event) => setShowBoards(event.target.checked)} /> Boards</label>
+        <label className="manage-check"><input type="checkbox" checked={showFeed} disabled={busy} onChange={(event) => setShowFeed(event.target.checked)} /> Feed</label>
+        <label className="manage-check"><input type="checkbox" checked={showRoadmap} disabled={busy} onChange={(event) => setShowRoadmap(event.target.checked)} /> Roadmap</label>
+        <div className="manage-row__actions">
+          <button className="button button--cta" type="submit" disabled={busy}>{busy ? "Saving…" : "Save pages"}</button>
+          <a className="ghost-button" href={`${(process.env.NEXT_PUBLIC_HOWLLO_PUBLIC_WEB_URL || "http://localhost:7703").replace(/\/$/, "")}/${encodeURIComponent(tenant)}`} target="_blank" rel="noreferrer">View public site ↗</a>
+        </div>
+      </form>
+      {pageNotice ? <p className="success-text" role="status">{pageNotice}</p> : null}
+      {pageError ? <p className="error-text" role="alert">{pageError}</p> : null}
+    </section>
+
+    <section className="panel">
+      <h2 className="section-title">Appearance</h2>
+      <form className="manage-fields" style={{ marginTop: "1rem" }} onSubmit={(event) => void saveAppearance(event)}>
       <label className="manage-label">Public site name
         <input className="manage-input" value={siteName} maxLength={120} onChange={(event) => setSiteName(event.target.value)} required />
       </label>
@@ -88,7 +136,7 @@ export function BrandingTab({ tenant }: { tenant: string }) {
           const file = event.target.files?.[0]; event.target.value = ""; void chooseLogo(file);
         }} />
         <span className="section-subtitle">PNG, JPG or WebP · up to 5 MB and 4096 × 4096 pixels. Large images are resized automatically.</span>
-        {logoUrl ? <button className="ghost-button" type="button" disabled={busy} onClick={() => { setLogoUrl(null); setNotice("Save changes to remove the logo."); }}>Remove logo</button> : null}
+        {logoUrl ? <button className="ghost-button" type="button" disabled={busy} onClick={() => { setLogoUrl(null); setAppearanceNotice("Save appearance to remove the logo."); }}>Remove logo</button> : null}
       </div>
       <div className="branding-presets" aria-label="Color themes">{PRESETS.map((preset) => <button
         key={preset.name} type="button" className="branding-preset" disabled={busy}
@@ -101,21 +149,16 @@ export function BrandingTab({ tenant }: { tenant: string }) {
       <label className="manage-label">Page background
         <div className="branding-color-field"><input type="color" value={COLOR.test(background) ? background : "#fff3ec"} onChange={(event) => setBackground(event.target.value)} /><input className="manage-input" value={background} onChange={(event) => setBackground(event.target.value)} maxLength={7} /></div>
       </label>
-      <div className="manage-fields" style={{ gap: ".55rem" }}>
-        <label className="manage-check"><input type="checkbox" checked={showBoards} onChange={(event) => setShowBoards(event.target.checked)} /> Show board directory ({`/${tenant}`})</label>
-        <label className="manage-check"><input type="checkbox" checked={showFeed} onChange={(event) => setShowFeed(event.target.checked)} /> Show workspace feed ({`/${tenant}/feed`})</label>
-        <label className="manage-check"><input type="checkbox" checked={showRoadmap} onChange={(event) => setShowRoadmap(event.target.checked)} /> Show roadmap ({`/${tenant}/roadmap`})</label>
-      </div>
-      <p className="section-subtitle">Each board also has its own URL. Turn an individual board on or off in the Boards tab.</p>
       <label className="manage-check"><input type="checkbox" checked={showPoweredBy} onChange={(event) => setShowPoweredBy(event.target.checked)} /> Show “Powered by Howllo”</label>
       <div className="branding-preview" style={{ background }}>
         <span style={{ color: accent }}>LIVE PREVIEW</span>
         <strong>{siteName || "Your workspace"}</strong>
         <button type="button" style={{ background: accent, color: contrastInk(accent) }}>Share feedback</button>
       </div>
-      <div className="manage-row__actions"><button className="button button--cta" type="submit" disabled={busy}>{busy ? "Saving…" : "Save public branding"}</button><a className="ghost-button" href={`${(process.env.NEXT_PUBLIC_HOWLLO_PUBLIC_WEB_URL || "http://localhost:7703").replace(/\/$/, "")}/${encodeURIComponent(tenant)}`} target="_blank" rel="noreferrer">Open public Web ↗</a></div>
-    </form>}
-    {notice ? <p className="success-text" role="status">{notice}</p> : null}
-    {error ? <p className="error-text" role="alert">{error}</p> : null}
-  </section>;
+      <div className="manage-row__actions"><button className="button button--cta" type="submit" disabled={busy}>{busy ? "Saving…" : "Save appearance"}</button></div>
+      </form>
+      {appearanceNotice ? <p className="success-text" role="status">{appearanceNotice}</p> : null}
+      {appearanceError ? <p className="error-text" role="alert">{appearanceError}</p> : null}
+    </section>
+  </div>;
 }

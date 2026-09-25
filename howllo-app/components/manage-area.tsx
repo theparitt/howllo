@@ -117,7 +117,7 @@ export function ManageArea() {
         <button type="button" className={`feed-chip${tab === "boards" ? " feed-chip--active" : ""}`} onClick={() => setTab("boards")}>
           Boards
         </button>
-        <button type="button" className={`feed-chip${tab === "branding" ? " feed-chip--active" : ""}`} onClick={() => setTab("branding")}>Public branding</button>
+        <button type="button" className={`feed-chip${tab === "branding" ? " feed-chip--active" : ""}`} onClick={() => setTab("branding")}>Public site</button>
         <button type="button" className={`feed-chip${tab === "participants" ? " feed-chip--active" : ""}`} onClick={() => setTab("participants")}>Users</button>
         <button type="button" className={`feed-chip${tab === "signin" ? " feed-chip--active" : ""}`} onClick={() => setTab("signin")}>
           Sign-in (SSO)

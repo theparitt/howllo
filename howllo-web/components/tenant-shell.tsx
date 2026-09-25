@@ -34,9 +34,9 @@ const DEFAULT_BRANDING: TenantBranding = {
   accent_color: null,
   background_color: null,
   show_powered_by: true,
-  show_roadmap: true,
+  show_roadmap: false,
   show_boards: true,
-  show_feed: true,
+  show_feed: false,
 };
 
 function getTenantSlugFromPath(pathname: string): string | null {
@@ -152,11 +152,6 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
     return Object.keys(style).length > 0 ? (style as CSSProperties) : undefined;
   }, [branding.accent_color, branding.background_color]);
 
-  const dashboardHref = buildTenantPath(
-    "/dashboard",
-    branding.tenant_slug,
-    branding.tenant_slug,
-  );
   const roadmapHref = buildTenantPath("/roadmap", branding.tenant_slug, branding.tenant_slug);
   const feedHref = buildTenantPath("/feed", branding.tenant_slug, branding.tenant_slug);
   const boardsHref = buildTenantPath("/", branding.tenant_slug, branding.tenant_slug);
@@ -201,9 +196,6 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
           </nav> : !loginHome ? <nav className="nav">
             {branding.show_boards ? <Link href={boardsHref} className="nav__link">Boards</Link> : null}
             {branding.show_feed ? <Link href={feedHref} className="nav__link">Feed</Link> : null}
-            <Link href={dashboardHref} className="nav__link">
-              Dashboard
-            </Link>
             {branding.show_roadmap ? <Link href={roadmapHref} className="nav__link">Roadmap</Link> : null}
             {canManage ? <a href={externalAppHref} className="nav__link">Howllo App ↗</a> : null}
             <NotificationBell />
