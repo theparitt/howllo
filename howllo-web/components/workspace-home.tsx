@@ -20,6 +20,7 @@ export function WorkspaceHome({ publicWebOrigin, staffSignIn = false }: { public
   const [loaded, setLoaded] = useState(false);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const openWorkspace = async (slug: string) => {
@@ -91,6 +92,7 @@ export function WorkspaceHome({ publicWebOrigin, staffSignIn = false }: { public
   }, [token, load]);
 
   const create = async () => {
+    if (busy || !name.trim()) return;
     setBusy(true);
     setError(null);
     try {
@@ -135,52 +137,61 @@ export function WorkspaceHome({ publicWebOrigin, staffSignIn = false }: { public
   }
 
   return (
-    <div className="page-stack" style={{ maxWidth: "48rem", margin: "0 auto" }}>
-      <section className="page-head">
-        <h1 className="page-title">Your workspaces</h1>
-        <p className="page-lead">Open a workspace to manage its boards, or create a new one.</p>
-      </section>
+    <div className="workspace-home">
+      <header className="workspace-home__header">
+        <div>
+          <h1 className="page-title">Your workspaces</h1>
+          <p className="workspace-home__intro">Choose a workspace to manage its boards and settings.</p>
+        </div>
+        {loaded && workspaces.length > 0 ? (
+          <button className="button workspace-home__new" type="button" onClick={() => setCreating((value) => !value)} aria-expanded={creating} aria-controls="workspace-create">
+            {creating ? "Cancel" : "+ New workspace"}
+          </button>
+        ) : null}
+      </header>
 
-      <section className="ws-grid">
+      {error ? <p className="error-text" role="alert">{error}</p> : null}
+
+      {!loaded ? <p className="workspace-home__loading">Loading workspaces…</p> : null}
+
+      {loaded && workspaces.length > 0 ? <section className="workspace-home__list" aria-label="Your workspaces">
         {workspaces.map((ws) => (
-          <Link key={ws.id} href={publicWebOrigin ? `${publicWebOrigin.replace(/\/$/, "")}/${encodeURIComponent(ws.slug)}` : `/${encodeURIComponent(ws.slug)}`} className="ws-card" aria-disabled={busy} onClick={(event) => {
+          <Link key={ws.id} href={staffSignIn ? `/app/${encodeURIComponent(ws.slug)}` : publicWebOrigin ? `${publicWebOrigin.replace(/\/$/, "")}/${encodeURIComponent(ws.slug)}` : `/${encodeURIComponent(ws.slug)}`} className="workspace-home__item" aria-disabled={busy} onClick={(event) => {
             if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
             event.preventDefault();
             if (!busy) void openWorkspace(ws.slug);
           }}>
-            <strong>{ws.name}</strong>
-            <span className="section-subtitle">
-              /{ws.slug} · {ws.board_count} boards · {ws.member_count} members
+            <span className="workspace-home__avatar" aria-hidden="true">{ws.name.trim().charAt(0).toUpperCase() || "W"}</span>
+            <span className="workspace-home__details">
+              <strong>{ws.name}</strong>
+              <span>/{ws.slug} <span aria-hidden="true">·</span> {ws.board_count} {ws.board_count === 1 ? "board" : "boards"} <span aria-hidden="true">·</span> {ws.member_count} {ws.member_count === 1 ? "member" : "members"}</span>
             </span>
+            <span className={`workspace-home__status ${ws.is_published ? "workspace-home__status--live" : ""}`}>{ws.is_published ? "Published" : "Private"}</span>
+            <span className="workspace-home__arrow" aria-hidden="true">→</span>
           </Link>
         ))}
-        {loaded && workspaces.length === 0 ? (
-          <p className="section-subtitle">You don&rsquo;t have any workspaces yet — create your first one below.</p>
-        ) : null}
-      </section>
+      </section> : null}
 
-      {error ? <p className="error-text" role="alert">{error}</p> : null}
-
-      <section className="panel">
-        <h2 className="section-title">Create a workspace</h2>
-        <div className="manage-form" style={{ marginTop: "1rem" }}>
+      {loaded && (creating || workspaces.length === 0) ? <section className="workspace-home__create" id="workspace-create">
+        <h2>{workspaces.length === 0 ? "Create your first workspace" : "New workspace"}</h2>
+        <p>A workspace keeps one product&rsquo;s boards and team together.</p>
+        <form className="workspace-home__form" onSubmit={(event) => { event.preventDefault(); void create(); }}>
+          <label htmlFor="workspace-name">Workspace name</label>
           <input
+            id="workspace-name"
             className="manage-input"
-            placeholder="My product"
+            placeholder="e.g. My product"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && name.trim() && !busy) create();
-            }}
+            maxLength={120}
+            autoFocus={creating}
           />
-          <button type="button" className="button button--cta" disabled={busy || !name.trim()} onClick={create}>
+          <span className="workspace-home__hint">Starts private with no boards. You can set it up before publishing.</span>
+          <button type="submit" className="button button--cta" disabled={busy || !name.trim()}>
             {busy ? "Creating…" : "Create workspace"}
           </button>
-        </div>
-        <p className="section-subtitle" style={{ marginTop: "0.6rem" }}>
-          You&rsquo;ll get a slug and starter boards, and become its owner.
-        </p>
-      </section>
+        </form>
+      </section> : null}
     </div>
   );
 }

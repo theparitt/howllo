@@ -277,6 +277,7 @@ export type WorkspaceSummary = {
   id: string;
   slug: string;
   name: string;
+  is_published: boolean;
   board_count: number;
   member_count: number;
   created_at: string;
