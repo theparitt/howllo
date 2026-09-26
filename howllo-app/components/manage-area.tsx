@@ -53,6 +53,7 @@ const NAV_ITEMS: { key: ManageTab; label: string; group: string; icon: string }[
   { key: "security", label: "Security", group: "Settings", icon: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" },
   { key: "signin", label: "Staff sign-in", group: "Settings", icon: "M10 17l5-5-5-5M15 12H3M13 4h5a2 2 0 012 2v12a2 2 0 01-2 2h-5" },
 ];
+const BOARD_NAV_ITEMS = new Set<ManageTab>(["boards", "branding", "participants", "moderation"]);
 
 function NavIcon({ path }: { path: string }) {
   return <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={path} /></svg>;
@@ -82,6 +83,9 @@ export function ManageArea() {
   const [role, setRole] = useState<string | null | undefined>(undefined);
   const [tab, setTab] = useState<ManageTab>("boards");
   const [collapsed, setCollapsed] = useState(false);
+  const [boardList, setBoardList] = useState<ManageBoard[] | null>(null);
+  const [boardLoadError, setBoardLoadError] = useState("");
+  const [boardRefresh, setBoardRefresh] = useState(0);
 
   useEffect(() => { setCollapsed(window.localStorage.getItem("howllo.staff.sidebar.collapsed") === "true"); }, []);
   const toggleSidebar = () => setCollapsed((value) => { window.localStorage.setItem("howllo.staff.sidebar.collapsed", String(!value)); return !value; });
@@ -94,17 +98,38 @@ export function ManageArea() {
 
   useEffect(() => {
     if (!tenant) return;
+    let cancelled = false;
+    setRole(undefined);
+    setBoardList(null);
     const token = readStoredBearerToken(tenant).trim();
     if (!token) {
       setRole(null);
       return;
     }
-    getMyWorkspaceRole(tenant, token).then(setRole).catch(() => setRole(null));
+    getMyWorkspaceRole(tenant, token)
+      .then((value) => { if (!cancelled) setRole(value); })
+      .catch(() => { if (!cancelled) setRole(null); });
+    return () => { cancelled = true; };
   }, [tenant]);
+
+  useEffect(() => {
+    if (!tenant || (role !== "owner" && role !== "admin")) return;
+    let cancelled = false;
+    setBoardList(null);
+    setBoardLoadError("");
+    managerListBoards(tenant, readStoredBearerToken(tenant).trim())
+      .then((boards) => { if (!cancelled) setBoardList(boards); })
+      .catch((cause) => { if (!cancelled) setBoardLoadError(cause instanceof Error ? cause.message : "Could not load boards."); });
+    return () => { cancelled = true; };
+  }, [tenant, role, boardRefresh]);
 
   useEffect(() => {
     if (role === "moderator") setTab("moderation");
   }, [role]);
+
+  useEffect(() => {
+    if (boardList?.length === 0 && BOARD_NAV_ITEMS.has(tab) && tab !== "boards") setTab("boards");
+  }, [boardList, tab]);
 
   if (role === undefined) {
     return <section className="panel"><p className="section-subtitle">Loading…</p></section>;
@@ -131,17 +156,25 @@ export function ManageArea() {
     );
   }
 
+  if (role !== "moderator" && boardList === null) {
+    return <section className="panel">{boardLoadError ? <p className="error-text" role="alert">{boardLoadError} <button type="button" className="ghost-button" onClick={() => setBoardRefresh((value) => value + 1)}>Retry</button></p> : <p className="section-subtitle">Loading workspace…</p>}</section>;
+  }
+
+  const noBoards = boardList?.length === 0;
+  const visibleNav = NAV_ITEMS.filter((item) => (role !== "moderator" || item.key === "moderation") && (!noBoards || !BOARD_NAV_ITEMS.has(item.key)));
+
   return (
     <div className={`manage-layout${collapsed ? " manage-layout--collapsed" : ""}`}>
       <aside className="manage-sidebar" aria-label="Workspace navigation">
         <div className="manage-sidebar__top"><span className="manage-sidebar__title">Workspace</span><button type="button" className="manage-sidebar__toggle" onClick={toggleSidebar} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}><NavIcon path={collapsed ? "M9 5l7 7-7 7" : "M15 5l-7 7 7 7"} /></button></div>
-        {Array.from(new Set(NAV_ITEMS.filter((item) => role !== "moderator" || item.key === "moderation").map((item) => item.group))).map((group) => <div className="manage-sidebar__group" key={group}>
+        {noBoards ? <button type="button" className={`manage-sidebar__create${tab === "boards" ? " manage-sidebar__create--active" : ""}`} aria-label="Create a board" title={collapsed ? "Create a board" : undefined} onClick={() => setTab("boards")}><NavIcon path="M12 5v14M5 12h14" /><span>Create a board</span></button> : null}
+        {Array.from(new Set(visibleNav.map((item) => item.group))).map((group) => <div className="manage-sidebar__group" key={group}>
           <span className="manage-sidebar__group-label">{group}</span>
-          {NAV_ITEMS.filter((item) => item.group === group && (role !== "moderator" || item.key === "moderation")).map((item) => <button key={item.key} type="button" className={`manage-sidebar__item${tab === item.key ? " manage-sidebar__item--active" : ""}`} aria-current={tab === item.key ? "page" : undefined} aria-label={item.label} title={collapsed ? item.label : undefined} onClick={() => setTab(item.key)}><NavIcon path={item.icon} /><span>{item.label}</span></button>)}
+          {visibleNav.filter((item) => item.group === group).map((item) => <button key={item.key} type="button" className={`manage-sidebar__item${tab === item.key ? " manage-sidebar__item--active" : ""}`} aria-current={tab === item.key ? "page" : undefined} aria-label={item.label} title={collapsed ? item.label : undefined} onClick={() => setTab(item.key)}><NavIcon path={item.icon} /><span>{item.label}</span></button>)}
         </div>)}
       </aside>
       <div className="manage-layout__content">
-      <header className="manage-layout__heading"><h1 className="page-title">{NAV_ITEMS.find((item) => item.key === (role === "moderator" ? "moderation" : tab))?.label}</h1>{tab === "branding" ? <p>Logo, colors, and pages your customers see.</p> : null}</header>
+      <header className="manage-layout__heading"><h1 className="page-title">{noBoards && tab === "boards" ? "Create your first board" : NAV_ITEMS.find((item) => item.key === (role === "moderator" ? "moderation" : tab))?.label}</h1>{tab === "branding" ? <p>Logo, colors, and pages your customers see.</p> : null}</header>
       {tenant ? (
         tab === "moderation" || role === "moderator" ? (
           <ModerationTab tenant={tenant} />
@@ -154,7 +187,7 @@ export function ManageArea() {
         ) : tab === "team" ? (
           <TeamTab tenant={tenant} myRole={role!} />
         ) : tab === "boards" ? (
-          <BoardsTab tenant={tenant} />
+          <BoardsTab tenant={tenant} initialBoards={boardList ?? []} onBoardsChange={setBoardList} />
         ) : (
           <SsoTab tenant={tenant} />
         )
@@ -342,8 +375,9 @@ function MemberRow({
   );
 }
 
-function BoardsTab({ tenant }: { tenant: string }) {
-  const [boards, setBoards] = useState<ManageBoard[]>([]);
+function BoardsTab({ tenant, initialBoards, onBoardsChange }: { tenant: string; initialBoards: ManageBoard[]; onBoardsChange: (boards: ManageBoard[]) => void }) {
+  const [boards, setBoards] = useState<ManageBoard[]>(initialBoards);
+  const [loading, setLoading] = useState(true);
   const [workspacePublished, setWorkspacePublished] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -364,14 +398,14 @@ function BoardsTab({ tenant }: { tenant: string }) {
     try {
       const [list, settings] = await Promise.all([managerListBoards(tenant, t), getTenantManagementSettings(tenant, t)]);
       setBoards(list);
+      onBoardsChange(list);
       setWorkspacePublished(settings.is_published);
       setSelected((cur) => (cur && list.some((item) => item.id === cur) ? cur : list[0]?.id ?? null));
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load boards.");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenant]);
+    } finally { setLoading(false); }
+  }, [tenant, onBoardsChange]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -415,17 +449,19 @@ function BoardsTab({ tenant }: { tenant: string }) {
     }
   }
 
+  if (loading) return <section className="panel"><p className="section-subtitle">Loading boards…</p></section>;
+
   return (
     <div className="page-stack">
       <section className="panel">
         <div className="manage-board-heading">
           <div>
-            <h2 className="section-title">Your boards</h2>
-            <p className="section-subtitle">Create boards one at a time. Each starts as a draft until you publish it.</p>
+            <h2 className="section-title">{boards.length === 0 ? "Start with a board" : "Your boards"}</h2>
+            <p className="section-subtitle">{boards.length === 0 ? "Give your board a name and choose how people will use it." : "Create boards one at a time. Each starts as a draft until you publish it."}</p>
           </div>
-          <button className="button button--cta" type="button" onClick={() => setCreating((value) => !value)}>{creating ? "Cancel" : "Create board"}</button>
+          {boards.length > 0 ? <button className="button button--cta" type="button" onClick={() => setCreating((value) => !value)}>{creating ? "Cancel" : "Create board"}</button> : null}
         </div>
-        {creating ? <form className="manage-fields" style={{ marginTop: "1rem" }} onSubmit={(event) => void createBoard(event)}>
+        {creating || boards.length === 0 ? <form className="manage-fields" style={{ marginTop: "1rem" }} onSubmit={(event) => void createBoard(event)}>
           <label className="manage-label">Board name<input className="manage-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Product ideas" required /></label>
           <label className="manage-label">URL slug<input className="manage-input" value={slugInput} onChange={(event) => setSlugInput(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} placeholder={generatedSlug || "product-ideas"} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required={!generatedSlug} /></label>
           <label className="manage-label">Description<textarea className="manage-input" rows={2} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
@@ -435,23 +471,22 @@ function BoardsTab({ tenant }: { tenant: string }) {
         </form> : null}
         {error ? <p className="error-text" role="alert">{error}</p> : null}
       </section>
-      <section className="dashboard-grid">
-      <section className="panel">
-        <h2 className="section-title">Boards</h2>
-        <div className="list-stack" style={{ marginTop: "1rem" }}>
-          {boards.length === 0 ? <p className="section-subtitle">No boards yet. Create your first board above.</p> : null}
-          {boards.map((b) => (
-            <button type="button" key={b.id} className={`manage-board-tab${b.id === selected ? " manage-board-tab--active" : ""}`} onClick={() => setSelected(b.id)}>
-              <strong>{b.name}</strong>
-              <span className="section-subtitle">{b.board_type}{b.is_private ? " · private" : ""} · {b.is_enabled ? workspacePublished ? "Active" : "Ready" : b.first_enabled_at ? "Paused" : "Draft"}</span>
-            </button>
-          ))}
-        </div>
-      </section>
-      {board ? <BoardEditor key={board.id} board={board} tenant={tenant} workspacePublished={workspacePublished} onSaved={reload} onDeleted={afterDelete} /> : (
-        <section className="panel"><p className="section-subtitle">Select a board to edit.</p></section>
-      )}
-      </section>
+      {boards.length > 0 ? <section className="dashboard-grid">
+        <section className="panel">
+          <h2 className="section-title">Boards</h2>
+          <div className="list-stack" style={{ marginTop: "1rem" }}>
+            {boards.map((b) => (
+              <button type="button" key={b.id} className={`manage-board-tab${b.id === selected ? " manage-board-tab--active" : ""}`} onClick={() => setSelected(b.id)}>
+                <strong>{b.name}</strong>
+                <span className="section-subtitle">{b.board_type}{b.is_private ? " · private" : ""} · {b.is_enabled ? workspacePublished ? "Active" : "Ready" : b.first_enabled_at ? "Paused" : "Draft"}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+        {board ? <BoardEditor key={board.id} board={board} tenant={tenant} workspacePublished={workspacePublished} onSaved={reload} onDeleted={afterDelete} /> : (
+          <section className="panel"><p className="section-subtitle">Select a board to edit.</p></section>
+        )}
+      </section> : null}
     </div>
   );
 }
