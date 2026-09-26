@@ -39,6 +39,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(auth::local_user::change_password)
         .service(auth::local_user::rotate_recovery_code)
         .service(auth::local_user::reset_password)
+        .service(auth::local_user::list_local_users)
+        .service(auth::local_user::issue_admin_recovery)
         .service(auth::local_user::logout)
         .service(auth::providers::list_providers)
         .service(auth::oidc::login)

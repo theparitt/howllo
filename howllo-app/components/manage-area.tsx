@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RooiamInlineLogin } from "@/components/rooiam-inline-login";
 import { ENABLED_AUTH_PROVIDERS } from "@/lib/auth-provider";
 import {
@@ -38,10 +38,25 @@ import { ModerationTab } from "./moderation-tab";
 import { BrandingTab } from "./branding-tab";
 import { SecurityTab } from "./security-tab";
 import { prepareBrandImage } from "../lib/prepare-brand-image";
+import { LIST_PAGE_SIZE, ListPager, ListSearch } from "./list-controls";
 
 const INVITE_ROLES = ["admin", "moderator"];
 const MEMBER_ROLES = ["owner", "admin", "moderator", "member"];
 const PUBLIC_WEB_URL = (process.env.NEXT_PUBLIC_HOWLLO_PUBLIC_WEB_URL || "http://localhost:7703").replace(/\/$/, "");
+type ManageTab = "team" | "boards" | "branding" | "security" | "signin" | "participants" | "moderation";
+const NAV_ITEMS: { key: ManageTab; label: string; group: string; icon: string }[] = [
+  { key: "boards", label: "Boards", group: "Workspace", icon: "M4 5h16v14H4zM4 10h16M10 10v9" },
+  { key: "branding", label: "Board site", group: "Workspace", icon: "M3 5h18v14H3zM3 9h18M7 14h4" },
+  { key: "team", label: "Staff", group: "People", icon: "M16 19v-1a4 4 0 00-8 0v1M12 11a3 3 0 100-6 3 3 0 000 6" },
+  { key: "participants", label: "Board members", group: "People", icon: "M4 19v-1a4 4 0 018 0v1M8 11a3 3 0 100-6 3 3 0 000 6M16 8h5M16 12h5" },
+  { key: "moderation", label: "Moderation", group: "People", icon: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4" },
+  { key: "security", label: "Security", group: "Settings", icon: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" },
+  { key: "signin", label: "Staff sign-in", group: "Settings", icon: "M10 17l5-5-5-5M15 12H3M13 4h5a2 2 0 012 2v12a2 2 0 01-2 2h-5" },
+];
+
+function NavIcon({ path }: { path: string }) {
+  return <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={path} /></svg>;
+}
 
 function publicBoardUrl(tenant: string, boardSlug: string): string {
   return `${PUBLIC_WEB_URL}/${encodeURIComponent(tenant)}/boards/${encodeURIComponent(boardSlug)}`;
@@ -65,7 +80,11 @@ function statusTone(status: string): string {
 export function ManageArea() {
   const [tenant, setTenant] = useState<string | null>(null);
   const [role, setRole] = useState<string | null | undefined>(undefined);
-  const [tab, setTab] = useState<"team" | "boards" | "branding" | "security" | "signin" | "participants" | "moderation">("boards");
+  const [tab, setTab] = useState<ManageTab>("boards");
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => { setCollapsed(window.localStorage.getItem("howllo.staff.sidebar.collapsed") === "true"); }, []);
+  const toggleSidebar = () => setCollapsed((value) => { window.localStorage.setItem("howllo.staff.sidebar.collapsed", String(!value)); return !value; });
 
   useEffect(() => {
     const resolve = () => setTenant(getCurrentWorkspaceSlug());
@@ -113,30 +132,16 @@ export function ManageArea() {
   }
 
   return (
-    <div className="page-stack">
-      <section className="page-head">
-        <h1 className="page-title">Manage workspace</h1>
-        <p className="page-lead">Create boards, choose who can see them, and share public board links with your users.</p>
-      </section>
-
-      <div className="feed-filters">
-        {role !== "moderator" ? <>
-        <button type="button" className={`feed-chip${tab === "team" ? " feed-chip--active" : ""}`} onClick={() => setTab("team")}>
-          Staff
-        </button>
-        <button type="button" className={`feed-chip${tab === "boards" ? " feed-chip--active" : ""}`} onClick={() => setTab("boards")}>
-          Boards
-        </button>
-        <button type="button" className={`feed-chip${tab === "branding" ? " feed-chip--active" : ""}`} onClick={() => setTab("branding")}>Public site</button>
-        <button type="button" className={`feed-chip${tab === "security" ? " feed-chip--active" : ""}`} onClick={() => setTab("security")}>Security</button>
-        <button type="button" className={`feed-chip${tab === "participants" ? " feed-chip--active" : ""}`} onClick={() => setTab("participants")}>Users</button>
-        <button type="button" className={`feed-chip${tab === "signin" ? " feed-chip--active" : ""}`} onClick={() => setTab("signin")}>
-          Sign-in (SSO)
-        </button>
-        </> : null}
-        <button type="button" className={`feed-chip${tab === "moderation" ? " feed-chip--active" : ""}`} onClick={() => setTab("moderation")}>Moderation</button>
-      </div>
-
+    <div className={`manage-layout${collapsed ? " manage-layout--collapsed" : ""}`}>
+      <aside className="manage-sidebar" aria-label="Workspace navigation">
+        <div className="manage-sidebar__top"><span className="manage-sidebar__title">Workspace</span><button type="button" className="manage-sidebar__toggle" onClick={toggleSidebar} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}><NavIcon path={collapsed ? "M9 5l7 7-7 7" : "M15 5l-7 7 7 7"} /></button></div>
+        {Array.from(new Set(NAV_ITEMS.filter((item) => role !== "moderator" || item.key === "moderation").map((item) => item.group))).map((group) => <div className="manage-sidebar__group" key={group}>
+          <span className="manage-sidebar__group-label">{group}</span>
+          {NAV_ITEMS.filter((item) => item.group === group && (role !== "moderator" || item.key === "moderation")).map((item) => <button key={item.key} type="button" className={`manage-sidebar__item${tab === item.key ? " manage-sidebar__item--active" : ""}`} aria-current={tab === item.key ? "page" : undefined} aria-label={item.label} title={collapsed ? item.label : undefined} onClick={() => setTab(item.key)}><NavIcon path={item.icon} /><span>{item.label}</span></button>)}
+        </div>)}
+      </aside>
+      <div className="manage-layout__content">
+      <header className="manage-layout__heading"><h1 className="page-title">{NAV_ITEMS.find((item) => item.key === (role === "moderator" ? "moderation" : tab))?.label}</h1>{tab === "branding" ? <p>Logo, colors, and pages your customers see.</p> : null}</header>
       {tenant ? (
         tab === "moderation" || role === "moderator" ? (
           <ModerationTab tenant={tenant} />
@@ -154,6 +159,7 @@ export function ManageArea() {
           <SsoTab tenant={tenant} />
         )
       ) : null}
+      </div>
     </div>
   );
 }
@@ -166,6 +172,11 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [memberQuery, setMemberQuery] = useState("");
+  const [memberRole, setMemberRole] = useState("all");
+  const [memberPage, setMemberPage] = useState(1);
+  const [inviteQuery, setInviteQuery] = useState("");
+  const [invitePage, setInvitePage] = useState(1);
 
   const token = () => readStoredBearerToken(tenant).trim();
 
@@ -207,6 +218,13 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
   };
 
   const ownerCount = members.filter((m) => m.role === "owner").length;
+  const visibleMembers = useMemo(() => members.filter((member) => {
+    const query = memberQuery.trim().toLowerCase();
+    return (!query || `${member.display_name} ${member.email}`.toLowerCase().includes(query)) && (memberRole === "all" || member.role === memberRole);
+  }), [members, memberQuery, memberRole]);
+  const visibleInvites = useMemo(() => invites.filter((invite) => `${invite.email} ${invite.role} ${invite.status}`.toLowerCase().includes(inviteQuery.trim().toLowerCase())), [invites, inviteQuery]);
+  const safeMemberPage = Math.min(memberPage, Math.max(1, Math.ceil(visibleMembers.length / LIST_PAGE_SIZE)));
+  const safeInvitePage = Math.min(invitePage, Math.max(1, Math.ceil(visibleInvites.length / LIST_PAGE_SIZE)));
 
   return (
     <>
@@ -229,8 +247,9 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
       {invites.length > 0 ? (
         <section className="panel">
           <h2 className="section-title">Invitations</h2>
+          <ListSearch value={inviteQuery} onChange={(value) => { setInviteQuery(value); setInvitePage(1); }} placeholder="Search invitations" />
           <div className="list-stack" style={{ marginTop: "1rem" }}>
-            {invites.map((inv) => (
+            {visibleInvites.slice((safeInvitePage - 1) * LIST_PAGE_SIZE, safeInvitePage * LIST_PAGE_SIZE).map((inv) => (
               <div className="manage-row" key={inv.id}>
                 <div>
                   <strong>{inv.email}</strong>
@@ -243,17 +262,22 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
                 ) : null}
               </div>
             ))}
+            {visibleInvites.length === 0 ? <p className="section-subtitle">No matching invitations.</p> : null}
           </div>
+          <ListPager page={safeInvitePage} total={visibleInvites.length} onPage={setInvitePage} />
         </section>
       ) : null}
 
       <section className="panel">
         <h2 className="section-title">Members</h2>
+        <ListSearch value={memberQuery} onChange={(value) => { setMemberQuery(value); setMemberPage(1); }} placeholder="Search staff by name or email"><select className="manage-input" aria-label="Filter staff by role" value={memberRole} onChange={(event) => { setMemberRole(event.target.value); setMemberPage(1); }}><option value="all">All roles</option>{MEMBER_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}</select></ListSearch>
         <div className="list-stack" style={{ marginTop: "1rem" }}>
-          {members.map((m) => (
+          {visibleMembers.slice((safeMemberPage - 1) * LIST_PAGE_SIZE, safeMemberPage * LIST_PAGE_SIZE).map((m) => (
             <MemberRow key={m.user_id} member={m} tenant={tenant} myRole={myRole} ownerCount={ownerCount} onChanged={reload} />
           ))}
+          {visibleMembers.length === 0 ? <p className="section-subtitle">No matching staff.</p> : null}
         </div>
+        <ListPager page={safeMemberPage} total={visibleMembers.length} onPage={setMemberPage} />
       </section>
     </>
   );
@@ -520,7 +544,7 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
         {!board.is_private && board.is_enabled && workspacePublished ? <button className="button" type="button" onClick={() => {
           const url = publicBoardUrl(tenant, board.slug);
           void navigator.clipboard.writeText(url).then(() => setNotice("Public board link copied.")).catch(() => setError("Could not copy link. Open the board and copy its URL."));
-        }}>Copy public link</button> : <span className="section-subtitle">{!board.is_enabled ? "Hidden from visitors" : !workspacePublished ? "Publish this workspace in Public site to share its boards." : "Private: workspace members only"}</span>}
+        }}>Copy board link</button> : <span className="section-subtitle">{!board.is_enabled ? "Hidden from visitors" : !workspacePublished ? "Publish this workspace in Board site to share its boards." : "Private: workspace members only"}</span>}
       </div>
       <div className="manage-fields" style={{ marginTop: "1rem" }}>
         <label className="manage-label">Name<input className="manage-input" value={name} onChange={(e) => setName(e.target.value)} /></label>

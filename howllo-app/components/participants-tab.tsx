@@ -1,14 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { managerClearParticipantRestriction, managerListParticipants, managerSetParticipantRestriction } from "@/lib/api";
 import { readStoredBearerToken } from "@/components/dev-auth-panel";
 import type { WorkspaceParticipant } from "@/lib/types";
+import { LIST_PAGE_SIZE, ListPager, ListSearch } from "./list-controls";
 
 export function ParticipantsTab({ tenant }: { tenant: string }) {
   const [items, setItems] = useState<WorkspaceParticipant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [page, setPage] = useState(1);
   const refresh = useCallback(async () => {
     try {
       setItems(await managerListParticipants(tenant, readStoredBearerToken(tenant).trim()));
@@ -18,15 +22,24 @@ export function ParticipantsTab({ tenant }: { tenant: string }) {
     } finally { setLoading(false); }
   }, [tenant]);
   useEffect(() => { void refresh(); }, [refresh]);
+  const visible = useMemo(() => items.filter((item) => {
+    const matchesQuery = `${item.display_name} ${item.email}`.toLowerCase().includes(query.trim().toLowerCase());
+    const matchesFilter = filter === "all" || (filter === "active" ? !item.restriction_kind : item.restriction_kind === filter);
+    return matchesQuery && matchesFilter;
+  }), [items, query, filter]);
+  const safePage = Math.min(page, Math.max(1, Math.ceil(visible.length / LIST_PAGE_SIZE)));
 
   return <section className="panel">
-    <h2 className="section-title">Workspace users</h2>
+    <h2 className="section-title">Board members</h2>
     <p className="section-subtitle">People who joined this workspace through the public board. Restrictions apply to every board in this workspace.</p>
+    <ListSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search users by name or email"><select className="manage-input" aria-label="Filter users by status" value={filter} onChange={(event) => { setFilter(event.target.value); setPage(1); }}><option value="all">All statuses</option><option value="active">Active</option><option value="suspended">Suspended</option><option value="banned">Banned</option></select></ListSearch>
     {loading ? <p>Loading…</p> : null}
     {items.length === 0 && !loading ? <p className="section-subtitle">No public users have joined yet.</p> : null}
     <div className="list-stack" style={{ marginTop: "1rem" }}>
-      {items.map((item) => <ParticipantRow key={item.user_id} item={item} tenant={tenant} onChanged={refresh} />)}
+      {visible.slice((safePage - 1) * LIST_PAGE_SIZE, safePage * LIST_PAGE_SIZE).map((item) => <ParticipantRow key={item.user_id} item={item} tenant={tenant} onChanged={refresh} />)}
+      {items.length > 0 && visible.length === 0 ? <p className="section-subtitle">No matching users.</p> : null}
     </div>
+    <ListPager page={safePage} total={visible.length} onPage={setPage} />
     {error ? <p className="error-text" role="alert">{error}</p> : null}
   </section>;
 }

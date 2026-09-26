@@ -136,6 +136,14 @@ fn verify_password(password: &str, stored_hash: &str) -> bool {
     }
 }
 
+pub async fn verify_operator_password(pool: &DbPool, password: &str) -> Result<bool, AppError> {
+    let stored: Option<String> = sqlx::query_scalar("SELECT password_hash FROM admin_credentials WHERE id = TRUE")
+        .fetch_optional(pool)
+        .await
+        .map_err(|error| { tracing::error!(%error, "failed to verify operator password"); AppError::InternalServerError })?;
+    Ok(stored.is_some_and(|hash| verify_password(password, &hash)))
+}
+
 fn mint_token(secret: &str) -> Result<(String, i64), AppError> {
     let expires_in = Duration::hours(TOKEN_TTL_HOURS);
     let claims = AdminClaims {

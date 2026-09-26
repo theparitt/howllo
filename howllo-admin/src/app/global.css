@@ -1264,6 +1264,18 @@ section > h1 + .muted {
   border-collapse: collapse;
 }
 
+.local-users-page { display: grid; gap: 1rem; }
+.local-users-page > h1 { margin-bottom: 0; }
+.local-users-page > p { margin-top: 0; }
+.local-users-search, .local-users-recovery label { display: grid; gap: .4rem; max-width: 34rem; }
+.local-users-table-wrap { overflow-x: auto; margin-top: 1rem; }
+.local-users-table-wrap .data-table { min-width: 760px; }
+.local-users-pager { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
+.local-users-pager > div { display: flex; gap: .5rem; }
+.local-users-recovery { display: grid; gap: .9rem; max-width: 40rem; }
+.local-users-recovery p { margin: 0; }
+.local-users-recovery > code { display: block; overflow-wrap: anywhere; user-select: all; padding: 1rem; border: 1px solid var(--border); border-radius: .75rem; background: white; }
+
 .data-table th {
   padding: 0 14px 10px 0;
   text-align: left;

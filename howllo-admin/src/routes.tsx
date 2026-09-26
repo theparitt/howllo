@@ -12,6 +12,7 @@ import { SettingsPage } from "./features/settings/SettingsPage";
 import { TenantsPage } from "./features/tenants/TenantsPage";
 import { WorkspaceDetailPage } from "./features/tenants/WorkspaceDetailPage";
 import { PlatformSettingsPage } from "./features/platform/PlatformSettingsPage";
+import { LocalUsersPage } from "./features/platform/LocalUsersPage";
 
 // Route table mirrors @howllo/config adminRoutes.
 export const router = createBrowserRouter([
@@ -27,6 +28,7 @@ export const router = createBrowserRouter([
       { path: "tenants", element: <TenantsPage /> },
       { path: "tenants/:workspaceSlug", element: <WorkspaceDetailPage /> },
       { path: "platform", element: <PlatformSettingsPage /> },
+      { path: "users", element: <LocalUsersPage /> },
       { path: "boards", element: <BoardsPage /> },
       { path: "boards/:boardId", element: <BoardsPage /> },
       { path: "tags", element: <TagsPage /> },

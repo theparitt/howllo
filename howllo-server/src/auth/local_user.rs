@@ -8,8 +8,10 @@ use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
+use std::net::IpAddr;
 
 use crate::{db::DbPool, errors::AppError, users::User};
+use crate::auth::{local_admin, AuthenticatedUser};
 
 const PREFIX: &str = "howllo_ac_";
 
@@ -123,17 +125,23 @@ pub async fn resolve_account_token(pool: &DbPool, token: &str) -> Result<Option<
 }
 
 pub async fn issue_account_token(pool: &DbPool, user_id: Uuid) -> Result<AccountToken, AppError> {
+    issue_account_token_inner(pool, user_id, None).await
+}
+
+async fn issue_account_token_inner(pool: &DbPool, user_id: Uuid, req: Option<&HttpRequest>) -> Result<AccountToken, AppError> {
     let token = format!(
         "{PREFIX}{}{}",
         Uuid::new_v4().simple(),
         Uuid::new_v4().simple()
     );
     sqlx::query(
-        "INSERT INTO account_sessions (user_id, token_hash, expires_at) VALUES ($1, $2, $3)",
+        "INSERT INTO account_sessions (user_id, token_hash, expires_at, login_ip, user_agent) VALUES ($1, $2, $3, $4::inet, $5)",
     )
     .bind(user_id)
     .bind(token_hash(&token))
     .bind(Utc::now() + Duration::days(30))
+    .bind(req.and_then(|request| request.headers().get("cf-connecting-ip").and_then(|value| value.to_str().ok()).and_then(|value| value.parse::<IpAddr>().ok()).or_else(|| request.peer_addr().map(|address| address.ip()))).map(|ip| ip.to_string()))
+    .bind(req.and_then(|request| request.headers().get("user-agent").and_then(|value| value.to_str().ok())).map(|value| value.chars().take(512).collect::<String>()))
     .execute(pool)
     .await
     .map_err(db_error)?;
@@ -152,6 +160,7 @@ fn db_error(error: sqlx::Error) -> AppError {
 
 #[post("/api/auth/local/register")]
 pub async fn register(
+    req: HttpRequest,
     pool: web::Data<DbPool>,
     body: web::Json<Credentials>,
 ) -> Result<impl Responder, AppError> {
@@ -194,7 +203,7 @@ pub async fn register(
         .map_err(db_error)?;
     tx.commit().await.map_err(db_error)?;
     tracing::info!(provider_id = "local", user_id = %id, "auth.login.succeeded");
-    let mut account = issue_account_token(pool.get_ref(), id).await?;
+    let mut account = issue_account_token_inner(pool.get_ref(), id, Some(&req)).await?;
     account.recovery_code = Some(recovery_code);
     Ok(HttpResponse::Created()
         .insert_header(("Cache-Control", "no-store"))
@@ -203,6 +212,7 @@ pub async fn register(
 
 #[post("/api/auth/local/login")]
 pub async fn login(
+    req: HttpRequest,
     pool: web::Data<DbPool>,
     body: web::Json<Credentials>,
 ) -> Result<impl Responder, AppError> {
@@ -226,7 +236,7 @@ pub async fn login(
     tracing::info!(provider_id = "local", user_id = %id, "auth.login.succeeded");
     Ok(HttpResponse::Ok()
         .insert_header(("Cache-Control", "no-store"))
-        .json(issue_account_token(pool.get_ref(), id).await?))
+        .json(issue_account_token_inner(pool.get_ref(), id, Some(&req)).await?))
 }
 
 #[post("/api/auth/local/change-password")]
@@ -336,6 +346,7 @@ pub async fn rotate_recovery_code(
 
 #[post("/api/auth/local/reset-password")]
 pub async fn reset_password(
+    req: HttpRequest,
     pool: web::Data<DbPool>,
     body: web::Json<ResetPasswordRequest>,
 ) -> Result<impl Responder, AppError> {
@@ -368,11 +379,85 @@ pub async fn reset_password(
     revoke_user_sessions(&mut tx, user_id).await?;
     tx.commit().await.map_err(db_error)?;
     tracing::info!(provider_id = "local", user_id = %user_id, "auth.password_reset.succeeded");
-    let mut account = issue_account_token(pool.get_ref(), user_id).await?;
+    let mut account = issue_account_token_inner(pool.get_ref(), user_id, Some(&req)).await?;
     account.recovery_code = Some(replacement_code);
     Ok(HttpResponse::Ok()
         .insert_header(("Cache-Control", "no-store"))
         .json(account))
+}
+
+#[derive(Deserialize)]
+pub struct LocalUsersQuery {
+    pub search: Option<String>,
+    pub page: Option<i64>,
+    pub per_page: Option<i64>,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct LocalUserSupportRow {
+    pub user_id: Uuid,
+    pub username: String,
+    pub display_name: String,
+    pub created_at: chrono::DateTime<Utc>,
+    pub last_sign_in_at: Option<chrono::DateTime<Utc>>,
+    pub login_ip: Option<String>,
+    pub user_agent: Option<String>,
+}
+
+#[get("/api/admin/local-users")]
+pub async fn list_local_users(
+    pool: web::Data<DbPool>,
+    query: web::Query<LocalUsersQuery>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    if !local_admin::is_local_admin_user(&auth.0) { return Err(AppError::Forbidden); }
+    let search = query.search.as_deref().unwrap_or("").trim();
+    if search.chars().count() > 100 { return Err(AppError::Validation("search is too long".into())); }
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page = query.per_page.unwrap_or(20).clamp(1, 100);
+    let pattern = format!("%{search}%");
+    let total: i64 = sqlx::query_scalar("SELECT count(*) FROM local_credentials c JOIN users u ON u.id = c.user_id WHERE c.username ILIKE $1 OR u.display_name ILIKE $1")
+        .bind(&pattern).fetch_one(pool.get_ref()).await.map_err(db_error)?;
+    let items = sqlx::query_as::<_, LocalUserSupportRow>(
+        "SELECT c.user_id, c.username, u.display_name, c.created_at, s.created_at AS last_sign_in_at, s.login_ip::text AS login_ip, s.user_agent FROM local_credentials c JOIN users u ON u.id = c.user_id LEFT JOIN LATERAL (SELECT created_at, login_ip, user_agent FROM account_sessions WHERE user_id = c.user_id ORDER BY created_at DESC LIMIT 1) s ON TRUE WHERE c.username ILIKE $1 OR u.display_name ILIKE $1 ORDER BY c.created_at DESC LIMIT $2 OFFSET $3"
+    ).bind(&pattern).bind(per_page).bind((page - 1).saturating_mul(per_page)).fetch_all(pool.get_ref()).await.map_err(db_error)?;
+    Ok(HttpResponse::Ok().insert_header(("Cache-Control", "no-store")).json(crate::dto::PaginatedResponse {
+        items, page, per_page, total, has_next: page.saturating_mul(per_page) < total,
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct AdminRecoveryRequest {
+    pub admin_password: String,
+    pub reason: String,
+}
+
+#[post("/api/admin/local-users/{user_id}/recovery")]
+pub async fn issue_admin_recovery(
+    pool: web::Data<DbPool>,
+    path: web::Path<Uuid>,
+    body: web::Json<AdminRecoveryRequest>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    if !local_admin::is_local_admin_user(&auth.0) { return Err(AppError::Forbidden); }
+    let reason = body.reason.trim();
+    if !(8..=500).contains(&reason.chars().count()) { return Err(AppError::Validation("reason must be 8–500 characters".into())); }
+    if !local_admin::verify_operator_password(pool.get_ref(), &body.admin_password).await? {
+        return Err(AppError::Unauthorized);
+    }
+    let user_id = path.into_inner();
+    let code = new_recovery_code();
+    let mut tx = pool.begin().await.map_err(db_error)?;
+    let target: Option<Uuid> = sqlx::query_scalar(
+        "INSERT INTO local_recovery_codes (user_id, code_hash) SELECT user_id, $2 FROM local_credentials WHERE user_id = $1 ON CONFLICT (user_id) DO UPDATE SET code_hash = EXCLUDED.code_hash, created_at = NOW() RETURNING user_id"
+    ).bind(user_id).bind(token_hash(&code)).fetch_optional(&mut *tx).await.map_err(db_error)?;
+    if target.is_none() { return Err(AppError::NotFound); }
+    revoke_user_sessions(&mut tx, user_id).await?;
+    sqlx::query("INSERT INTO local_recovery_issuances (user_id, issued_by, reason) VALUES ($1, $2, $3)")
+        .bind(user_id).bind(auth.0.id).bind(reason).execute(&mut *tx).await.map_err(db_error)?;
+    tx.commit().await.map_err(db_error)?;
+    tracing::info!(user_id = %user_id, issued_by = %auth.0.id, "local recovery issued by platform admin");
+    Ok(HttpResponse::Ok().insert_header(("Cache-Control", "no-store")).json(serde_json::json!({"recovery_code": code})))
 }
 
 async fn revoke_user_sessions(
@@ -424,6 +509,7 @@ mod tests {
     };
     use actix_web::{http::StatusCode, test, web, App};
     use serde_json::json;
+    use uuid::Uuid;
     #[actix_web::test]
     async fn usernames_are_normalized_and_constrained() {
         assert_eq!(username(" Alice_42 ").unwrap(), "alice_42");
@@ -704,5 +790,70 @@ mod tests {
         .await;
         assert_eq!(new_login.status(), StatusCode::OK);
         assert!(read_json(new_login).await.get("recovery_code").is_none());
+    }
+
+    #[actix_web::test]
+    async fn platform_admin_recovery_is_audited_and_restricted() {
+        let _guard = lock_test_db().await;
+        let settings = test_settings();
+        let pool = db::establish_connection(&settings.database_url).await.unwrap();
+        reset_db(&pool).await;
+        sqlx::query("DELETE FROM admin_credentials").execute(&pool).await.unwrap();
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings))
+                .configure(startup::configure),
+        ).await;
+        let registered = test::call_service(&app, test::TestRequest::post()
+            .uri("/api/auth/local/register")
+            .insert_header(("User-Agent", "Recovery test browser"))
+            .set_json(json!({"username":"support_user","password":"first-strong-password"}))
+            .to_request()).await;
+        assert_eq!(registered.status(), StatusCode::CREATED);
+        let registered = read_json(registered).await;
+        let user_id: Uuid = sqlx::query_scalar("SELECT user_id FROM local_credentials WHERE username = 'support_user'")
+            .fetch_one(&pool).await.unwrap();
+        let first_code = registered["recovery_code"].as_str().unwrap().to_string();
+        let user_token = format!("Bearer {}", registered["access_token"].as_str().unwrap());
+        let url = format!("/api/admin/local-users/{user_id}/recovery");
+        let forbidden = test::call_service(&app, test::TestRequest::post().uri(&url)
+            .insert_header(("Authorization", user_token.clone()))
+            .set_json(json!({"admin_password":"admin-password","reason":"Support request 123"}))
+            .to_request()).await;
+        assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+        let setup = test::call_service(&app, test::TestRequest::post()
+            .uri("/api/admin/auth/setup")
+            .set_json(json!({"bootstrap_key":"test-bootstrap-key","password":"admin-password"}))
+            .to_request()).await;
+        assert_eq!(setup.status(), StatusCode::OK);
+        let admin_token = format!("Bearer {}", read_json(setup).await["access_token"].as_str().unwrap());
+        let listed = test::call_service(&app, test::TestRequest::get()
+            .uri("/api/admin/local-users?search=support_user&page=1&per_page=20")
+            .insert_header(("Authorization", admin_token.clone()))
+            .to_request()).await;
+        assert_eq!(listed.status(), StatusCode::OK);
+        let listed = read_json(listed).await;
+        assert_eq!(listed["total"], 1);
+        assert_eq!(listed["items"][0]["user_agent"], "Recovery test browser");
+        let bad_password = test::call_service(&app, test::TestRequest::post().uri(&url)
+            .insert_header(("Authorization", admin_token.clone()))
+            .set_json(json!({"admin_password":"wrong-password","reason":"Support request 123"}))
+            .to_request()).await;
+        assert_eq!(bad_password.status(), StatusCode::UNAUTHORIZED);
+        let issued = test::call_service(&app, test::TestRequest::post().uri(&url)
+            .insert_header(("Authorization", admin_token))
+            .set_json(json!({"admin_password":"admin-password","reason":"Support request 123"}))
+            .to_request()).await;
+        assert_eq!(issued.status(), StatusCode::OK);
+        assert_eq!(issued.headers().get("Cache-Control").unwrap(), "no-store");
+        let new_code = read_json(issued).await["recovery_code"].as_str().unwrap().to_string();
+        assert_ne!(first_code, new_code);
+        let audit_count: i64 = sqlx::query_scalar("SELECT count(*) FROM local_recovery_issuances WHERE reason = $1")
+            .bind("Support request 123").fetch_one(&pool).await.unwrap();
+        assert_eq!(audit_count, 1);
+        let old_session = test::call_service(&app, test::TestRequest::get().uri("/api/me")
+            .insert_header(("Authorization", user_token)).to_request()).await;
+        assert_eq!(old_session.status(), StatusCode::UNAUTHORIZED);
     }
 }

@@ -26,4 +26,5 @@ export const adminRoutes = {
   moderation: () => `/admin/moderation`,
   settings: () => `/admin/settings`,
   platform: () => `/admin/platform`,
+  users: () => `/admin/users`,
 };

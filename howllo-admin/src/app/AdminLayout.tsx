@@ -26,6 +26,7 @@ const icon = (path: string): ReactNode => (
 const PLATFORM_NAV: NavItem[] = [
   { to: adminRoutes.home(), label: "Dashboard", end: true, icon: icon("M3 12l9-8 9 8M5 10v10h14V10") },
   { to: adminRoutes.tenants(), label: "Workspaces", icon: icon("M3 7h18M3 12h18M3 17h18") },
+  { to: adminRoutes.users(), label: "User accounts", icon: icon("M16 19v-1a4 4 0 00-8 0v1M12 11a3 3 0 100-6 3 3 0 000 6M19 8h3M20.5 6.5v3") },
   { to: adminRoutes.platform(), label: "Platform", icon: icon("M4 6h16M4 12h16M4 18h16M8 6v12") },
 ];
 
