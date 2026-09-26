@@ -144,6 +144,7 @@ Admin, Landing, and Guides Workers serve static assets. Read the product
 tutorials at [docs.howllo.dev](https://docs.howllo.dev), or run `npm run
 dev:docs` while developing locally.
 
-See [docs/architecture.md](docs/architecture.md) for the full architecture and
-[docs/internal/](docs/internal/) for deeper design notes. The current MVP
-verification record is in [docs/MVP_READINESS.md](docs/MVP_READINESS.md).
+See [docs/architecture.md](docs/architecture.md) for the full architecture,
+[the production roadmap](docs/roadmap.md) for release gates, and
+[docs/internal/](docs/internal/) for deeper design notes. The
+[MVP verification record](docs/MVP_READINESS.md) is a historical snapshot.
