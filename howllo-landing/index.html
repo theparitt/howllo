@@ -36,10 +36,8 @@
 
     .site-header { border-bottom: 1px solid rgba(234, 223, 216, .78); background: rgba(252, 250, 247, .95); }
     .site-nav { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 86px; }
-    .brand { display: inline-flex; align-items: center; gap: 11px; text-decoration: none; flex: none; }
-    .brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: var(--white); border: 1px solid var(--line); }
-    .brand-mark img { width: 28px; height: 28px; }
-    .brand-wordmark { display: block; height: 23px; width: auto; }
+    .brand { display: inline-flex; align-items: center; text-decoration: none; flex: none; }
+    .brand-logo { display: block; height: 35px; width: auto; }
     .nav-actions { display: flex; align-items: center; gap: clamp(18px, 2.5vw, 34px); }
     .nav-actions a { text-decoration: none; font-size: 14px; font-weight: 600; color: #554d4b; }
     .nav-actions a:hover { color: var(--coral-dark); }
@@ -108,9 +106,7 @@
     .closing-character { align-self: flex-end; width: 200px; max-height: 214px; object-fit: contain; object-position: bottom; margin-bottom: -58px; filter: drop-shadow(0 7px 10px rgba(79, 55, 44, .10)); }
     .site-footer { border-top: 1px solid var(--line); padding: 30px 0; }
     .footer-inner { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
-    .footer-inner .brand-mark { width: 30px; height: 30px; border-radius: 9px; }
-    .footer-inner .brand-mark img { width: 22px; height: 22px; }
-    .footer-inner .brand-wordmark { height: 18px; }
+    .footer-inner .brand-logo { height: 27px; }
     .footer-inner p { margin: 0; color: #9a8e89; font-size: 12px; }
 
     @media (max-width: 900px) {
@@ -123,10 +119,10 @@
     }
     @media (max-width: 620px) {
       .container { width: min(100% - 36px, 1160px); }
-      .site-nav { min-height: 72px; }
-      .brand-mark { width: 33px; height: 33px; }
-      .brand-mark img { width: 24px; height: 24px; }
-      .brand-wordmark { height: 18px; }
+      .site-nav { min-height: 72px; gap: 12px; }
+      .brand-logo { height: 27px; }
+      .nav-actions { gap: 10px; }
+      .nav-actions a { white-space: nowrap; font-size: 12px; }
       .nav-actions a:not(.sign-in):not(.github-link):not(.guides-link) { display: none; }
       .hero { padding: 60px 0 62px; }
       h1 { font-size: clamp(43px, 11vw, 60px); }
@@ -157,8 +153,7 @@
   <header class="site-header">
     <nav class="site-nav container" aria-label="Main navigation">
       <a class="brand" href="/" aria-label="Howllo home">
-        <span class="brand-mark"><img src="brand/howllo-logo.svg" alt=""></span>
-        <img class="brand-wordmark" src="brand/howllo-logo-wordmark-horizontal.svg?v=hollow-1" alt="Howllo">
+        <img class="brand-logo" src="brand/howllo-logo-wordmark-horizontal.svg?v=full-logo-2" alt="Howllo">
       </a>
       <div class="nav-actions">
         <a class="guides-link" href="https://docs.howllo.dev/">Guides</a>
@@ -257,8 +252,7 @@
   <footer class="site-footer">
     <div class="footer-inner container">
       <a class="brand" href="/" aria-label="Howllo home">
-        <span class="brand-mark"><img src="brand/howllo-logo.svg" alt=""></span>
-        <img class="brand-wordmark" src="brand/howllo-logo-wordmark-horizontal.svg?v=hollow-1" alt="Howllo">
+        <img class="brand-logo" src="brand/howllo-logo-wordmark-horizontal.svg?v=full-logo-2" alt="Howllo">
       </a>
       <p>© 2026 Howllo · Open source under <a href="https://github.com/theparitt/howllo/blob/main/LICENSE">Apache 2.0</a>.</p>
     </div>
