@@ -15,6 +15,7 @@ import {
   managerDeleteBoard,
   managerGetBoardSummary,
   managerListBoards,
+  managerGetBoardCount,
   managerListInvitations,
   managerListMembers,
   managerRemoveMember,
@@ -84,6 +85,7 @@ export function ManageArea() {
   const [tab, setTab] = useState<ManageTab>("boards");
   const [collapsed, setCollapsed] = useState(false);
   const [boardList, setBoardList] = useState<ManageBoard[] | null>(null);
+  const [moderatorBoardCount, setModeratorBoardCount] = useState<number | null>(null);
   const [boardLoadError, setBoardLoadError] = useState("");
   const [boardRefresh, setBoardRefresh] = useState(0);
 
@@ -101,6 +103,7 @@ export function ManageArea() {
     let cancelled = false;
     setRole(undefined);
     setBoardList(null);
+    setModeratorBoardCount(null);
     const token = readStoredBearerToken(tenant).trim();
     if (!token) {
       setRole(null);
@@ -111,6 +114,17 @@ export function ManageArea() {
       .catch(() => { if (!cancelled) setRole(null); });
     return () => { cancelled = true; };
   }, [tenant]);
+
+  useEffect(() => {
+    if (!tenant || role !== "moderator") return;
+    let cancelled = false;
+    setModeratorBoardCount(null);
+    setBoardLoadError("");
+    managerGetBoardCount(tenant, readStoredBearerToken(tenant).trim())
+      .then((count) => { if (!cancelled) setModeratorBoardCount(count); })
+      .catch((cause) => { if (!cancelled) setBoardLoadError(cause instanceof Error ? cause.message : "Could not load boards."); });
+    return () => { cancelled = true; };
+  }, [tenant, role, boardRefresh]);
 
   useEffect(() => {
     if (!tenant || (role !== "owner" && role !== "admin")) return;
@@ -158,6 +172,13 @@ export function ManageArea() {
 
   if (role !== "moderator" && boardList === null) {
     return <section className="panel">{boardLoadError ? <p className="error-text" role="alert">{boardLoadError} <button type="button" className="ghost-button" onClick={() => setBoardRefresh((value) => value + 1)}>Retry</button></p> : <p className="section-subtitle">Loading workspace…</p>}</section>;
+  }
+
+  if (role === "moderator" && moderatorBoardCount === null) {
+    return <section className="panel">{boardLoadError ? <p className="error-text" role="alert">{boardLoadError} <button type="button" className="ghost-button" onClick={() => setBoardRefresh((value) => value + 1)}>Retry</button></p> : <p className="section-subtitle">Loading workspace…</p>}</section>;
+  }
+  if (role === "moderator" && moderatorBoardCount === 0) {
+    return <section className="panel empty-state"><h1 className="empty-state__title">No boards yet</h1><p className="empty-state__copy">An owner or admin can create the first board.</p></section>;
   }
 
   const noBoards = boardList?.length === 0;

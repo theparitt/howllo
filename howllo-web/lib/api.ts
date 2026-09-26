@@ -324,6 +324,14 @@ export async function managerListBoards(tenantSlug: string, token: string): Prom
   return unwrap<ManageBoard[]>(response);
 }
 
+export async function managerGetBoardCount(tenantSlug: string, token: string): Promise<number> {
+  const response = await apiFetch(
+    buildUrl(`/api/admin/boards/count?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { cache: "no-store", headers: { Authorization: token } },
+  );
+  return unwrap<{ count: number }>(response).then((result) => result.count);
+}
+
 export async function managerCreateBoard(
   input: {
     tenant_slug: string;

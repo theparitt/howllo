@@ -81,6 +81,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(boards::api::list_boards)
         .service(boards::api::get_board_detail)
         .service(boards::api::list_admin_boards)
+        .service(boards::api::count_staff_boards)
         .service(boards::api::create_board)
         .service(boards::api::update_board)
         .service(boards::api::delete_board)

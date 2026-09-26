@@ -1,11 +1,12 @@
 use actix_web::{delete, get, patch, post, web, HttpRequest, HttpResponse, Responder};
 use serde::Deserialize;
 
-use crate::auth::AuthenticatedUser;
+use crate::auth::{require_moderator, AuthenticatedUser};
 use crate::db::DbPool;
 use crate::dto::{CreateBoardRequest, UpdateBoardRequest};
 use crate::errors::AppError;
 use crate::services::board_service;
+use crate::repositories::board_repository;
 
 #[derive(Deserialize)]
 pub struct BoardListQuery {
@@ -54,6 +55,31 @@ pub async fn list_admin_boards(
     let boards =
         board_service::list_admin_boards(pool.get_ref(), &query.tenant_slug, auth.0.id).await?;
     Ok(HttpResponse::Ok().json(boards))
+}
+
+#[get("/api/admin/boards/count")]
+pub async fn count_staff_boards(
+    pool: web::Data<DbPool>,
+    query: web::Query<AdminBoardListQuery>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    let tenant_id = board_repository::get_tenant_id_by_slug(pool.get_ref(), &query.tenant_slug)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "could not resolve workspace for board count");
+            AppError::InternalServerError
+        })?
+        .ok_or(AppError::NotFound)?;
+    require_moderator(pool.get_ref(), tenant_id, auth.0.id).await?;
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM boards WHERE tenant_id = $1")
+        .bind(tenant_id)
+        .fetch_one(pool.get_ref())
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "could not count workspace boards");
+            AppError::InternalServerError
+        })?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "count": count })))
 }
 
 #[post("/api/admin/boards")]
@@ -196,6 +222,40 @@ mod tests {
         bearer_for, lock_test_db, read_json, reset_db, seed_basic_tenant, test_settings,
     };
     use crate::startup;
+
+    #[actix_web::test]
+    async fn board_count_is_visible_to_staff_but_not_public_members() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url).await.unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+        let empty_tenant_id = uuid::Uuid::new_v4();
+        sqlx::query("INSERT INTO tenants (id, slug, name) VALUES ($1, 'empty-workspace', 'Empty')")
+            .bind(empty_tenant_id).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO memberships (tenant_id, user_id, role) VALUES ($1, $2, 'moderator')")
+            .bind(empty_tenant_id).bind(seed.moderator_user_id).execute(&pool).await.unwrap();
+        let app = test::init_service(App::new()
+            .app_data(web::Data::new(pool.clone()))
+            .app_data(web::Data::new(settings.clone()))
+            .configure(startup::configure)).await;
+        let moderator = bearer_for(&seed.moderator_subject, "moderator@example.com", "Moderator", &settings.rooiam_jwt_secret);
+        let member = bearer_for(&seed.member_subject, "member@example.com", "Member", &settings.rooiam_jwt_secret);
+        let empty = test::call_service(&app, test::TestRequest::get()
+            .uri("/api/admin/boards/count?tenant_slug=empty-workspace")
+            .insert_header(("Authorization", moderator.clone())).to_request()).await;
+        assert_eq!(empty.status(), StatusCode::OK);
+        assert_eq!(read_json(empty).await["count"], 0);
+        let existing = test::call_service(&app, test::TestRequest::get()
+            .uri(&format!("/api/admin/boards/count?tenant_slug={}", seed.tenant_slug))
+            .insert_header(("Authorization", moderator)).to_request()).await;
+        assert_eq!(existing.status(), StatusCode::OK);
+        assert_eq!(read_json(existing).await["count"], 2);
+        let denied = test::call_service(&app, test::TestRequest::get()
+            .uri(&format!("/api/admin/boards/count?tenant_slug={}", seed.tenant_slug))
+            .insert_header(("Authorization", member)).to_request()).await;
+        assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+    }
 
     #[actix_web::test]
     async fn announcement_board_enforces_staff_posts_and_disabled_interactions() {
