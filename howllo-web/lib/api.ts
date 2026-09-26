@@ -331,6 +331,9 @@ export async function managerCreateBoard(
     name: string;
     description?: string;
     board_type: string;
+    intro_text?: string | null;
+    allow_votes?: boolean;
+    allow_comments?: boolean;
     is_private: boolean;
     is_enabled?: boolean;
   },
@@ -350,6 +353,9 @@ export async function managerUpdateBoard(
     name: string;
     description?: string | null;
     board_type: string;
+    intro_text?: string | null;
+    allow_votes?: boolean;
+    allow_comments?: boolean;
     is_private: boolean;
     is_enabled?: boolean;
     background_color?: string | null;

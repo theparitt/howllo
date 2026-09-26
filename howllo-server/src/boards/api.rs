@@ -70,6 +70,9 @@ pub async fn create_board(
         body.name.trim(),
         body.description.as_deref().map(str::trim),
         body.board_type.trim(),
+        body.intro_text.as_deref().map(str::trim),
+        body.allow_votes,
+        body.allow_comments,
         body.is_private,
         body.icon_url
             .as_deref()
@@ -101,6 +104,9 @@ pub async fn update_board(
         body.name.trim(),
         body.description.as_deref().map(str::trim),
         body.board_type.trim(),
+        body.intro_text.as_deref().map(str::trim),
+        body.allow_votes,
+        body.allow_comments,
         body.is_private,
         body.icon_url
             .as_deref()
@@ -190,6 +196,58 @@ mod tests {
         bearer_for, lock_test_db, read_json, reset_db, seed_basic_tenant, test_settings,
     };
     use crate::startup;
+
+    #[actix_web::test]
+    async fn announcement_board_enforces_staff_posts_and_disabled_interactions() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url).await.unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+        sqlx::query("UPDATE posts SET created_at = now() - interval '2 days'")
+            .execute(&pool).await.unwrap();
+
+        let app = test::init_service(App::new()
+            .app_data(web::Data::new(pool.clone()))
+            .app_data(web::Data::new(settings.clone()))
+            .app_data(web::Data::new(crate::realtime::Hub::new()))
+            .configure(startup::configure)).await;
+        let member = bearer_for(&seed.member_subject, "member@example.com", "Member", &settings.rooiam_jwt_secret);
+        let admin = bearer_for(&seed.admin_subject, "admin@example.com", "Admin", &settings.rooiam_jwt_secret);
+        let board_id: uuid::Uuid = sqlx::query_scalar("SELECT id FROM boards WHERE slug = $1")
+            .bind(&seed.board_slug).fetch_one(&pool).await.unwrap();
+        let settings_request = test::TestRequest::patch().uri(&format!("/api/admin/boards/{board_id}"))
+            .insert_header(("Authorization", admin.clone()))
+            .set_json(json!({"name": "Updates", "board_type": "announcements", "intro_text": "News from our team", "allow_votes": false, "allow_comments": false, "is_private": false}))
+            .to_request();
+        let settings_response = test::call_service(&app, settings_request).await;
+        assert_eq!(settings_response.status(), StatusCode::OK);
+        let board_settings = read_json(settings_response).await;
+        assert_eq!(board_settings["intro_text"], "News from our team");
+        assert_eq!(board_settings["allow_votes"], false);
+        assert_eq!(board_settings["allow_comments"], false);
+        let post_path = format!("/api/boards/{}/posts", seed.board_slug);
+
+        let member_post = test::TestRequest::post().uri(&post_path)
+            .insert_header(("Authorization", member.clone()))
+            .set_json(json!({"tenant_slug": seed.tenant_slug, "title": "Visitor update", "body": "Visitors must not publish here."}))
+            .to_request();
+        assert_eq!(test::call_service(&app, member_post).await.status(), StatusCode::FORBIDDEN);
+
+        let staff_post = test::TestRequest::post().uri(&post_path)
+            .insert_header(("Authorization", admin))
+            .set_json(json!({"tenant_slug": seed.tenant_slug, "title": "Team update", "body": "Available now."}))
+            .to_request();
+        assert_eq!(test::call_service(&app, staff_post).await.status(), StatusCode::CREATED);
+
+        let vote = test::TestRequest::post().uri(&format!("/api/posts/{}/vote", seed.canonical_post_id))
+            .insert_header(("Authorization", member.clone())).to_request();
+        assert_eq!(test::call_service(&app, vote).await.status(), StatusCode::FORBIDDEN);
+        let comment = test::TestRequest::post().uri(&format!("/api/posts/{}/comments", seed.canonical_post_id))
+            .insert_header(("Authorization", member))
+            .set_json(json!({"body": "A response"})).to_request();
+        assert_eq!(test::call_service(&app, comment).await.status(), StatusCode::FORBIDDEN);
+    }
 
     #[actix_web::test]
     async fn private_board_requires_membership() {

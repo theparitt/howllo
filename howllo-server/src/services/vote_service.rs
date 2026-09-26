@@ -6,7 +6,10 @@ use crate::repositories::vote_repository;
 use crate::services::post_service;
 
 pub async fn add_vote(pool: &DbPool, post_id: Uuid, user_id: Uuid) -> Result<(), AppError> {
-    post_service::ensure_post_interaction_access(pool, post_id, user_id, true).await?;
+    let access = post_service::ensure_post_interaction_access(pool, post_id, user_id, true).await?;
+    if !access.allow_votes {
+        return Err(AppError::Forbidden);
+    }
 
     let mut tx = pool.begin().await.map_err(|e| {
         tracing::error!(error = %e, post_id = %post_id, user_id = %user_id, "error opening vote transaction");

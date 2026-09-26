@@ -10,6 +10,7 @@ pub struct BoardAccessRecord {
     pub board_id: Uuid,
     pub tenant_id: Uuid,
     pub is_private: bool,
+    pub board_type: String,
 }
 
 #[derive(FromRow)]
@@ -20,6 +21,8 @@ pub struct PostAccessRecord {
     pub is_hidden: bool,
     pub deleted_at: Option<DateTime<Utc>>,
     pub is_locked: bool,
+    pub allow_votes: bool,
+    pub allow_comments: bool,
 }
 
 #[derive(Debug)]
@@ -68,7 +71,7 @@ pub async fn find_board_access(
 ) -> Result<Option<BoardAccessRecord>, sqlx::Error> {
     let row = sqlx::query(
         r#"
-        SELECT b.id, b.is_private, t.id as tenant_id
+        SELECT b.id, b.is_private, b.board_type, t.id as tenant_id
         FROM boards b
         JOIN tenants t ON b.tenant_id = t.id
         WHERE t.slug = $1 AND t.is_published = TRUE AND b.slug = $2 AND b.is_enabled = TRUE
@@ -83,6 +86,7 @@ pub async fn find_board_access(
         board_id: row.get("id"),
         tenant_id: row.get("tenant_id"),
         is_private: row.get("is_private"),
+        board_type: row.get("board_type"),
     }))
 }
 
@@ -94,7 +98,7 @@ pub async fn find_post_access(
     if let Some(tenant_slug) = tenant_slug {
         sqlx::query_as::<_, PostAccessRecord>(
             r#"
-            SELECT p.tenant_id, p.board_id, p.is_hidden, p.deleted_at, p.is_locked, b.is_private
+            SELECT p.tenant_id, p.board_id, p.is_hidden, p.deleted_at, p.is_locked, b.is_private, b.allow_votes, b.allow_comments
             FROM posts p
             JOIN boards b ON p.board_id = b.id
             JOIN tenants t ON p.tenant_id = t.id
@@ -108,7 +112,7 @@ pub async fn find_post_access(
     } else {
         sqlx::query_as::<_, PostAccessRecord>(
             r#"
-            SELECT p.tenant_id, p.board_id, p.is_hidden, p.deleted_at, p.is_locked, b.is_private
+            SELECT p.tenant_id, p.board_id, p.is_hidden, p.deleted_at, p.is_locked, b.is_private, b.allow_votes, b.allow_comments
             FROM posts p
             JOIN boards b ON p.board_id = b.id
             JOIN tenants t ON p.tenant_id = t.id

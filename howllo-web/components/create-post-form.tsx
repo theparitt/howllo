@@ -6,10 +6,12 @@ import Link from "next/link";
 import { createPost, uploadImage } from "@/lib/api";
 import { readStoredBearerToken } from "@/components/dev-auth-panel";
 import { buildTenantPath } from "@/lib/default-tenant";
+import type { BoardKind } from "@/lib/board-experience";
 
 type CreatePostFormProps = {
   tenantSlug: string;
   boardSlug: string;
+  boardKind: BoardKind;
 };
 
 function submissionMessage(error: unknown): string {
@@ -21,11 +23,15 @@ function submissionMessage(error: unknown): string {
   return error.message;
 }
 
-export function CreatePostForm({ tenantSlug, boardSlug }: CreatePostFormProps) {
+export function CreatePostForm({ tenantSlug, boardSlug, boardKind }: CreatePostFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [steps, setSteps] = useState("");
+  const [expected, setExpected] = useState("");
+  const [actual, setActual] = useState("");
+  const [environment, setEnvironment] = useState("");
   const [attachments, setAttachments] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +82,12 @@ export function CreatePostForm({ tenantSlug, boardSlug }: CreatePostFormProps) {
         tenantSlug,
         boardSlug,
         title,
-        body,
+        body: boardKind === "bug-reports" ? [
+          `Steps to reproduce\n${steps.trim()}`,
+          `Expected result\n${expected.trim()}`,
+          `Actual result\n${actual.trim()}`,
+          environment.trim() ? `Environment\n${environment.trim()}` : "",
+        ].filter(Boolean).join("\n\n") : body,
         attachments,
         token,
       });
@@ -104,28 +115,33 @@ export function CreatePostForm({ tenantSlug, boardSlug }: CreatePostFormProps) {
     <form className="panel field-grid" onSubmit={onSubmit}>
       <div>
         <div className="muted" style={{ marginBottom: "0.45rem", fontSize: "0.86rem" }}>
-          Title
+          {boardKind === "bug-reports" ? "Short summary" : boardKind === "discussions" ? "Topic or question" : "Feature idea"}
         </div>
         <input
           className="field"
           value={title}
           onChange={(event) => setTitle(event.target.value)}
-          placeholder="What should the team know?"
+          placeholder={boardKind === "bug-reports" ? "What is broken?" : boardKind === "discussions" ? "What would you like to discuss?" : "What would you like to see?"}
           required
         />
       </div>
-      <div>
+      {boardKind === "bug-reports" ? <div className="field-grid">
+        <label className="manage-label">Steps to reproduce<textarea className="textarea" value={steps} onChange={(event) => setSteps(event.target.value)} placeholder="1. Open…\n2. Click…" required /></label>
+        <label className="manage-label">Expected result<textarea className="textarea" value={expected} onChange={(event) => setExpected(event.target.value)} placeholder="What should have happened?" required /></label>
+        <label className="manage-label">Actual result<textarea className="textarea" value={actual} onChange={(event) => setActual(event.target.value)} placeholder="What happened instead?" required /></label>
+        <label className="manage-label">Device or browser (optional)<input className="field" value={environment} onChange={(event) => setEnvironment(event.target.value)} placeholder="e.g. Chrome on Windows" /></label>
+      </div> : <div>
         <div className="muted" style={{ marginBottom: "0.45rem", fontSize: "0.86rem" }}>
-          Description
+          {boardKind === "discussions" ? "Your message" : "Why would this help?"}
         </div>
         <textarea
           className="textarea"
           value={body}
           onChange={(event) => setBody(event.target.value)}
-          placeholder="Explain the request, the problem, or the outcome you want."
+          placeholder={boardKind === "discussions" ? "Share context so others can join the conversation." : "Describe the problem and the outcome you want."}
           required
         />
-      </div>
+      </div>}
       <div>
         <div className="muted" style={{ marginBottom: "0.45rem", fontSize: "0.86rem" }}>
           Screenshots (optional)
@@ -168,7 +184,7 @@ export function CreatePostForm({ tenantSlug, boardSlug }: CreatePostFormProps) {
           </div>
           <div className="form-actions__primary">
             <button className="button" disabled={pending || uploading} type="submit">
-              {pending ? "Creating..." : "Create post"}
+              {pending ? "Posting…" : boardKind === "bug-reports" ? "Submit bug report" : boardKind === "discussions" ? "Start discussion" : "Submit idea"}
             </button>
           </div>
         </div>

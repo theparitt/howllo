@@ -22,7 +22,9 @@ import {
   managerUpdateMemberRole,
   managerWithdrawInvitation,
   type BoardSummary,
+  createPost,
 } from "@/lib/api";
+import { BOARD_PRESETS, boardKind, boardPreset } from "@/lib/board-experience";
 import {
   getCurrentWorkspaceSlug,
   readStoredBearerToken,
@@ -39,11 +41,19 @@ import { prepareBrandImage } from "../lib/prepare-brand-image";
 
 const INVITE_ROLES = ["admin", "moderator"];
 const MEMBER_ROLES = ["owner", "admin", "moderator", "member"];
-const BOARD_TYPES = ["feature-requests", "bug-reports", "discussions", "announcements"];
 const PUBLIC_WEB_URL = (process.env.NEXT_PUBLIC_HOWLLO_PUBLIC_WEB_URL || "http://localhost:7703").replace(/\/$/, "");
 
 function publicBoardUrl(tenant: string, boardSlug: string): string {
   return `${PUBLIC_WEB_URL}/${encodeURIComponent(tenant)}/boards/${encodeURIComponent(boardSlug)}`;
+}
+
+function BoardTypePicker({ value, onChange, group }: { value: string; onChange: (type: string) => void; group: string }) {
+  return <div className="board-kind-picker" role="radiogroup" aria-label="Board type">
+    {BOARD_PRESETS.map((preset) => <label key={preset.value} className={`board-kind-picker__option${value === preset.value ? " board-kind-picker__option--active" : ""}`}>
+      <input type="radio" name={group} value={preset.value} checked={value === preset.value} onChange={() => onChange(preset.value)} />
+      <strong>{preset.label}</strong><span>{preset.description}</span>
+    </label>)}
+  </div>;
 }
 
 function statusTone(status: string): string {
@@ -316,7 +326,7 @@ function BoardsTab({ tenant }: { tenant: string }) {
   const [name, setName] = useState("");
   const [slugInput, setSlugInput] = useState("");
   const [description, setDescription] = useState("");
-  const [boardType, setBoardType] = useState(BOARD_TYPES[0]);
+  const [boardType, setBoardType] = useState<string>(BOARD_PRESETS[0].value);
   const [isPrivate, setIsPrivate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -364,6 +374,8 @@ function BoardsTab({ tenant }: { tenant: string }) {
         name: name.trim(),
         description: description.trim(),
         board_type: boardType,
+        allow_votes: boardPreset(boardType).defaultVotes,
+        allow_comments: boardPreset(boardType).defaultComments,
         is_private: isPrivate,
       }, token());
       setSelected(created.id);
@@ -393,7 +405,7 @@ function BoardsTab({ tenant }: { tenant: string }) {
           <label className="manage-label">Board name<input className="manage-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Product ideas" required /></label>
           <label className="manage-label">URL slug<input className="manage-input" value={slugInput} onChange={(event) => setSlugInput(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} placeholder={generatedSlug || "product-ideas"} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required={!generatedSlug} /></label>
           <label className="manage-label">Description<textarea className="manage-input" rows={2} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
-          <label className="manage-label">Type<select className="manage-input" value={boardType} onChange={(event) => setBoardType(event.target.value)}>{BOARD_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+          <div className="manage-label">Board type<BoardTypePicker value={boardType} onChange={setBoardType} group="create-board-kind" /></div>
           <label className="manage-check"><input type="checkbox" checked={isPrivate} onChange={(event) => setIsPrivate(event.target.checked)} /> Private board (members only)</label>
           <button className="button button--cta" type="submit" disabled={busy || !name.trim() || !slug}>{busy ? "Creating…" : "Create board"}</button>
         </form> : null}
@@ -423,7 +435,10 @@ function BoardsTab({ tenant }: { tenant: string }) {
 function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: { board: ManageBoard; tenant: string; workspacePublished: boolean; onSaved: () => Promise<void>; onDeleted: () => Promise<void> }) {
   const [name, setName] = useState(board.name);
   const [description, setDescription] = useState(board.description ?? "");
-  const [boardType, setBoardType] = useState(board.board_type);
+  const [boardType, setBoardType] = useState<string>(boardKind(board.board_type));
+  const [introText, setIntroText] = useState(board.intro_text ?? "");
+  const [allowVotes, setAllowVotes] = useState(board.allow_votes);
+  const [allowComments, setAllowComments] = useState(board.allow_comments);
   const [isPrivate, setIsPrivate] = useState(board.is_private);
   const [bg, setBg] = useState(board.background_color ?? "#fff1ea");
   const [iconUrl, setIconUrl] = useState(board.icon_url);
@@ -442,6 +457,9 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
         name: name.trim(),
         description: description.trim() || undefined,
         board_type: boardType,
+        intro_text: introText,
+        allow_votes: allowVotes,
+        allow_comments: allowComments,
         is_private: isPrivate,
         is_enabled: board.is_enabled,
         background_color: bg || undefined,
@@ -507,11 +525,10 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
       <div className="manage-fields" style={{ marginTop: "1rem" }}>
         <label className="manage-label">Name<input className="manage-input" value={name} onChange={(e) => setName(e.target.value)} /></label>
         <label className="manage-label">Description<textarea className="manage-input" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
-        <label className="manage-label">Type
-          <select className="manage-input" value={boardType} onChange={(e) => setBoardType(e.target.value)}>
-            {BOARD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </label>
+        <div className="manage-label">Board type<BoardTypePicker value={boardType} group="edit-board-kind" onChange={(next) => { setBoardType(next); setAllowVotes(boardPreset(next).defaultVotes); setAllowComments(boardPreset(next).defaultComments); }} /></div>
+        <label className="manage-label">Board introduction<textarea className="manage-input" rows={2} maxLength={240} value={introText} onChange={(e) => setIntroText(e.target.value)} placeholder="Optional guidance shown above posts" /></label>
+        <label className="manage-check"><input type="checkbox" checked={allowVotes} onChange={(e) => setAllowVotes(e.target.checked)} /> {boardKind(boardType) === "bug-reports" ? "Let visitors mark a bug as affecting them" : boardKind(boardType) === "discussions" ? "Let visitors like discussions" : boardKind(boardType) === "announcements" ? "Let visitors mark updates helpful" : "Let visitors vote on ideas"}</label>
+        <label className="manage-check"><input type="checkbox" checked={allowComments} onChange={(e) => setAllowComments(e.target.checked)} /> {boardKind(boardType) === "discussions" ? "Let visitors reply" : boardKind(boardType) === "announcements" ? "Let visitors respond" : "Let visitors comment"}</label>
         <label className="manage-label">Background color
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
             <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(bg) ? bg : "#fff1ea"} onChange={(e) => setBg(e.target.value)} />
@@ -541,6 +558,7 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
         <button type="button" className="ghost-button" disabled={busy} onClick={() => void setPublication(!board.is_enabled)}>{board.is_enabled ? "Pause board" : board.first_enabled_at ? "Resume board" : "Publish board"}</button>
         {notice ? <span className="success-text">{notice}</span> : null}
       </div>
+      {boardKind(board.board_type) === "announcements" ? <AnnouncementComposer tenant={tenant} board={board} available={board.is_enabled && workspacePublished} /> : null}
       <div className="board-danger-zone">
         {!deleteOpen ? <button type="button" className="ghost-button button--danger" disabled={busy} onClick={() => void openDelete()}>Delete board</button> : <>
           <h3 className="section-title">Delete {board.name}?</h3>
@@ -554,6 +572,34 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
       {error ? <p className="error-text">{error}</p> : null}
     </section>
   );
+}
+
+function AnnouncementComposer({ tenant, board, available }: { tenant: string; board: ManageBoard; available: boolean }) {
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  if (!available) return <p className="section-subtitle">Publish the workspace and this board before posting an announcement.</p>;
+
+  return <form className="manage-fields announcement-composer" onSubmit={async (event) => {
+    event.preventDefault();
+    if (!title.trim() || !body.trim()) return;
+    setBusy(true); setMessage(null);
+    try {
+      const result = await createPost({ tenantSlug: tenant, boardSlug: board.slug, title: title.trim(), body: body.trim(), token: readStoredBearerToken(tenant).trim() });
+      setTitle(""); setBody("");
+      setMessage(result.review_state === "pending" ? "Announcement sent for review." : "Announcement published. Open the board to view it.");
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Could not publish announcement.");
+    } finally { setBusy(false); }
+  }}>
+    <h3 className="section-title">New announcement</h3>
+    <label className="manage-label">Title<input className="manage-input" maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
+    <label className="manage-label">Update<textarea className="manage-input" rows={5} value={body} onChange={(event) => setBody(event.target.value)} required /></label>
+    <button className="button" type="submit" disabled={busy || !title.trim() || !body.trim()}>{busy ? "Publishing…" : "Publish announcement"}</button>
+    {message ? <p role="status" className="section-subtitle">{message}</p> : null}
+  </form>;
 }
 
 function SsoTab({ tenant }: { tenant: string }) {

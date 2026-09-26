@@ -271,6 +271,11 @@ pub mod test_support {
             ADD COLUMN IF NOT EXISTS background_color VARCHAR(32);
 
             ALTER TABLE boards
+                ADD COLUMN IF NOT EXISTS intro_text TEXT,
+                ADD COLUMN IF NOT EXISTS allow_votes BOOLEAN NOT NULL DEFAULT TRUE,
+                ADD COLUMN IF NOT EXISTS allow_comments BOOLEAN NOT NULL DEFAULT TRUE;
+
+            ALTER TABLE boards
             ADD COLUMN IF NOT EXISTS dashboard_sections TEXT[] NOT NULL DEFAULT '{progress,latest,top}';
 
             ALTER TABLE users

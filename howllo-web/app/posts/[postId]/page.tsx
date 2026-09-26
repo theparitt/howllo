@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ApiError, getComments, getPostDetail, getStatusHistory } from "@/lib/api";
+import { ApiError, getBoardDetail, getComments, getPostDetail, getStatusHistory } from "@/lib/api";
 import {
   WorkspaceContextError,
   buildTenantPath,
@@ -13,6 +13,7 @@ import { ModerationPanel } from "@/components/moderation-panel";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { WorkspaceState } from "@/components/workspace-state";
 import { plural } from "@/lib/format";
+import { boardKind, boardVoteLabel } from "@/lib/board-experience";
 
 type PostPageProps = {
   params: Promise<{
@@ -46,9 +47,17 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
       getComments(postId, token),
       getStatusHistory(tenant, postId, token),
     ]);
+    const board = await getBoardDetail(tenant, post.board_slug, token);
+    const kind = boardKind(board.board_type);
+    const bugSections = kind === "bug-reports" && post.body.startsWith("Steps to reproduce\n")
+      ? post.body.split(/\n\n(?=(?:Expected result|Actual result|Environment)\n)/).map((part) => {
+          const split = part.indexOf("\n");
+          return { label: part.slice(0, split), content: part.slice(split + 1) };
+        })
+      : null;
 
     return (
-      <div className="post-thread">
+      <div className={`post-thread post-thread--${kind}`}>
         <RealtimeRefresh postId={post.id} tenantSlug={tenant} />
           <section className="post-detail">
             <div className="eyebrow-row">
@@ -58,7 +67,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
               >
                 ← Back to board
               </Link>
-              <span className="chip">{post.board_slug}</span>
+              <span className="chip">{board.name}</span>
             </div>
             <div className="toolbar" style={{ justifyContent: "space-between", alignItems: "flex-start", marginTop: "1rem" }}>
               <div className="stack stack--tight">
@@ -66,12 +75,12 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                   {post.title}
                 </h1>
                 <div className="metric-row">
-                  <span><strong>{post.vote_count}</strong> {plural(post.vote_count, "vote")}</span>
-                  <span><strong>{comments.length}</strong> {plural(comments.length, "comment")}</span>
+                  {board.allow_votes ? <span><strong>{post.vote_count}</strong> {plural(post.vote_count, "vote")}</span> : null}
+                  {board.allow_comments ? <span><strong>{comments.length}</strong> {plural(comments.length, "comment")}</span> : null}
                   <span>{new Date(post.created_at).toLocaleDateString()}</span>
                 </div>
               </div>
-              <StatusPill status={post.status} />
+              {kind === "feature-requests" || kind === "bug-reports" ? <StatusPill status={post.status} /> : null}
             </div>
             {post.duplicate_of_post_id ? (
               <div className="notice" style={{ marginTop: "1rem" }}>
@@ -84,7 +93,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
               </div>
             ) : null}
             <hr className="divider" />
-            <p className="post-body">{post.body}</p>
+            {bugSections ? <div className="bug-report-sections">{bugSections.map((section) => <section key={section.label}><h2>{section.label}</h2><p className="post-body">{section.content}</p></section>)}</div> : <p className="post-body">{post.body}</p>}
             {post.attachments && post.attachments.length > 0 ? (
               <div className="attachment-grid" style={{ marginTop: "1.1rem" }}>
                 {post.attachments.map((url) => (
@@ -100,11 +109,11 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                 ))}
               </div>
             ) : null}
-            <PostActions tenantSlug={tenant} postId={post.id} />
+            <PostActions tenantSlug={tenant} postId={post.id} allowVotes={board.allow_votes} voteLabel={boardVoteLabel(board.board_type)} />
           </section>
 
-          <section className="panel post-thread__comments" id="comments">
-            <h2 className="section-title" style={{ fontSize: "1.15rem" }}>Comments ({comments.length})</h2>
+          {board.allow_comments ? <section className="panel post-thread__comments" id="comments">
+            <h2 className="section-title" style={{ fontSize: "1.15rem" }}>{kind === "discussions" ? "Replies" : kind === "announcements" ? "Responses" : "Comments"} ({comments.length})</h2>
             <div className="post-thread__comment-list">
               {comments.length > 0 ? comments.map((comment) => (
                 <article className="comment-card" key={comment.id}>
@@ -128,7 +137,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
               )}
             </div>
             <CommentComposer tenantSlug={tenant} isLocked={post.is_locked} postId={post.id} />
-          </section>
+          </section> : null}
           {history.length > 0 ? (
             <details className="post-history">
               <summary>Status history</summary>

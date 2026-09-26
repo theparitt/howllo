@@ -8,6 +8,8 @@ import { readStoredBearerToken } from "@/components/dev-auth-panel";
 type PostActionsProps = {
   tenantSlug: string;
   postId: string;
+  allowVotes?: boolean;
+  voteLabel?: string;
 };
 
 function actionErrorMessage(cause: unknown, fallback: string): string {
@@ -20,7 +22,7 @@ function actionErrorMessage(cause: unknown, fallback: string): string {
   }
 }
 
-export function PostActions({ tenantSlug, postId }: PostActionsProps) {
+export function PostActions({ tenantSlug, postId, allowVotes = true, voteLabel = "Vote" }: PostActionsProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"vote" | "follow" | null>(null);
@@ -49,14 +51,14 @@ export function PostActions({ tenantSlug, postId }: PostActionsProps) {
 
   return (
     <div className="post-engagement">
-        <button
+        {allowVotes ? <button
           className="button"
           disabled={busy !== null}
           onClick={() => withToken("vote", (token) => votePost(postId, token))}
           type="button"
         >
-          {busy === "vote" ? "Voting..." : "Vote"}
-        </button>
+          {busy === "vote" ? "Saving…" : voteLabel}
+        </button> : null}
         <button
           className="ghost-button"
           disabled={busy !== null}

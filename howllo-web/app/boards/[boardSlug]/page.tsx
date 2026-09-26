@@ -12,6 +12,7 @@ import { StatusPill } from "@/components/status-pill";
 import { WorkspaceState } from "@/components/workspace-state";
 import { countLabel } from "@/lib/format";
 import { ApiError } from "@/lib/api";
+import { boardKind } from "@/lib/board-experience";
 import { notFound } from "next/navigation";
 
 type BoardPageProps = {
@@ -59,44 +60,60 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
         token,
       }),
     ]);
+    const kind = boardKind(board.board_type);
+    const action = kind === "feature-requests" ? "Suggest a feature" : kind === "bug-reports" ? "Report a bug" : "Start a discussion";
+    const empty = kind === "announcements" ? "No announcements yet" : kind === "bug-reports" ? "No bug reports yet" : kind === "discussions" ? "No discussions yet" : "No feature requests yet";
 
     return (
-      <div className="page-stack">
+      <div className={`page-stack experience experience--${kind}`}>
         <RealtimeRefresh boardId={board.id} tenantSlug={tenant} />
         <section className="page-head">
           <Link className="back-link" href={buildTenantPath("/", tenant, defaultTenantSlug)}>← All boards</Link>
-          <div className="board-page-heading" style={board.background_color ? { backgroundColor: board.background_color } : undefined}>
+          <div className="board-page-heading experience__heading" style={board.background_color ? { backgroundColor: `color-mix(in srgb, ${board.background_color} 22%, white)` } : undefined}>
             <div>
+              <span className="experience__eyebrow">{kind === "announcements" ? "Updates" : kind === "bug-reports" ? "Issue tracker" : kind === "discussions" ? "Community" : "Ideas"}</span>
               <h1 className="page-title">{board.name}</h1>
               {board.description ? <p className="page-lead">{board.description}</p> : null}
+              {board.intro_text ? <p className="experience__intro">{board.intro_text}</p> : null}
             </div>
-            <Link className="button" href={buildTenantPath(`/boards/${board.slug}/new`, tenant, defaultTenantSlug)}>New post</Link>
+            {kind !== "announcements" ? <Link className="button" href={buildTenantPath(`/boards/${board.slug}/new`, tenant, defaultTenantSlug)}>{action}</Link> : null}
           </div>
         </section>
 
+        {kind === "feature-requests" && board.allow_votes && posts.length > 0 ? <nav className="experience__sort" aria-label="Sort requests">
+          <Link className={sort === "top" ? "experience__sort-active" : ""} href={buildTenantPath(`/boards/${board.slug}?sort=top`, tenant, defaultTenantSlug)}>Top voted</Link>
+          <Link className={sort !== "top" ? "experience__sort-active" : ""} href={buildTenantPath(`/boards/${board.slug}?sort=newest`, tenant, defaultTenantSlug)}>Newest</Link>
+        </nav> : null}
+
         {posts.length > 0 ? (
-          <section className="list-stack">
+          <section className="experience__posts" aria-label={`${board.name} posts`}>
             {posts.map((post) => (
               <Link
-                className="list-row"
+                className="experience__post"
                 href={buildTenantPath(`/posts/${post.id}`, tenant, defaultTenantSlug)}
                 key={post.id}
               >
-                <div>
+                {kind === "feature-requests" && board.allow_votes ? <span className="experience__votes"><strong>{post.vote_count}</strong><small>votes</small></span> : null}
+                {kind === "announcements" ? <time className="experience__date" dateTime={post.created_at}>{new Date(post.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</time> : null}
+                {kind === "bug-reports" ? <span className="experience__bug-mark" aria-hidden="true">!</span> : null}
+                <div className="experience__post-main">
                   <strong>{post.title}</strong>
                   <p className="section-subtitle">
-                    {countLabel(post.vote_count, "vote")} • {countLabel(post.comment_count, "comment")}
+                    {kind === "bug-reports" ? "Bug report" : kind === "discussions" ? "Discussion" : kind === "announcements" ? "Team update" : "Feature request"}
+                    {board.allow_votes && kind !== "feature-requests" ? ` · ${post.vote_count} ${kind === "bug-reports" ? "affected" : kind === "announcements" ? "helpful" : "likes"}` : ""}
+                    {board.allow_comments && kind !== "discussions" ? ` · ${countLabel(post.comment_count, "comment")}` : ""}
                     {post.duplicate_of_post_id ? " • duplicate" : ""}
                   </p>
                 </div>
-                <StatusPill status={post.status} />
+                {(kind === "feature-requests" || kind === "bug-reports") ? <StatusPill status={post.status} /> : null}
+                {kind === "discussions" ? <span className="experience__reply-count">{post.comment_count} replies</span> : null}
               </Link>
             ))}
           </section>
         ) : (
           <section className="panel empty-state">
-            <h2 className="empty-state__title">No requests yet</h2>
-            <p className="empty-state__copy">Be the first to create a post for this board.</p>
+            <h2 className="empty-state__title">{empty}</h2>
+            <p className="empty-state__copy">{kind === "announcements" ? "Updates from the team will appear here." : `Be the first to ${kind === "bug-reports" ? "report a problem" : kind === "discussions" ? "start a conversation" : "share an idea"}.`}</p>
           </section>
         )}
       </div>

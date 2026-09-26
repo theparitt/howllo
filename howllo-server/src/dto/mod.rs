@@ -14,6 +14,9 @@ pub struct BoardListItemDto {
     pub name: String,
     pub description: Option<String>,
     pub board_type: String,
+    pub intro_text: Option<String>,
+    pub allow_votes: bool,
+    pub allow_comments: bool,
     pub icon_url: Option<String>,
     pub background_color: Option<String>,
     pub dashboard_sections: Vec<String>,
@@ -27,6 +30,9 @@ pub struct BoardDetailDto {
     pub name: String,
     pub description: Option<String>,
     pub board_type: String,
+    pub intro_text: Option<String>,
+    pub allow_votes: bool,
+    pub allow_comments: bool,
     pub is_private: bool,
     pub is_enabled: bool,
     pub first_enabled_at: Option<DateTime<Utc>>,
@@ -42,6 +48,12 @@ pub struct CreateBoardRequest {
     pub name: String,
     pub description: Option<String>,
     pub board_type: String,
+    #[serde(default)]
+    pub intro_text: Option<String>,
+    #[serde(default)]
+    pub allow_votes: Option<bool>,
+    #[serde(default)]
+    pub allow_comments: Option<bool>,
     pub is_private: bool,
     #[serde(default)]
     pub icon_url: Option<String>,
@@ -56,6 +68,12 @@ pub struct UpdateBoardRequest {
     pub name: String,
     pub description: Option<String>,
     pub board_type: String,
+    #[serde(default)]
+    pub intro_text: Option<String>,
+    #[serde(default)]
+    pub allow_votes: Option<bool>,
+    #[serde(default)]
+    pub allow_comments: Option<bool>,
     pub is_private: bool,
     #[serde(default)]
     pub is_enabled: Option<bool>,
@@ -309,6 +327,9 @@ impl CreateBoardRequest {
         if self.board_type.trim().is_empty() {
             return Err(AppError::Validation("board_type is required".to_string()));
         }
+        if self.intro_text.as_ref().is_some_and(|text| text.chars().count() > 240) {
+            return Err(AppError::Validation("intro_text must be 240 characters or fewer".to_string()));
+        }
         Ok(())
     }
 }
@@ -320,6 +341,9 @@ impl UpdateBoardRequest {
         }
         if self.board_type.trim().is_empty() {
             return Err(AppError::Validation("board_type is required".to_string()));
+        }
+        if self.intro_text.as_ref().is_some_and(|text| text.chars().count() > 240) {
+            return Err(AppError::Validation("intro_text must be 240 characters or fewer".to_string()));
         }
         Ok(())
     }

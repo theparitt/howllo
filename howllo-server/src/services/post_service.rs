@@ -33,6 +33,8 @@ pub struct BoardPostListInput<'a> {
 pub struct PostInteractionAccess {
     pub tenant_id: Uuid,
     pub board_id: Uuid,
+    pub allow_votes: bool,
+    pub allow_comments: bool,
 }
 
 pub async fn ensure_board_access(
@@ -256,6 +258,9 @@ pub async fn create_post(
     user_id: Uuid,
 ) -> Result<PostCreatedDto, AppError> {
     let board = ensure_board_access(req, pool, tenant_slug, board_slug).await?;
+    if matches!(board.board_type.as_str(), "announcements" | "changelog" | "updates") {
+        require_permission(pool, board.tenant_id, user_id, Permission::ModerateContent).await?;
+    }
     policy::enforce_ip_policy(req, pool, board.tenant_id).await?;
     memberships::check_membership(pool, board.tenant_id, user_id)
         .await
@@ -436,5 +441,7 @@ pub async fn ensure_post_interaction_access(
     Ok(PostInteractionAccess {
         tenant_id: post.tenant_id,
         board_id: post.board_id,
+        allow_votes: post.allow_votes,
+        allow_comments: post.allow_comments,
     })
 }

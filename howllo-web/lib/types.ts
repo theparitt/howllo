@@ -6,6 +6,9 @@ export type Board = {
   name: string;
   description: string | null;
   board_type: string;
+  intro_text: string | null;
+  allow_votes: boolean;
+  allow_comments: boolean;
   icon_url: string | null;
   background_color: string | null;
   dashboard_sections: DashboardSection[];
@@ -258,6 +261,9 @@ export type ManageBoard = {
   name: string;
   description: string | null;
   board_type: string;
+  intro_text: string | null;
+  allow_votes: boolean;
+  allow_comments: boolean;
   is_private: boolean;
   is_enabled: boolean;
   first_enabled_at: string | null;

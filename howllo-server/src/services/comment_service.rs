@@ -31,6 +31,9 @@ pub async fn create_comment(
     body: &str,
 ) -> Result<CommentCreatedDto, AppError> {
     let access = post_service::ensure_post_interaction_access(pool, post_id, user_id, true).await?;
+    if !access.allow_comments {
+        return Err(AppError::Forbidden);
+    }
     policy::enforce_ip_policy(req, pool, access.tenant_id).await?;
     let limits = policy::workspace_policy(pool, access.tenant_id)
         .await?

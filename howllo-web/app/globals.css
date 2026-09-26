@@ -2192,6 +2192,46 @@ textarea.manage-input { width: 100%; resize: vertical; }
 .sso-code code { white-space: pre; }
 
 /* --------------------------------------------------------- Workspace home */
+.experience { max-width: 58rem; margin-inline: auto; }
+.experience__heading { align-items: flex-end; }
+.experience__eyebrow { display: block; margin-bottom: 0.5rem; color: var(--primary); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+.experience__intro { margin: 0.75rem 0 0; max-width: 42rem; color: var(--text); line-height: 1.55; }
+.experience__sort { display: flex; gap: 0.3rem; border-bottom: 1px solid var(--border); }
+.experience__sort a { padding: 0.7rem 0.9rem; color: var(--muted); font-size: 0.88rem; text-decoration: none; }
+.experience__sort a.experience__sort-active { color: var(--primary); border-bottom: 2px solid var(--primary); font-weight: 700; }
+.experience__posts { display: grid; gap: 0.6rem; }
+.experience__post { display: flex; align-items: center; gap: 1rem; min-width: 0; padding: 1rem 1.2rem; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel-strong); color: var(--text); text-decoration: none; }
+.experience__post:hover { border-color: var(--primary); }
+.experience__post-main { flex: 1; min-width: 0; }
+.experience__post-main strong { display: block; font-size: 1.05rem; line-height: 1.35; }
+.experience__post-main p { margin: 0.3rem 0 0; font-size: 0.82rem; }
+.experience__votes { display: grid; place-items: center; flex: 0 0 3.6rem; padding: 0.35rem; border: 1px solid var(--border); border-radius: 0.65rem; line-height: 1.1; }
+.experience__votes strong { font-size: 1.2rem; }
+.experience__votes small { margin-top: 0.2rem; font-size: 0.68rem; color: var(--muted); }
+.experience--feature-requests .experience__post { border-left: 3px solid var(--primary); }
+.experience--bug-reports .experience__posts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.experience--bug-reports .experience__post { display: grid; grid-template-columns: 2rem minmax(0, 1fr); align-content: start; gap: 0.65rem 0.85rem; min-height: 9rem; }
+.experience--bug-reports .experience__post-main { grid-column: 2; }
+.experience--bug-reports .experience__post > :last-child { grid-column: 2; justify-self: start; }
+.experience__bug-mark { display: grid; place-items: center; flex: 0 0 2rem; height: 2rem; border-radius: 50%; background: #fff0e8; color: #b75a33; font-weight: 800; }
+.experience--discussions .experience__post { padding: 1.25rem 1.35rem; border-radius: 1rem; }
+.experience__reply-count { flex: none; color: var(--muted); font-size: 0.82rem; }
+.experience--announcements .experience__posts { gap: 1rem; border-left: 2px solid var(--border); margin-left: 0.45rem; padding-left: 1.25rem; }
+.experience--announcements .experience__post { align-items: flex-start; flex-direction: column; position: relative; padding: 1.3rem 1.5rem; border-radius: 1rem; }
+.experience--announcements .experience__post::before { content: ""; position: absolute; top: 1.55rem; left: -1.72rem; width: 0.7rem; height: 0.7rem; border-radius: 50%; background: var(--primary); }
+.experience__date { color: var(--muted); font-size: 0.78rem; font-weight: 700; }
+.bug-report-sections { display: grid; gap: 1.2rem; }
+.bug-report-sections section { padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: var(--radius-md); background: color-mix(in srgb, var(--panel-strong) 90%, var(--primary) 10%); }
+.bug-report-sections h2 { margin: 0 0 0.45rem; font-size: 0.9rem; }
+.post-thread--announcements .post-detail { border-left: 3px solid var(--primary); }
+.post-thread--discussions .post-detail { border-radius: 1rem; }
+@media (max-width: 600px) {
+  .experience--bug-reports .experience__posts { grid-template-columns: 1fr; }
+  .experience__post { gap: 0.7rem; padding: 0.9rem; flex-wrap: wrap; }
+  .experience__post-main { flex-basis: 60%; }
+  .experience__votes { flex-basis: 3rem; }
+  .experience__reply-count { margin-left: auto; }
+}
 .ws-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
