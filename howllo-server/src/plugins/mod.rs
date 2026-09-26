@@ -155,6 +155,8 @@ struct PublicBoard {
     name: String,
     description: Option<String>,
     board_type: String,
+    header_image_url: Option<String>,
+    background_image_url: Option<String>,
 }
 
 #[derive(Serialize, FromRow)]
@@ -177,7 +179,7 @@ pub async fn public_context(
     let (id, name, site_name, accent_color, background_color, show_boards, show_feed, show_roadmap) =
         workspace.ok_or(AppError::NotFound)?;
     let boards: Vec<PublicBoard> = if show_boards {
-        sqlx::query_as("SELECT slug,name,description,board_type FROM boards WHERE tenant_id=$1 AND is_enabled=TRUE AND is_private=FALSE ORDER BY created_at")
+        sqlx::query_as("SELECT slug,name,description,board_type,header_image_url,background_image_url FROM boards WHERE tenant_id=$1 AND is_enabled=TRUE AND is_private=FALSE ORDER BY created_at")
             .bind(id).fetch_all(pool.get_ref()).await.map_err(db_error)?
     } else {
         vec![]

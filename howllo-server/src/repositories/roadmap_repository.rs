@@ -13,12 +13,15 @@ pub async fn fetch_roadmap_items(
 ) -> Result<Vec<PostListItemDto>, sqlx::Error> {
     let mut builder = QueryBuilder::<sqlx::Postgres>::new(
         r#"
-        SELECT p.id, p.title, p.status, p.vote_count,
+        SELECT p.id, p.title, p.status, cat.name AS category_name, cat.color AS category_color,
+               ARRAY(SELECT tag_name.name FROM post_tags post_tag JOIN tags tag_name ON tag_name.id=post_tag.tag_id WHERE post_tag.post_id=p.id ORDER BY tag_name.name) AS tag_names,
+               p.vote_count,
                (SELECT count(*) FROM comments c WHERE c.post_id = p.id AND c.is_hidden = false) AS comment_count,
                p.duplicate_of_post_id, p.created_at, p.is_hidden, p.deleted_at
         FROM posts p
         JOIN boards b ON p.board_id = b.id
         JOIN tenants t ON p.tenant_id = t.id
+        LEFT JOIN board_categories cat ON cat.id=p.category_id AND cat.board_id=b.id
         "#,
     );
 

@@ -124,11 +124,15 @@ pub async fn create_board(
     is_private: bool,
     icon_url: Option<&str>,
     background_color: Option<&str>,
+    header_image_url: Option<&str>,
+    background_image_url: Option<&str>,
     dashboard_sections: Option<Vec<String>>,
     user_id: Uuid,
 ) -> Result<BoardDetailDto, AppError> {
     let tenant_id = require_admin_by_tenant_slug(pool, tenant_slug, user_id).await?;
     validate_optional_color(background_color, "background_color")?;
+    validate_optional_image_url(header_image_url, "header_image_url")?;
+    validate_optional_image_url(background_image_url, "background_image_url")?;
     let dashboard_sections = normalize_dashboard_sections(dashboard_sections)?;
 
     let mut tx = pool.begin().await.map_err(|e| {
@@ -149,6 +153,8 @@ pub async fn create_board(
         is_private,
         icon_url,
         background_color,
+        header_image_url,
+        background_image_url,
         &dashboard_sections,
     )
     .await
@@ -201,12 +207,16 @@ pub async fn update_board(
     is_private: bool,
     icon_url: Option<&str>,
     background_color: Option<&str>,
+    header_image_url: Option<&str>,
+    background_image_url: Option<&str>,
     dashboard_sections: Option<Vec<String>>,
     is_enabled: Option<bool>,
     user_id: Uuid,
 ) -> Result<BoardDetailDto, AppError> {
     require_admin_by_board_id(pool, board_id, user_id).await?;
     validate_optional_color(background_color, "background_color")?;
+    validate_optional_image_url(header_image_url, "header_image_url")?;
+    validate_optional_image_url(background_image_url, "background_image_url")?;
     let dashboard_sections = normalize_dashboard_sections(dashboard_sections)?;
 
     let mut tx = pool.begin().await.map_err(|e| {
@@ -234,6 +244,8 @@ pub async fn update_board(
         is_private,
         icon_url,
         background_color,
+        header_image_url,
+        background_image_url,
         &dashboard_sections,
         is_enabled,
     )
@@ -299,7 +311,7 @@ pub async fn delete_board(pool: &DbPool, board_id: Uuid, user_id: Uuid) -> Resul
         .ok_or(AppError::NotFound)?;
 
     let asset_urls: Vec<String> = sqlx::query_scalar(
-        "SELECT url FROM (SELECT jsonb_array_elements_text(attachments) AS url FROM posts WHERE board_id = $1 UNION SELECT icon_url AS url FROM boards WHERE id = $1) assets WHERE url IS NOT NULL",
+        "SELECT url FROM (SELECT jsonb_array_elements_text(attachments) AS url FROM posts WHERE board_id = $1 UNION SELECT icon_url AS url FROM boards WHERE id = $1 UNION SELECT header_image_url AS url FROM boards WHERE id = $1 UNION SELECT background_image_url AS url FROM boards WHERE id = $1) assets WHERE url IS NOT NULL",
     )
     .bind(board_id)
     .fetch_all(&mut *tx)
@@ -396,7 +408,7 @@ async fn cleanup_deleted_board_assets(pool: &DbPool, tenant_id: Uuid, urls: Vec<
             continue;
         }
         let referenced = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM posts WHERE attachments @> jsonb_build_array($1::text)) OR EXISTS(SELECT 1 FROM boards WHERE icon_url = $1) OR EXISTS(SELECT 1 FROM tenant_branding WHERE logo_url = $1)",
+            "SELECT EXISTS(SELECT 1 FROM posts WHERE attachments @> jsonb_build_array($1::text)) OR EXISTS(SELECT 1 FROM boards WHERE icon_url = $1 OR header_image_url = $1 OR background_image_url = $1) OR EXISTS(SELECT 1 FROM tenant_branding WHERE logo_url = $1)",
         )
         .bind(&url)
         .fetch_one(pool)
@@ -417,6 +429,28 @@ async fn cleanup_deleted_board_assets(pool: &DbPool, tenant_id: Uuid, urls: Vec<
         {
             tracing::warn!(%error, %tenant_id, %relative_path, "could not clear deleted board asset quota");
         }
+    }
+}
+
+fn validate_optional_image_url(value: Option<&str>, field: &str) -> Result<(), AppError> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    let valid = value.len() <= 2048
+        && url::Url::parse(value)
+            .map(|url| {
+                matches!(url.scheme(), "https" | "http")
+                    && url.host_str().is_some()
+                    && url.username().is_empty()
+                    && url.password().is_none()
+            })
+            .unwrap_or(false);
+    if valid {
+        Ok(())
+    } else {
+        Err(AppError::Validation(format!(
+            "{field} must be an HTTP(S) image URL"
+        )))
     }
 }
 

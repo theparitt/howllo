@@ -7,11 +7,14 @@ import { createPost, uploadImage } from "@/lib/api";
 import { readStoredBearerToken } from "@/components/dev-auth-panel";
 import { buildTenantPath } from "@/lib/default-tenant";
 import type { BoardKind } from "@/lib/board-experience";
+import type { BoardCategory, Tag } from "@/lib/types";
 
 type CreatePostFormProps = {
   tenantSlug: string;
   boardSlug: string;
   boardKind: BoardKind;
+  categories: BoardCategory[];
+  tags: Tag[];
 };
 
 function submissionMessage(error: unknown): string {
@@ -23,7 +26,7 @@ function submissionMessage(error: unknown): string {
   return error.message;
 }
 
-export function CreatePostForm({ tenantSlug, boardSlug, boardKind }: CreatePostFormProps) {
+export function CreatePostForm({ tenantSlug, boardSlug, boardKind, categories, tags }: CreatePostFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [title, setTitle] = useState("");
@@ -33,6 +36,8 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind }: CreatePostF
   const [actual, setActual] = useState("");
   const [environment, setEnvironment] = useState("");
   const [attachments, setAttachments] = useState<string[]>([]);
+  const [categoryId, setCategoryId] = useState("");
+  const [tagIds, setTagIds] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -89,6 +94,8 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind }: CreatePostF
           environment.trim() ? `Environment\n${environment.trim()}` : "",
         ].filter(Boolean).join("\n\n") : body,
         attachments,
+        categoryId: categoryId || null,
+        tagIds,
         token,
       });
       if (created.review_state === "pending") {
@@ -142,6 +149,8 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind }: CreatePostF
           required
         />
       </div>}
+      {categories.length ? <label className="manage-label">Category<select className="field" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}><option value="">Choose a category (optional)</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label> : null}
+      {tags.length ? <fieldset className="experience__tag-picker"><legend>Tags (up to 3, optional)</legend><div>{tags.map((tag) => <label key={tag.id}><input type="checkbox" checked={tagIds.includes(tag.id)} disabled={!tagIds.includes(tag.id) && tagIds.length >= 3} onChange={(event) => setTagIds((current) => event.target.checked ? [...current, tag.id] : current.filter((id) => id !== tag.id))} /><span>#{tag.name}</span></label>)}</div></fieldset> : null}
       <div>
         <div className="muted" style={{ marginBottom: "0.45rem", fontSize: "0.86rem" }}>
           Screenshots (optional)

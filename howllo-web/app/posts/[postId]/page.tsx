@@ -79,6 +79,10 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                   {board.allow_comments ? <span><strong>{comments.length}</strong> {plural(comments.length, "comment")}</span> : null}
                   <span>{new Date(post.created_at).toLocaleDateString()}</span>
                 </div>
+                {post.category_name || post.tags?.length ? <div className="experience__post-labels">
+                  {post.category_name ? <span className="experience__category"><i style={{ background: post.category_color ?? "#64748b" }} />{post.category_name}</span> : null}
+                  {post.tags?.map((tag) => <span className="experience__tag" key={tag.id}>#{tag.name}</span>)}
+                </div> : null}
               </div>
               {kind === "feature-requests" || kind === "bug-reports" ? <StatusPill status={post.status} /> : null}
             </div>

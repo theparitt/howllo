@@ -25,6 +25,8 @@ pub struct BoardPostListInput<'a> {
     pub sort: &'a str,
     pub status: Option<&'a str>,
     pub tag: Option<&'a str>,
+    pub category: Option<&'a str>,
+    pub q: Option<&'a str>,
     pub page: i64,
     pub per_page: i64,
     pub include_hidden: bool,
@@ -92,6 +94,11 @@ pub async fn ensure_post_read_access(
 pub async fn list_board_posts(
     input: BoardPostListInput<'_>,
 ) -> Result<PaginatedResponse<PostListItemDto>, AppError> {
+    if input.q.is_some_and(|q| q.len() > 100) {
+        return Err(AppError::Validation(
+            "Search is limited to 100 characters".into(),
+        ));
+    }
     if let Some(status) = input.status {
         FeedbackStatus::parse(status)?;
     }
@@ -124,6 +131,8 @@ pub async fn list_board_posts(
         input.board_slug,
         status,
         input.tag,
+        input.category,
+        input.q,
         input.include_hidden,
     )
     .await
@@ -140,6 +149,8 @@ pub async fn list_board_posts(
             sort: input.sort,
             status,
             tag: input.tag,
+            category: input.category,
+            q: input.q,
             include_hidden: input.include_hidden,
             limit: input.per_page,
             offset: (input.page - 1) * input.per_page,
@@ -215,6 +226,8 @@ pub async fn get_post_detail(
     Ok(PostDetailDto {
         author_display_name: detail.author_display_name,
         board_slug: detail.board_slug,
+        category_name: detail.category_name,
+        category_color: detail.category_color,
         body: detail.body,
         comment_count,
         created_at: detail.created_at,
@@ -255,10 +268,53 @@ pub async fn create_post(
     title: &str,
     body: &str,
     attachments: &[String],
+    category_id: Option<Uuid>,
+    tag_ids: &[Uuid],
     user_id: Uuid,
 ) -> Result<PostCreatedDto, AppError> {
     let board = ensure_board_access(req, pool, tenant_slug, board_slug).await?;
-    if matches!(board.board_type.as_str(), "announcements" | "changelog" | "updates") {
+    if tag_ids.len() > 3
+        || tag_ids
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            != tag_ids.len()
+    {
+        return Err(AppError::Validation("Choose up to 3 different tags".into()));
+    }
+    if !tag_ids.is_empty() {
+        let valid_count: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM tags WHERE tenant_id=$1 AND id=ANY($2)")
+                .bind(board.tenant_id)
+                .bind(tag_ids)
+                .fetch_one(pool)
+                .await
+                .map_err(|_| AppError::InternalServerError)?;
+        if valid_count != tag_ids.len() as i64 {
+            return Err(AppError::Validation(
+                "Choose tags from this workspace".into(),
+            ));
+        }
+    }
+    if let Some(category_id) = category_id {
+        let belongs: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM board_categories WHERE id=$1 AND board_id=$2)",
+        )
+        .bind(category_id)
+        .bind(board.board_id)
+        .fetch_one(pool)
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
+        if !belongs {
+            return Err(AppError::Validation(
+                "Choose a category from this board".into(),
+            ));
+        }
+    }
+    if matches!(
+        board.board_type.as_str(),
+        "announcements" | "changelog" | "updates"
+    ) {
         require_permission(pool, board.tenant_id, user_id, Permission::ModerateContent).await?;
     }
     policy::enforce_ip_policy(req, pool, board.tenant_id).await?;
@@ -361,12 +417,17 @@ pub async fn create_post(
         "approved"
     };
 
-    let created = post_repository::create_post(&mut tx, board.tenant_id, board.board_id, user_id, title, body, attachments, review_state, review_reason)
+    let created = post_repository::create_post(&mut tx, board.tenant_id, board.board_id, user_id, title, body, attachments, category_id, review_state, review_reason)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, tenant_id = %board.tenant_id, board_slug = board_slug, user_id = %user_id, "error creating post");
             AppError::InternalServerError
         })?;
+    for tag_id in tag_ids {
+        crate::repositories::tag_repository::attach_tag_to_post(&mut tx, created.id, *tag_id)
+            .await
+            .map_err(|_| AppError::InternalServerError)?;
+    }
     tx.commit()
         .await
         .map_err(|_| AppError::InternalServerError)?;

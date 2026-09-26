@@ -196,3 +196,11 @@
 .branding-preview > strong { font-family: var(--font-display); font-size: 1.4rem; }
 .branding-preview > button { border: 0; border-radius: 999px; padding: 0.55rem 1rem; font-weight: 700; }
 .branding-board-icon { width: 3.5rem; height: 3.5rem; object-fit: contain; border-radius: 0.75rem; }
+.board-taxonomy { display: grid; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+.board-taxonomy__chips { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.board-taxonomy__chip { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.35rem 0.55rem; border: 1px solid var(--border); border-radius: 0.55rem; background: var(--panel-strong); font-size: 0.84rem; }
+.board-taxonomy__chip button { padding: 0; border: 0; background: none; color: var(--muted); cursor: pointer; font: inherit; }
+.board-taxonomy__color { width: 1.2rem; height: 1.2rem; padding: 0; border: 0; background: none; cursor: pointer; }
+.board-taxonomy__add { display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.8rem; }
+.board-taxonomy__add .manage-input { flex: 1; min-width: 0; }
+.board-taxonomy__add input[type=color] { width: 2.5rem; height: 2.5rem; border: 0; background: none; }

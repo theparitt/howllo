@@ -3,7 +3,7 @@ const MAX_SOURCE_BYTES = 5 * 1024 * 1024;
 const MAX_SOURCE_SIDE = 4096;
 
 /** Fit a raster image inside the requested box without changing its aspect ratio. */
-export async function prepareBrandImage(file: File, maxWidth: number, maxHeight: number): Promise<File> {
+export async function prepareBrandImage(file: File, maxWidth: number, maxHeight: number, outputType: "image/png" | "image/webp" = "image/png"): Promise<File> {
   if (!IMAGE_TYPES.has(file.type)) throw new Error("Choose a PNG, JPG or WebP image.");
   if (file.size > MAX_SOURCE_BYTES) throw new Error("Choose an image smaller than 5 MB.");
 
@@ -29,9 +29,10 @@ export async function prepareBrandImage(file: File, maxWidth: number, maxHeight:
     context.imageSmoothingQuality = "high";
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
     const blob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((result) => result ? resolve(result) : reject(new Error("Could not prepare this image.")), "image/png");
+      canvas.toBlob((result) => result ? resolve(result) : reject(new Error("Could not prepare this image.")), outputType, 0.84);
     });
-    return new File([blob], "brand-image.png", { type: "image/png" });
+    if (blob.size > MAX_SOURCE_BYTES) throw new Error("Prepared image exceeds 5 MB. Choose a simpler or smaller image.");
+    return new File([blob], outputType === "image/webp" ? "board-image.webp" : "brand-image.png", { type: outputType });
   } finally {
     URL.revokeObjectURL(objectUrl);
   }

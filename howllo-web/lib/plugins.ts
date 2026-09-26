@@ -11,7 +11,7 @@ export type PluginContext = {
   api_version: 1;
   workspace: { slug: string; name: string; site_name: string; accent_color: string | null; background_color: string | null;
     pages: { boards: boolean; feed: boolean; roadmap: boolean } };
-  boards: { slug: string; name: string; description: string | null; board_type: string }[];
+  boards: { slug: string; name: string; description: string | null; board_type: string; header_image_url: string | null; background_image_url: string | null }[];
   plugins: PublicPlugin[];
 };
 

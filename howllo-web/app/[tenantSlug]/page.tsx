@@ -40,6 +40,7 @@ export default async function TenantRootPage({ params }: TenantRootPageProps) {
               style={board.background_color ? { backgroundColor: board.background_color } : undefined}
             >
               <span className="board-list__item">
+                {board.header_image_url ? <img className="board-list__cover" src={board.header_image_url} alt="" /> : null}
                 {board.icon_url ? <img className="board-list__icon" src={board.icon_url} alt="" /> : null}
                 <span><strong>{board.name}</strong>{board.description ? <span className="section-subtitle">{board.description}</span> : null}</span>
               </span>

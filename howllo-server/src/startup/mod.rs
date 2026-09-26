@@ -3,8 +3,8 @@ use actix_web::{get, web, HttpResponse, Responder};
 
 use crate::{
     ai, api_tokens, audit, auth, boards, comments, exports, invitations, me, memberships,
-    moderation, moderation_notes, notifications, platform, plugins, policy, posts, realtime, search,
-    subscriptions, tags, tenancy, votes, webhooks,
+    moderation, moderation_notes, notifications, platform, plugins, policy, posts, realtime,
+    search, subscriptions, tags, tenancy, votes, webhooks,
 };
 
 #[get("/api/health")]
@@ -90,6 +90,11 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(tenancy::update_workspace_auth_config)
         .service(realtime::handler::ws_connect)
         .service(boards::api::list_boards)
+        .service(boards::categories::list_public)
+        .service(boards::categories::list_admin)
+        .service(boards::categories::create)
+        .service(boards::categories::update)
+        .service(boards::categories::remove)
         .service(boards::api::get_board_detail)
         .service(boards::api::list_admin_boards)
         .service(boards::api::count_staff_boards)
@@ -139,6 +144,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(notifications::mark_all_read)
         .service(notifications::mark_notification_read)
         .service(tags::api::list_tags)
+        .service(tags::api::list_admin_tags)
         .service(comments::api::create_comment)
         .service(comments::api::list_comments)
         .service(votes::api::add_vote)

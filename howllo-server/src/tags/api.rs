@@ -7,6 +7,34 @@ use crate::dto::{CreateTagRequest, UpdateTagRequest};
 use crate::errors::AppError;
 use crate::services::tag_service;
 
+#[get("/api/admin/tags")]
+pub async fn list_admin_tags(
+    pool: web::Data<DbPool>,
+    query: web::Query<std::collections::HashMap<String, String>>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    let slug = query
+        .get("tenant_slug")
+        .filter(|slug| !slug.trim().is_empty())
+        .ok_or_else(|| AppError::Validation("tenant_slug is required".into()))?;
+    let tenant =
+        crate::repositories::membership_repository::resolve_tenant_id(pool.get_ref(), slug).await?;
+    crate::auth::require_permission(
+        pool.get_ref(),
+        tenant,
+        auth.0.id,
+        crate::domain::permission::Permission::ManageTags,
+    )
+    .await?;
+    let tags = crate::repositories::tag_repository::list_tags_for_tenant(pool.get_ref(), tenant)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "could not list admin tags");
+            AppError::InternalServerError
+        })?;
+    Ok(HttpResponse::Ok().json(tags))
+}
+
 #[get("/api/tags")]
 pub async fn list_tags(
     pool: web::Data<DbPool>,

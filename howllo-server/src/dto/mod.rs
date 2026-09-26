@@ -19,6 +19,8 @@ pub struct BoardListItemDto {
     pub allow_comments: bool,
     pub icon_url: Option<String>,
     pub background_color: Option<String>,
+    pub header_image_url: Option<String>,
+    pub background_image_url: Option<String>,
     pub dashboard_sections: Vec<String>,
     pub is_enabled: bool,
 }
@@ -38,6 +40,8 @@ pub struct BoardDetailDto {
     pub first_enabled_at: Option<DateTime<Utc>>,
     pub icon_url: Option<String>,
     pub background_color: Option<String>,
+    pub header_image_url: Option<String>,
+    pub background_image_url: Option<String>,
     pub dashboard_sections: Vec<String>,
 }
 
@@ -59,6 +63,10 @@ pub struct CreateBoardRequest {
     pub icon_url: Option<String>,
     #[serde(default)]
     pub background_color: Option<String>,
+    #[serde(default)]
+    pub header_image_url: Option<String>,
+    #[serde(default)]
+    pub background_image_url: Option<String>,
     #[serde(default)]
     pub dashboard_sections: Option<Vec<String>>,
 }
@@ -82,6 +90,10 @@ pub struct UpdateBoardRequest {
     #[serde(default)]
     pub background_color: Option<String>,
     #[serde(default)]
+    pub header_image_url: Option<String>,
+    #[serde(default)]
+    pub background_image_url: Option<String>,
+    #[serde(default)]
     pub dashboard_sections: Option<Vec<String>>,
 }
 
@@ -90,6 +102,9 @@ pub struct PostListItemDto {
     pub id: Uuid,
     pub title: String,
     pub status: String,
+    pub category_name: Option<String>,
+    pub category_color: Option<String>,
+    pub tag_names: Vec<String>,
     pub vote_count: i32,
     pub comment_count: i64,
     pub duplicate_of_post_id: Option<Uuid>,
@@ -152,6 +167,8 @@ pub struct PostDetailDto {
     pub duplicate_of_post_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub board_slug: String,
+    pub category_name: Option<String>,
+    pub category_color: Option<String>,
     pub tags: Vec<TagDto>,
     pub follow_state: Option<PostFollowStateDto>,
     pub official_response: Option<OfficialResponseSummaryDto>,
@@ -164,6 +181,10 @@ pub struct CreatePostRequest {
     pub tenant_slug: String,
     pub title: String,
     pub body: String,
+    #[serde(default)]
+    pub category_id: Option<Uuid>,
+    #[serde(default)]
+    pub tag_ids: Vec<Uuid>,
     /// Public URLs of images attached to this post (from /api/uploads). Optional.
     #[serde(default)]
     pub attachments: Vec<String>,
@@ -327,8 +348,14 @@ impl CreateBoardRequest {
         if self.board_type.trim().is_empty() {
             return Err(AppError::Validation("board_type is required".to_string()));
         }
-        if self.intro_text.as_ref().is_some_and(|text| text.chars().count() > 240) {
-            return Err(AppError::Validation("intro_text must be 240 characters or fewer".to_string()));
+        if self
+            .intro_text
+            .as_ref()
+            .is_some_and(|text| text.chars().count() > 240)
+        {
+            return Err(AppError::Validation(
+                "intro_text must be 240 characters or fewer".to_string(),
+            ));
         }
         Ok(())
     }
@@ -342,8 +369,14 @@ impl UpdateBoardRequest {
         if self.board_type.trim().is_empty() {
             return Err(AppError::Validation("board_type is required".to_string()));
         }
-        if self.intro_text.as_ref().is_some_and(|text| text.chars().count() > 240) {
-            return Err(AppError::Validation("intro_text must be 240 characters or fewer".to_string()));
+        if self
+            .intro_text
+            .as_ref()
+            .is_some_and(|text| text.chars().count() > 240)
+        {
+            return Err(AppError::Validation(
+                "intro_text must be 240 characters or fewer".to_string(),
+            ));
         }
         Ok(())
     }
@@ -485,6 +518,8 @@ mod tests {
             title: " ".to_string(),
             body: "".to_string(),
             attachments: Vec::new(),
+            category_id: None,
+            tag_ids: Vec::new(),
         };
 
         assert!(request.validate().is_err());

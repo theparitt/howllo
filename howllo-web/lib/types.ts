@@ -11,6 +11,8 @@ export type Board = {
   allow_comments: boolean;
   icon_url: string | null;
   background_color: string | null;
+  header_image_url: string | null;
+  background_image_url: string | null;
   dashboard_sections: DashboardSection[];
 };
 
@@ -87,10 +89,15 @@ export type BoardDetail = Board & {
   is_enabled: boolean;
 };
 
+export type BoardCategory = { id: string; slug: string; name: string; color: string };
+
 export type PostListItem = {
   id: string;
   title: string;
   status: string;
+  category_name: string | null;
+  category_color: string | null;
+  tag_names: string[];
   vote_count: number;
   comment_count: number;
   duplicate_of_post_id: string | null;
@@ -107,7 +114,10 @@ export type PostDetail = {
   duplicate_of_post_id: string | null;
   created_at: string;
   board_slug: string;
+  category_name: string | null;
+  category_color: string | null;
   attachments?: string[];
+  tags?: Tag[];
 };
 
 export type Comment = {
@@ -269,6 +279,8 @@ export type ManageBoard = {
   first_enabled_at: string | null;
   icon_url: string | null;
   background_color: string | null;
+  header_image_url: string | null;
+  background_image_url: string | null;
   dashboard_sections: DashboardSection[];
 };
 

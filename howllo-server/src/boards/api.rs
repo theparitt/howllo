@@ -5,8 +5,8 @@ use crate::auth::{require_moderator, AuthenticatedUser};
 use crate::db::DbPool;
 use crate::dto::{CreateBoardRequest, UpdateBoardRequest};
 use crate::errors::AppError;
-use crate::services::board_service;
 use crate::repositories::board_repository;
+use crate::services::board_service;
 
 #[derive(Deserialize)]
 pub struct BoardListQuery {
@@ -108,6 +108,14 @@ pub async fn create_board(
             .as_deref()
             .map(str::trim)
             .filter(|v| !v.is_empty()),
+        body.header_image_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty()),
+        body.background_image_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty()),
         body.dashboard_sections.clone(),
         auth.0.id,
     )
@@ -139,6 +147,14 @@ pub async fn update_board(
             .map(str::trim)
             .filter(|v| !v.is_empty()),
         body.background_color
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty()),
+        body.header_image_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty()),
+        body.background_image_url
             .as_deref()
             .map(str::trim)
             .filter(|v| !v.is_empty()),

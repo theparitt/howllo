@@ -37,6 +37,8 @@ pub struct PostDetailRecord {
     pub duplicate_of_post_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub board_slug: String,
+    pub category_name: Option<String>,
+    pub category_color: Option<String>,
     pub attachments: Vec<String>,
 }
 
@@ -59,6 +61,8 @@ pub struct BoardPostListQuery<'a> {
     pub sort: &'a str,
     pub status: Option<&'a str>,
     pub tag: Option<&'a str>,
+    pub category: Option<&'a str>,
+    pub q: Option<&'a str>,
     pub include_hidden: bool,
     pub limit: i64,
     pub offset: i64,
@@ -131,6 +135,8 @@ pub async fn count_board_posts(
     board_slug: &str,
     status: Option<&str>,
     tag: Option<&str>,
+    category: Option<&str>,
+    q: Option<&str>,
     include_hidden: bool,
 ) -> Result<i64, sqlx::Error> {
     let mut builder = QueryBuilder::<sqlx::Postgres>::new(
@@ -165,6 +171,18 @@ pub async fn count_board_posts(
         builder.push(" AND tag.slug = ");
         builder.push_bind(tag.trim());
     }
+    if let Some(category) = category {
+        builder.push(" AND EXISTS (SELECT 1 FROM board_categories cat WHERE cat.id=p.category_id AND cat.board_id=b.id AND cat.slug=");
+        builder.push_bind(category.trim());
+        builder.push(")");
+    }
+    if let Some(q) = q.filter(|q| !q.trim().is_empty()) {
+        builder.push(" AND (p.title ILIKE ");
+        builder.push_bind(format!("%{}%", q.trim()));
+        builder.push(" OR p.body ILIKE ");
+        builder.push_bind(format!("%{}%", q.trim()));
+        builder.push(")");
+    }
 
     let row: (i64,) = builder.build_query_as().fetch_one(pool).await?;
     Ok(row.0)
@@ -176,12 +194,15 @@ pub async fn list_board_posts(
 ) -> Result<Vec<PostListItemDto>, sqlx::Error> {
     let mut builder = QueryBuilder::<sqlx::Postgres>::new(
         r#"
-        SELECT p.id, p.title, p.status, p.vote_count,
+        SELECT p.id, p.title, p.status, cat.name AS category_name, cat.color AS category_color,
+               ARRAY(SELECT tag_name.name FROM post_tags post_tag JOIN tags tag_name ON tag_name.id=post_tag.tag_id WHERE post_tag.post_id=p.id ORDER BY tag_name.name) AS tag_names,
+               p.vote_count,
                (SELECT count(*) FROM comments c WHERE c.post_id = p.id AND c.is_hidden = false) AS comment_count,
                p.duplicate_of_post_id, p.created_at, p.is_hidden, p.deleted_at
         FROM posts p
         JOIN boards b ON p.board_id = b.id
         JOIN tenants t ON b.tenant_id = t.id
+        LEFT JOIN board_categories cat ON cat.id=p.category_id AND cat.board_id=b.id
         "#,
     );
 
@@ -207,6 +228,17 @@ pub async fn list_board_posts(
     if let Some(tag) = query.tag {
         builder.push(" AND tag.slug = ");
         builder.push_bind(tag.trim());
+    }
+    if let Some(category) = query.category {
+        builder.push(" AND cat.slug = ");
+        builder.push_bind(category.trim());
+    }
+    if let Some(q) = query.q.filter(|q| !q.trim().is_empty()) {
+        builder.push(" AND (p.title ILIKE ");
+        builder.push_bind(format!("%{}%", q.trim()));
+        builder.push(" OR p.body ILIKE ");
+        builder.push_bind(format!("%{}%", q.trim()));
+        builder.push(")");
     }
 
     builder.push(" ORDER BY ");
@@ -236,11 +268,12 @@ pub async fn find_post_detail(
         r#"
         SELECT p.id, p.title, p.body, p.status, u.display_name as author_display_name,
                p.vote_count, p.is_locked, p.duplicate_of_post_id, p.created_at, b.slug as board_slug,
-               p.attachments
+               p.attachments, cat.name AS "category_name?", cat.color AS "category_color?"
         FROM posts p
         JOIN boards b ON p.board_id = b.id
         JOIN tenants t ON p.tenant_id = t.id
         JOIN users u ON p.user_id = u.id
+        LEFT JOIN board_categories cat ON cat.id=p.category_id AND cat.board_id=b.id
         WHERE p.id = $1 AND t.slug = $2 AND p.is_hidden = false AND p.deleted_at IS NULL
         "#,
         post_id,
@@ -260,6 +293,8 @@ pub async fn find_post_detail(
         duplicate_of_post_id: row.duplicate_of_post_id,
         created_at: row.created_at,
         board_slug: row.board_slug,
+        category_name: row.category_name,
+        category_color: row.category_color,
         attachments: serde_json::from_value(row.attachments).unwrap_or_default(),
     }))
 }
@@ -577,6 +612,7 @@ pub async fn create_post(
     title: &str,
     body: &str,
     attachments: &[String],
+    category_id: Option<Uuid>,
     review_state: &str,
     review_reason: Option<&str>,
 ) -> Result<crate::dto::PostCreatedDto, sqlx::Error> {
@@ -584,8 +620,8 @@ pub async fn create_post(
         serde_json::to_value(attachments).unwrap_or_else(|_| serde_json::json!([]));
     let row = sqlx::query(
         r#"
-        INSERT INTO posts (tenant_id, board_id, user_id, title, body, attachments, is_hidden, review_state, review_reason)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        INSERT INTO posts (tenant_id, board_id, user_id, title, body, attachments, category_id, is_hidden, review_state, review_reason)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING id, review_state
         "#,
     )
@@ -595,6 +631,7 @@ pub async fn create_post(
     .bind(title)
     .bind(body)
     .bind(attachments_json)
+    .bind(category_id)
     .bind(review_state == "pending")
     .bind(review_state)
     .bind(review_reason)

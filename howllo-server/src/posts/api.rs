@@ -17,6 +17,8 @@ pub struct PostListQuery {
     pub sort: Option<String>,
     pub status: Option<String>,
     pub tag: Option<String>,
+    pub category: Option<String>,
+    pub q: Option<String>,
     pub page: Option<i64>,
     pub per_page: Option<i64>,
     /// Admin-only: include hidden and soft-deleted posts in the result so they
@@ -400,6 +402,8 @@ pub async fn list_board_posts(
             sort,
             status: query.status.as_deref(),
             tag: query.tag.as_deref(),
+            category: query.category.as_deref(),
+            q: query.q.as_deref(),
             tenant_slug: query.tenant_slug.trim(),
         })
         .await?;
@@ -467,6 +471,8 @@ pub async fn create_post(
         &body.title,
         &body.body,
         &body.attachments,
+        body.category_id,
+        &body.tag_ids,
         user_id,
     )
     .await?;

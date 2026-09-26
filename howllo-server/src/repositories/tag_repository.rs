@@ -13,13 +13,23 @@ pub async fn list_tags_by_tenant_slug(
         SELECT tags.id, tags.slug, tags.name, tags.color
         FROM tags
         JOIN tenants t ON tags.tenant_id = t.id
-        WHERE t.slug = $1
+        WHERE t.slug = $1 AND t.is_published = TRUE
         ORDER BY tags.name ASC
         "#,
         tenant_slug
     )
     .fetch_all(pool)
     .await
+}
+
+pub async fn list_tags_for_tenant(
+    pool: &DbPool,
+    tenant_id: Uuid,
+) -> Result<Vec<TagDto>, sqlx::Error> {
+    sqlx::query_as("SELECT id,slug,name,color FROM tags WHERE tenant_id=$1 ORDER BY name")
+        .bind(tenant_id)
+        .fetch_all(pool)
+        .await
 }
 
 pub async fn create_tag(

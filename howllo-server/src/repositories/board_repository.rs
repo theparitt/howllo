@@ -10,7 +10,7 @@ pub async fn list_public_boards(
 ) -> Result<Vec<BoardListItemDto>, sqlx::Error> {
     sqlx::query_as::<_, BoardListItemDto>(
         r#"
-        SELECT b.id, b.slug, b.name, b.description, b.board_type, b.intro_text, b.allow_votes, b.allow_comments, b.icon_url, b.background_color, b.dashboard_sections, b.is_enabled
+        SELECT b.id, b.slug, b.name, b.description, b.board_type, b.intro_text, b.allow_votes, b.allow_comments, b.icon_url, b.background_color, b.header_image_url, b.background_image_url, b.dashboard_sections, b.is_enabled
         FROM boards b
         JOIN tenants t ON b.tenant_id = t.id
         WHERE t.slug = $1 AND t.is_published = TRUE AND b.is_private = false AND b.is_enabled = true
@@ -63,7 +63,7 @@ pub async fn get_public_board_by_slug(
 ) -> Result<Option<BoardDetailDto>, sqlx::Error> {
     sqlx::query_as::<_, BoardDetailDto>(
         r#"
-        SELECT b.id, b.slug, b.name, b.description, b.board_type, b.intro_text, b.allow_votes, b.allow_comments, b.is_private, b.is_enabled, b.first_enabled_at, b.icon_url, b.background_color, b.dashboard_sections
+        SELECT b.id, b.slug, b.name, b.description, b.board_type, b.intro_text, b.allow_votes, b.allow_comments, b.is_private, b.is_enabled, b.first_enabled_at, b.icon_url, b.background_color, b.header_image_url, b.background_image_url, b.dashboard_sections
         FROM boards b
         JOIN tenants t ON b.tenant_id = t.id
         WHERE t.slug = $1 AND t.is_published = TRUE AND b.slug = $2
@@ -81,7 +81,7 @@ pub async fn list_admin_boards(
 ) -> Result<Vec<BoardDetailDto>, sqlx::Error> {
     sqlx::query_as::<_, BoardDetailDto>(
         r#"
-        SELECT id, slug, name, description, board_type, intro_text, allow_votes, allow_comments, is_private, is_enabled, first_enabled_at, icon_url, background_color, dashboard_sections
+        SELECT id, slug, name, description, board_type, intro_text, allow_votes, allow_comments, is_private, is_enabled, first_enabled_at, icon_url, background_color, header_image_url, background_image_url, dashboard_sections
         FROM boards
         WHERE tenant_id = $1
         ORDER BY created_at ASC
@@ -106,13 +106,15 @@ pub async fn create_board(
     is_private: bool,
     icon_url: Option<&str>,
     background_color: Option<&str>,
+    header_image_url: Option<&str>,
+    background_image_url: Option<&str>,
     dashboard_sections: &[String],
 ) -> Result<BoardDetailDto, sqlx::Error> {
     sqlx::query_as::<_, BoardDetailDto>(
         r#"
-        INSERT INTO boards (tenant_id, slug, name, description, board_type, intro_text, allow_votes, allow_comments, is_private, icon_url, background_color, dashboard_sections, is_enabled)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, FALSE)
-        RETURNING id, slug, name, description, board_type, intro_text, allow_votes, allow_comments, is_private, is_enabled, first_enabled_at, icon_url, background_color, dashboard_sections
+        INSERT INTO boards (tenant_id, slug, name, description, board_type, intro_text, allow_votes, allow_comments, is_private, icon_url, background_color, header_image_url, background_image_url, dashboard_sections, is_enabled)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, FALSE)
+        RETURNING id, slug, name, description, board_type, intro_text, allow_votes, allow_comments, is_private, is_enabled, first_enabled_at, icon_url, background_color, header_image_url, background_image_url, dashboard_sections
         "#,
     )
     .bind(tenant_id)
@@ -126,6 +128,8 @@ pub async fn create_board(
     .bind(is_private)
     .bind(icon_url)
     .bind(background_color)
+    .bind(header_image_url)
+    .bind(background_image_url)
     .bind(dashboard_sections)
     .fetch_one(&mut **tx)
     .await
@@ -144,6 +148,8 @@ pub struct PreviousBoard {
     pub is_enabled: bool,
     pub is_default: bool,
     pub background_color: Option<String>,
+    pub header_image_url: Option<String>,
+    pub background_image_url: Option<String>,
 }
 
 pub async fn get_board_for_update(
@@ -151,7 +157,7 @@ pub async fn get_board_for_update(
     board_id: Uuid,
 ) -> Result<Option<PreviousBoard>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT tenant_id, slug, name, description, board_type, intro_text, allow_votes, allow_comments, is_private, is_enabled, is_default, background_color FROM boards WHERE id = $1",
+        "SELECT tenant_id, slug, name, description, board_type, intro_text, allow_votes, allow_comments, is_private, is_enabled, is_default, background_color, header_image_url, background_image_url FROM boards WHERE id = $1",
     )
     .bind(board_id)
     .fetch_optional(&mut **tx)
@@ -170,6 +176,8 @@ pub async fn get_board_for_update(
         is_enabled: row.get("is_enabled"),
         is_default: row.get("is_default"),
         background_color: row.get("background_color"),
+        header_image_url: row.get("header_image_url"),
+        background_image_url: row.get("background_image_url"),
     }))
 }
 
@@ -186,6 +194,8 @@ pub async fn update_board(
     is_private: bool,
     icon_url: Option<&str>,
     background_color: Option<&str>,
+    header_image_url: Option<&str>,
+    background_image_url: Option<&str>,
     dashboard_sections: &[String],
     is_enabled: Option<bool>,
 ) -> Result<BoardDetailDto, sqlx::Error> {
@@ -201,12 +211,14 @@ pub async fn update_board(
             is_private = $4,
             icon_url = $5,
             background_color = $6,
+            header_image_url = $13,
+            background_image_url = $14,
             dashboard_sections = $7,
             is_enabled = COALESCE($9, is_enabled),
             first_enabled_at = CASE WHEN $9 = TRUE THEN COALESCE(first_enabled_at, NOW()) ELSE first_enabled_at END,
             updated_at = NOW()
         WHERE id = $8
-        RETURNING id, slug, name, description, board_type, intro_text, allow_votes, allow_comments, is_private, is_enabled, first_enabled_at, icon_url, background_color, dashboard_sections
+        RETURNING id, slug, name, description, board_type, intro_text, allow_votes, allow_comments, is_private, is_enabled, first_enabled_at, icon_url, background_color, header_image_url, background_image_url, dashboard_sections
         "#,
     )
     .bind(name)
@@ -221,6 +233,8 @@ pub async fn update_board(
     .bind(intro_text)
     .bind(allow_votes)
     .bind(allow_comments)
+    .bind(header_image_url)
+    .bind(background_image_url)
     .fetch_one(&mut **tx)
     .await
 }

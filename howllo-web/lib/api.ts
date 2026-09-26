@@ -173,22 +173,32 @@ export async function getBoardDetail(
   return unwrap<BoardDetail>(response);
 }
 
+export async function getBoardCategories(tenantSlug: string, boardSlug: string, token?: string): Promise<import("./types").BoardCategory[]> {
+  const response = await apiFetch(buildUrl(`/api/boards/${encodeURIComponent(boardSlug)}/categories?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { cache: "no-store", headers: token ? { Authorization: token } : undefined });
+  return unwrap<import("./types").BoardCategory[]>(response);
+}
+
 export async function getBoardPosts(params: {
   tenantSlug: string;
   boardSlug: string;
   sort?: string;
   status?: string;
   tag?: string;
+  category?: string;
+  q?: string;
   page?: number;
   perPage?: number;
   token?: string;
-}): Promise<PostListItem[]> {
+}): Promise<PaginatedResponse<PostListItem>> {
   const search = new URLSearchParams({
     tenant_slug: params.tenantSlug,
   });
   if (params.sort) search.set("sort", params.sort);
   if (params.status) search.set("status", params.status);
   if (params.tag) search.set("tag", params.tag);
+  if (params.category) search.set("category", params.category);
+  if (params.q) search.set("q", params.q);
   if (params.page) search.set("page", String(params.page));
   if (params.perPage) search.set("per_page", String(params.perPage));
 
@@ -198,7 +208,7 @@ export async function getBoardPosts(params: {
     { cache: "no-store", headers },
   );
   const payload = await unwrap<PaginatedResponse<PostListItem>>(response);
-  return payload.items;
+  return payload;
 }
 
 export async function getPostDetail(
@@ -367,6 +377,8 @@ export async function managerUpdateBoard(
     is_private: boolean;
     is_enabled?: boolean;
     background_color?: string | null;
+    header_image_url?: string | null;
+    background_image_url?: string | null;
     dashboard_sections?: string[];
     icon_url?: string | null;
   },
@@ -704,6 +716,8 @@ export async function createPost(input: {
   title: string;
   body: string;
   attachments?: string[];
+  categoryId?: string | null;
+  tagIds?: string[];
   token: string;
 }) {
   const response = await apiFetch(
@@ -719,6 +733,8 @@ export async function createPost(input: {
         title: input.title,
         body: input.body,
         attachments: input.attachments ?? [],
+        category_id: input.categoryId ?? null,
+        tag_ids: input.tagIds ?? [],
       }),
     },
   );

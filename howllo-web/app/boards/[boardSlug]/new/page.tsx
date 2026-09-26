@@ -6,7 +6,7 @@ import {
 } from "@/lib/default-tenant";
 import { CreatePostForm } from "@/components/create-post-form";
 import { WorkspaceState } from "@/components/workspace-state";
-import { ApiError, getBoardDetail } from "@/lib/api";
+import { ApiError, getBoardCategories, getBoardDetail, getTags } from "@/lib/api";
 import { ApiUnavailable } from "@/components/api-unavailable";
 import { getServerBearerToken } from "@/lib/server-auth";
 import { boardKind } from "@/lib/board-experience";
@@ -40,8 +40,11 @@ export default async function CreatePostPage({
   }
 
   let board;
+  let categories;
+  let tags;
   try {
-    board = await getBoardDetail(tenant, boardSlug, await getServerBearerToken(tenant));
+    const token = await getServerBearerToken(tenant);
+    [board, categories, tags] = await Promise.all([getBoardDetail(tenant, boardSlug, token), getBoardCategories(tenant, boardSlug, token), getTags(tenant)]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) notFound();
     return <ApiUnavailable message={error instanceof Error ? error.message : "Could not open this board."} />;
@@ -60,7 +63,7 @@ export default async function CreatePostPage({
         <p className="page-lead">{kind === "bug-reports" ? "Tell the team what happened and how to reproduce it." : kind === "discussions" ? "Ask a question or start a conversation." : "Describe the improvement you would like to see."}</p>
       </section>
 
-      <CreatePostForm boardSlug={boardSlug} tenantSlug={tenant} boardKind={kind} />
+      <CreatePostForm boardSlug={boardSlug} tenantSlug={tenant} boardKind={kind} categories={categories} tags={tags} />
     </div>
   );
 }

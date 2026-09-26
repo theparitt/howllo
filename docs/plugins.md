@@ -38,7 +38,7 @@ returns 404 for an unpublished workspace. Example:
     "pages": { "boards": true, "feed": true, "roadmap": false }
   },
   "boards": [
-    { "slug": "ideas", "name": "Ideas", "description": "New ideas", "board_type": "feedback" }
+    { "slug": "ideas", "name": "Ideas", "description": "New ideas", "board_type": "feedback", "header_image_url": null, "background_image_url": null }
   ],
   "plugins": [
     { "id": "board-grid", "version": "1.0.0", "slot": "board.directory.layout", "stylesheet_path": "/plugins/board-grid.css" }

@@ -6,6 +6,8 @@ import { ENABLED_AUTH_PROVIDERS } from "@/lib/auth-provider";
 import {
   disableSso,
   getMyWorkspaceRole,
+  getBoardCategories,
+  getTags,
   getTenantManagementSettings,
   getSsoConfig,
   regenerateSsoSecret,
@@ -31,7 +33,7 @@ import {
   readStoredBearerToken,
   subscribeToBearerTokenChange,
 } from "@/components/dev-auth-panel";
-import type { ManageBoard, MyInvitation, WorkspaceMember } from "@/lib/types";
+import type { BoardCategory, ManageBoard, MyInvitation, Tag, WorkspaceMember } from "@/lib/types";
 import { API_BASE_URL } from "@/lib/config";
 import { uploadImage } from "@/lib/api";
 import { ParticipantsTab } from "./participants-tab";
@@ -41,6 +43,7 @@ import { SecurityTab } from "./security-tab";
 import { CustomerSignInTab } from "./customer-signin-tab";
 import { WorkspacePluginsTab } from "./workspace-plugins-tab";
 import { prepareBrandImage } from "../lib/prepare-brand-image";
+import { BoardTaxonomyEditor } from "./board-taxonomy-editor";
 import { LIST_PAGE_SIZE, ListPager, ListSearch } from "./list-controls";
 
 const INVITE_ROLES = ["admin", "moderator"];
@@ -530,6 +533,8 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
   const [isPrivate, setIsPrivate] = useState(board.is_private);
   const [bg, setBg] = useState(board.background_color ?? "#fff1ea");
   const [iconUrl, setIconUrl] = useState(board.icon_url);
+  const [headerImageUrl, setHeaderImageUrl] = useState(board.header_image_url);
+  const [backgroundImageUrl, setBackgroundImageUrl] = useState(board.background_image_url);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -553,6 +558,8 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
         background_color: bg || undefined,
         dashboard_sections: board.dashboard_sections,
         icon_url: iconUrl,
+        header_image_url: headerImageUrl,
+        background_image_url: backgroundImageUrl,
       }, readStoredBearerToken(tenant).trim());
       setNotice("Saved.");
       await onSaved();
@@ -575,6 +582,8 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
         background_color: board.background_color,
         dashboard_sections: board.dashboard_sections,
         icon_url: board.icon_url,
+        header_image_url: board.header_image_url,
+        background_image_url: board.background_image_url,
       }, readStoredBearerToken(tenant).trim());
       await onSaved();
       setNotice(enabled ? workspacePublished ? "Board is active." : "Board is ready. Publish the workspace to make it visible." : "Board is paused. Its posts are hidden until you resume it.");
@@ -623,6 +632,30 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
             <input className="manage-input" value={bg} onChange={(e) => setBg(e.target.value)} placeholder="#fff1ea" />
           </div>
         </label>
+        <div className="manage-label">Header image
+          {headerImageUrl ? <img src={headerImageUrl} alt="Board header preview" style={{ display: "block", width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 12, margin: "0.6rem 0" }} /> : <span className="section-subtitle">Shown above this board’s posts.</span>}
+          <input className="manage-input" type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={async (event) => {
+            const file = event.target.files?.[0]; event.target.value = ""; if (!file) return;
+            setBusy(true); setError(null);
+            try { setHeaderImageUrl(await uploadImage(await prepareBrandImage(file, 1800, 600, "image/webp"), readStoredBearerToken(tenant).trim(), tenant)); setNotice("Header uploaded. Save changes to publish it."); }
+            catch (cause) { setError(cause instanceof Error ? cause.message : "Could not upload header."); }
+            finally { setBusy(false); }
+          }} />
+          <span className="section-subtitle">Use a wide image. PNG, JPG or WebP · up to 5 MB · fitted within 1800 × 600.</span>
+          {headerImageUrl ? <button type="button" className="ghost-button" disabled={busy} onClick={() => setHeaderImageUrl(null)}>Remove header</button> : null}
+        </div>
+        <div className="manage-label">Background image
+          {backgroundImageUrl ? <img src={backgroundImageUrl} alt="Board background preview" style={{ display: "block", width: "100%", maxHeight: 130, objectFit: "cover", borderRadius: 12, margin: "0.6rem 0" }} /> : <span className="section-subtitle">A subtle image behind the board content. Leave empty for the workspace color.</span>}
+          <input className="manage-input" type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={async (event) => {
+            const file = event.target.files?.[0]; event.target.value = ""; if (!file) return;
+            setBusy(true); setError(null);
+            try { setBackgroundImageUrl(await uploadImage(await prepareBrandImage(file, 2000, 1400, "image/webp"), readStoredBearerToken(tenant).trim(), tenant)); setNotice("Background uploaded. Save changes to publish it."); }
+            catch (cause) { setError(cause instanceof Error ? cause.message : "Could not upload background."); }
+            finally { setBusy(false); }
+          }} />
+          <span className="section-subtitle">PNG, JPG or WebP · up to 5 MB · fitted within 2000 × 1400.</span>
+          {backgroundImageUrl ? <button type="button" className="ghost-button" disabled={busy} onClick={() => setBackgroundImageUrl(null)}>Remove background</button> : null}
+        </div>
         <div className="manage-label">Board icon
           {iconUrl ? <img src={iconUrl} alt="Current board icon" className="branding-board-icon" /> : <span className="section-subtitle">No custom icon</span>}
           <input className="manage-input" type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={async (event) => {
@@ -641,6 +674,7 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
         </div>
         <label className="manage-check"><input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} /> Private board (members only)</label>
       </div>
+      <BoardTaxonomyEditor boardId={board.id} tenant={tenant} />
       <div className="manage-board-links">
         <button type="button" className="button button--cta" disabled={busy || !name.trim()} onClick={save}>{busy ? "Saving…" : "Save changes"}</button>
         <button type="button" className="ghost-button" disabled={busy} onClick={() => void setPublication(!board.is_enabled)}>{board.is_enabled ? "Pause board" : board.first_enabled_at ? "Resume board" : "Publish board"}</button>
@@ -667,6 +701,17 @@ function AnnouncementComposer({ tenant, board, available }: { tenant: string; bo
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [categories, setCategories] = useState<BoardCategory[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [categoryId, setCategoryId] = useState("");
+  const [tagIds, setTagIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!available) return;
+    void Promise.all([getBoardCategories(tenant, board.slug), getTags(tenant)])
+      .then(([nextCategories, nextTags]) => { setCategories(nextCategories); setTags(nextTags); })
+      .catch(() => { setCategories([]); setTags([]); });
+  }, [available, tenant, board.slug]);
 
   if (!available) return <p className="section-subtitle">Publish the workspace and this board before posting an announcement.</p>;
 
@@ -675,8 +720,9 @@ function AnnouncementComposer({ tenant, board, available }: { tenant: string; bo
     if (!title.trim() || !body.trim()) return;
     setBusy(true); setMessage(null);
     try {
-      const result = await createPost({ tenantSlug: tenant, boardSlug: board.slug, title: title.trim(), body: body.trim(), token: readStoredBearerToken(tenant).trim() });
+      const result = await createPost({ tenantSlug: tenant, boardSlug: board.slug, title: title.trim(), body: body.trim(), categoryId: categoryId || null, tagIds, token: readStoredBearerToken(tenant).trim() });
       setTitle(""); setBody("");
+      setCategoryId(""); setTagIds([]);
       setMessage(result.review_state === "pending" ? "Announcement sent for review." : "Announcement published. Open the board to view it.");
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Could not publish announcement.");
@@ -685,6 +731,8 @@ function AnnouncementComposer({ tenant, board, available }: { tenant: string; bo
     <h3 className="section-title">New announcement</h3>
     <label className="manage-label">Title<input className="manage-input" maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
     <label className="manage-label">Update<textarea className="manage-input" rows={5} value={body} onChange={(event) => setBody(event.target.value)} required /></label>
+    {categories.length ? <label className="manage-label">Category<select className="manage-input" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}><option value="">No category</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label> : null}
+    {tags.length ? <div className="manage-label">Tags (up to 3)<div className="board-taxonomy__chips">{tags.map((tag) => <label className="manage-check" key={tag.id}><input type="checkbox" checked={tagIds.includes(tag.id)} disabled={!tagIds.includes(tag.id) && tagIds.length >= 3} onChange={(event) => setTagIds((current) => event.target.checked ? [...current, tag.id] : current.filter((id) => id !== tag.id))} />#{tag.name}</label>)}</div></div> : null}
     <button className="button" type="submit" disabled={busy || !title.trim() || !body.trim()}>{busy ? "Publishing…" : "Publish announcement"}</button>
     {message ? <p role="status" className="section-subtitle">{message}</p> : null}
   </form>;
