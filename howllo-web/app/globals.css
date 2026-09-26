@@ -2219,6 +2219,18 @@ textarea.manage-input { width: 100%; resize: vertical; }
 .experience__sort { display: flex; gap: 0.3rem; border-bottom: 1px solid var(--border); }
 .experience__sort a { padding: 0.7rem 0.9rem; color: var(--muted); font-size: 0.88rem; text-decoration: none; }
 .experience__sort a.experience__sort-active { color: var(--primary); border-bottom: 2px solid var(--primary); font-weight: 700; }
+.experience__announcement { padding: .8rem 1rem; border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: .65rem; background: var(--panel-strong); white-space: pre-wrap; }
+.experience__forum { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.experience__forum--with-sidebar { grid-template-columns: minmax(0, 1fr) minmax(12rem, 15rem); }
+.experience__forum-main { min-width: 0; display: grid; gap: 1rem; }
+.experience__sidebar { display: grid; gap: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel-strong); }
+.experience__sidebar h2 { margin: 0 0 .55rem; font-size: .9rem; }
+.experience__sidebar p, .experience__footer { margin: 0; white-space: pre-wrap; color: var(--muted); font-size: .88rem; line-height: 1.55; overflow-wrap: anywhere; }
+.experience__sidebar nav { display: grid; gap: .2rem; }
+.experience__sidebar nav a { padding: .3rem 0; color: var(--text); font-size: .87rem; text-decoration: none; }
+.experience__sidebar nav a:hover { color: var(--primary); }
+.experience__footer { padding: 1rem 0; border-top: 1px solid var(--border); }
+.experience__pinned { display: inline-block; margin: .2rem 0; padding: .14rem .45rem; border-radius: 99px; background: color-mix(in srgb, var(--primary) 13%, white); color: var(--primary); font-size: .72rem; font-weight: 700; }
 .experience__posts { display: grid; gap: 0.6rem; }
 .experience__post { display: flex; align-items: center; gap: 1rem; min-width: 0; padding: 1rem 1.2rem; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel-strong); color: var(--text); text-decoration: none; }
 .experience__post:hover { border-color: var(--primary); }
@@ -2230,6 +2242,9 @@ textarea.manage-input { width: 100%; resize: vertical; }
 .experience__votes small { margin-top: 0.2rem; font-size: 0.68rem; color: var(--muted); }
 .experience--feature-requests .experience__post { border-left: 3px solid var(--primary); }
 .experience--bug-reports .experience__posts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.experience--bug-reports .experience__forum .experience__posts { grid-template-columns: minmax(0, 1fr); }
+.experience--bug-reports .experience__forum .experience__post { display: flex; min-height: 0; align-items: center; }
+.experience--bug-reports .experience__forum .experience__post-main { grid-column: auto; }
 .experience--bug-reports .experience__post { display: grid; grid-template-columns: 2rem minmax(0, 1fr); align-content: start; gap: 0.65rem 0.85rem; min-height: 9rem; }
 .experience--bug-reports .experience__post-main { grid-column: 2; }
 .experience--bug-reports .experience__post > :last-child { grid-column: 2; justify-self: start; }
@@ -2250,6 +2265,7 @@ textarea.manage-input { width: 100%; resize: vertical; }
   .experience__background { inset-inline: 0; width: 100%; }
   .experience--bug-reports .experience__posts { grid-template-columns: 1fr; }
   .experience__post { gap: 0.7rem; padding: 0.9rem; flex-wrap: wrap; }
+  .experience__forum--with-sidebar { grid-template-columns: minmax(0, 1fr); }
   .experience__post-main { flex-basis: 60%; }
   .experience__votes { flex-basis: 3rem; }
   .experience__reply-count { margin-left: auto; }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getBoardCategories, getBoardDetail, getBoardPosts, getTags } from "@/lib/api";
+import { getBoardCategories, getBoardDetail, getBoardPosts, getBoardPresentation, getTags } from "@/lib/api";
 import {
   WorkspaceContextError,
   buildTenantPath,
@@ -51,7 +51,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
   const token = await getServerBearerToken(tenant);
 
   try {
-    const [board, postsPage, categories, tags] = await Promise.all([
+    const [board, postsPage, categories, tags, presentation] = await Promise.all([
       getBoardDetail(tenant, boardSlug, token),
       getBoardPosts({
         tenantSlug: tenant,
@@ -67,6 +67,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
       }),
       getBoardCategories(tenant, boardSlug, token),
       getTags(tenant),
+      getBoardPresentation(tenant, boardSlug, token),
     ]);
     const posts = postsPage.items;
     const boardPath = `/boards/${board.slug}`;
@@ -83,6 +84,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
 
     return (
       <div className={`page-stack experience experience--${kind}${board.background_image_url ? " experience--with-background" : ""}`}>
+        {presentation.plugins.filter((plugin) => /^\/plugins\/[a-z0-9-]+\.css$/.test(plugin.stylesheet_path)).map((plugin) => <link rel="stylesheet" href={plugin.stylesheet_path} key={plugin.id} />)}
         {board.background_image_url ? <img className="experience__background" src={board.background_image_url} alt="" aria-hidden="true" /> : null}
         <RealtimeRefresh boardId={board.id} tenantSlug={tenant} />
         <section className="page-head">
@@ -99,6 +101,8 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
           </div>
         </section>
 
+        {presentation.announcement ? <div className="experience__announcement" role="note">{presentation.announcement}</div> : null}
+
         <form className="experience__filters" action={buildTenantPath(boardPath, tenant, defaultTenantSlug)} method="get" role="search">
           <label className="experience__search"><span className="sr-only">Search topics</span><input name="q" type="search" defaultValue={query.q ?? ""} maxLength={100} placeholder="Search topics in this board" /></label>
           {categories.length ? <label><span className="sr-only">Category</span><select name="category" defaultValue={query.category ?? ""}><option value="">All categories</option>{categories.map((category) => <option value={category.slug} key={category.id}>{category.name}</option>)}</select></label> : null}
@@ -108,10 +112,14 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
           {query.q || query.category || query.tag ? <Link className="experience__clear" href={buildTenantPath(boardPath, tenant, defaultTenantSlug)}>Clear</Link> : null}
         </form>
 
-        {kind === "feature-requests" && board.allow_votes ? <nav className="experience__sort" aria-label="Sort requests">
-          <Link className={sort === "top" ? "experience__sort-active" : ""} href={filteredPath({ sort: "top" })}>Top voted</Link>
-          <Link className={sort !== "top" ? "experience__sort-active" : ""} href={filteredPath({ sort: "newest" })}>Newest</Link>
-        </nav> : null}
+        <nav className="experience__sort" aria-label="Sort topics">
+          <Link className={sort === "newest" ? "experience__sort-active" : ""} href={filteredPath({ sort: "newest", page: undefined })}>Latest</Link>
+          <Link className={sort === "hot" ? "experience__sort-active" : ""} href={filteredPath({ sort: "hot", page: undefined })}>Hot</Link>
+          {board.allow_votes ? <Link className={sort === "top" ? "experience__sort-active" : ""} href={filteredPath({ sort: "top", page: undefined })}>Top</Link> : null}
+        </nav>
+
+        <div className={`experience__forum${presentation.sidebar_text || categories.length ? " experience__forum--with-sidebar" : ""}`}>
+        <div className="experience__forum-main">
 
         {posts.length > 0 ? (
           <section className="experience__posts" aria-label={`${board.name} posts`}>
@@ -126,6 +134,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
                 {kind === "bug-reports" ? <span className="experience__bug-mark" aria-hidden="true">!</span> : null}
                 <div className="experience__post-main">
                   <strong>{post.title}</strong>
+                  {post.is_pinned ? <span className="experience__pinned">Pinned</span> : null}
                   {post.category_name || post.tag_names.length ? <div className="experience__post-labels">
                     {post.category_name ? <span className="experience__category"><i style={{ background: post.category_color ?? "#64748b" }} />{post.category_name}</span> : null}
                     {post.tag_names.map((tagName) => <span className="experience__tag" key={tagName}>#{tagName}</span>)}
@@ -153,6 +162,13 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
           <span>Page {page}</span>
           {postsPage.has_next ? <Link href={filteredPath({ page: String(page + 1) })}>Next →</Link> : <span />}
         </nav> : null}
+        </div>
+        {presentation.sidebar_text || categories.length ? <aside className="experience__sidebar" aria-label="Board information">
+          {presentation.sidebar_text ? <section><h2>About this board</h2><p>{presentation.sidebar_text}</p></section> : null}
+          {categories.length ? <section><h2>Categories</h2><nav aria-label="Categories"><Link href={filteredPath({ category: undefined, page: undefined })}>All topics</Link>{categories.map((category) => <Link href={filteredPath({ category: category.slug, page: undefined })} key={category.id}>{category.name}</Link>)}</nav></section> : null}
+        </aside> : null}
+        </div>
+        {presentation.footer_text ? <footer className="experience__footer">{presentation.footer_text}</footer> : null}
       </div>
     );
   } catch (error) {

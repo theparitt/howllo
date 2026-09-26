@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   getMyWorkspaceRole,
   moderateLock,
+  moderatePin,
   moderateStatus,
   moderateVisibility,
   postOfficialResponse,
@@ -27,11 +28,12 @@ type Props = {
   postId: string;
   currentStatus: string;
   isLocked: boolean;
+  isPinned: boolean;
 };
 
 // Moderation controls on the post page for owner/admin/moderator. Renders
 // nothing for everyone else. Uses the same admin endpoints howllo-admin does.
-export function ModerationPanel({ tenantSlug, boardSlug, postId, currentStatus, isLocked }: Props) {
+export function ModerationPanel({ tenantSlug, boardSlug, postId, currentStatus, isLocked, isPinned }: Props) {
   const router = useRouter();
   const [role, setRole] = useState<string | null>(null);
   const [reason, setReason] = useState("");
@@ -134,6 +136,7 @@ export function ModerationPanel({ tenantSlug, boardSlug, postId, currentStatus, 
       </div>
 
       <div className="mod-block mod-block--row">
+        <button type="button" className="ghost-button button--small" disabled={busy !== null} onClick={() => run("pin", () => moderatePin(postId, !isPinned, token()))}>{busy === "pin" ? "…" : isPinned ? "Unpin topic" : "Pin topic"}</button>
         <button
           type="button"
           className="ghost-button button--small"

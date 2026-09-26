@@ -179,6 +179,25 @@ export async function getBoardCategories(tenantSlug: string, boardSlug: string, 
   return unwrap<import("./types").BoardCategory[]>(response);
 }
 
+export type BoardPresentation = {
+  announcement: string;
+  sidebar_text: string;
+  footer_text: string;
+  plugins: { id: string; stylesheet_path: string }[];
+};
+
+export async function getBoardPresentation(tenantSlug: string, boardSlug: string, token?: string): Promise<BoardPresentation> {
+  const response = await apiFetch(buildUrl(`/api/boards/${encodeURIComponent(boardSlug)}/presentation?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { cache: "no-store", headers: token ? { Authorization: token } : undefined });
+  return unwrap<BoardPresentation>(response);
+}
+
+export async function moderatePin(postId: string, enabled: boolean, token: string): Promise<void> {
+  const response = await apiFetch(buildUrl(`/api/admin/posts/${encodeURIComponent(postId)}/pin`),
+    { method: "PATCH", headers: { Authorization: token, "content-type": "application/json" }, body: JSON.stringify({ enabled }) });
+  if (!response.ok) throw new ApiError(response.status, "Could not update pinned topic.");
+}
+
 export async function getBoardPosts(params: {
   tenantSlug: string;
   boardSlug: string;

@@ -99,6 +99,7 @@ export type PostListItem = {
   category_color: string | null;
   tag_names: string[];
   vote_count: number;
+  is_pinned: boolean;
   comment_count: number;
   duplicate_of_post_id: string | null;
   created_at: string;
@@ -110,6 +111,7 @@ export type PostDetail = {
   body: string;
   status: string;
   vote_count: number;
+  is_pinned: boolean;
   is_locked: boolean;
   duplicate_of_post_id: string | null;
   created_at: string;

@@ -44,6 +44,8 @@ import { CustomerSignInTab } from "./customer-signin-tab";
 import { WorkspacePluginsTab } from "./workspace-plugins-tab";
 import { prepareBrandImage } from "../lib/prepare-brand-image";
 import { BoardTaxonomyEditor } from "./board-taxonomy-editor";
+import { BoardExtras } from "./board-extras";
+import { BoardTopics } from "./board-topics";
 import { LIST_PAGE_SIZE, ListPager, ListSearch } from "./list-controls";
 
 const INVITE_ROLES = ["admin", "moderator"];
@@ -675,6 +677,8 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
         <label className="manage-check"><input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} /> Private board (members only)</label>
       </div>
       <BoardTaxonomyEditor boardId={board.id} tenant={tenant} />
+      <BoardExtras boardId={board.id} tenant={tenant} />
+      {board.is_enabled && workspacePublished ? <BoardTopics boardSlug={board.slug} tenant={tenant} /> : null}
       <div className="manage-board-links">
         <button type="button" className="button button--cta" disabled={busy || !name.trim()} onClick={save}>{busy ? "Saving…" : "Save changes"}</button>
         <button type="button" className="ghost-button" disabled={busy} onClick={() => void setPublication(!board.is_enabled)}>{board.is_enabled ? "Pause board" : board.first_enabled_at ? "Resume board" : "Publish board"}</button>

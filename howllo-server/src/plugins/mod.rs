@@ -92,6 +92,8 @@ pub async fn set_platform_plugin_approval(
     if !body.enabled {
         sqlx::query("UPDATE workspace_plugins SET enabled=FALSE, updated_at=NOW() WHERE plugin_id=$1 AND enabled=TRUE")
             .bind(path.as_str()).execute(&mut *tx).await.map_err(db_error)?;
+        sqlx::query("UPDATE board_plugins SET enabled=FALSE, updated_at=NOW() WHERE plugin_id=$1 AND enabled=TRUE")
+            .bind(path.as_str()).execute(&mut *tx).await.map_err(db_error)?;
     }
     tx.commit().await.map_err(db_error)?;
     Ok(HttpResponse::NoContent().finish())
@@ -105,7 +107,7 @@ pub async fn list_workspace_plugins(
 ) -> Result<impl Responder, AppError> {
     let tenant = manage_tenant(pool.get_ref(), &path, auth.0.id).await?;
     let plugins = sqlx::query_as::<_, WorkspacePluginRow>(
-        "SELECT p.id, p.version, p.name, p.description, p.slot, p.stylesheet_path, COALESCE(w.enabled,FALSE) AS enabled FROM plugin_catalog p LEFT JOIN workspace_plugins w ON w.plugin_id=p.id AND w.tenant_id=$1 WHERE p.is_approved=TRUE ORDER BY p.slot,p.name"
+        "SELECT p.id, p.version, p.name, p.description, p.slot, p.stylesheet_path, COALESCE(w.enabled,FALSE) AS enabled FROM plugin_catalog p LEFT JOIN workspace_plugins w ON w.plugin_id=p.id AND w.tenant_id=$1 WHERE p.is_approved=TRUE AND p.slot NOT LIKE 'board.topics.%' ORDER BY p.slot,p.name"
     ).bind(tenant).fetch_all(pool.get_ref()).await.map_err(db_error)?;
     Ok(HttpResponse::Ok()
         .insert_header(("Cache-Control", "no-store"))
@@ -131,6 +133,7 @@ pub async fn set_workspace_plugin(
             .await
             .map_err(db_error)?;
     let (slot, approved) = row.ok_or(AppError::NotFound)?;
+    if slot.starts_with("board.topics.") { return Err(AppError::Validation("Enable this plugin on an individual board".into())); }
     if body.enabled && !approved {
         return Err(AppError::Forbidden);
     }

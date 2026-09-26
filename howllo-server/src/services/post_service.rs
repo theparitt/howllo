@@ -240,6 +240,7 @@ pub async fn get_post_detail(
         tags,
         title: detail.title,
         vote_count: detail.vote_count,
+        is_pinned: detail.is_pinned,
         attachments: detail.attachments,
     })
 }

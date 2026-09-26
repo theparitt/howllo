@@ -21,7 +21,7 @@ pub async fn search_posts(
         r#"
         SELECT p.id, p.title, p.status, cat.name AS category_name, cat.color AS category_color,
                ARRAY(SELECT tag_name.name FROM post_tags post_tag JOIN tags tag_name ON tag_name.id=post_tag.tag_id WHERE post_tag.post_id=p.id ORDER BY tag_name.name) AS tag_names,
-               p.vote_count,
+               p.vote_count, (p.pinned_at IS NOT NULL) AS is_pinned,
                (SELECT count(*) FROM comments c WHERE c.post_id = p.id AND c.is_hidden = false) AS comment_count,
                p.duplicate_of_post_id, p.created_at, p.is_hidden, p.deleted_at
         FROM posts p

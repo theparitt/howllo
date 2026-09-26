@@ -1,0 +1,4 @@
+.experience__forum .experience__posts { gap: .15rem; }
+.experience__forum .experience__post { padding: .55rem .8rem; border-radius: .45rem; }
+.experience__forum .experience__post-main strong { font-size: .94rem; }
+.experience__forum .experience__post-main p { font-size: .75rem; }

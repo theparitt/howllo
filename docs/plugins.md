@@ -12,6 +12,14 @@ The first supported points are:
 | --- | --- | --- |
 | `workspace.typography` | Public board fonts and text spacing | `[data-howllo-plugin-surface]` |
 | `board.directory.layout` | Public board directory layout | `[data-howllo-slot="board.directory"]` |
+| `board.topics.layout` | Topic-list density for one board | `.experience__forum` |
+| `board.topics.typography` | Topic and thread reading style for one board | `.experience__forum`, `.post-thread` |
+
+The topic slots are configured under **Workspace → Boards → Board appearance
+and plugins**. Each board chooses its own approved plugin for each slot. The
+workspace-wide typography and directory slots stay in **Workspace → Plugins**.
+The public board presentation endpoint returns only approved and enabled
+stylesheets, and checks private-board access before returning data.
 
 Packages in v1 are stylesheet assets under `howllo-web/public/plugins/`. They
 are versioned in `plugin_catalog`. Add a migration for a new package with its
@@ -19,6 +27,12 @@ ID, version, name, description, slot and stylesheet path. The migration should
 set `is_approved=FALSE`; a platform admin reviews and approves it in **Platform
 settings → Plugins**. A tenant then enables it in **Workspace → Plugins**.
 Tenant managers cannot provide stylesheet URLs or arbitrary JavaScript.
+
+Code highlighting, custom renderers and third-party widgets need a reviewed
+renderer and isolation model before they can run on visitor pages. The v1
+plugin system intentionally supports vetted CSS packages only. Core posting,
+replies, voting, categories, tags, search, pinning and sorting do not depend
+on plugins.
 
 ## Public data contract
 

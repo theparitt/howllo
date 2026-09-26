@@ -3,7 +3,7 @@ use actix_web::{get, web, HttpResponse, Responder};
 
 use crate::{
     ai, api_tokens, audit, auth, boards, comments, exports, invitations, me, memberships,
-    moderation, moderation_notes, notifications, platform, plugins, policy, posts, realtime,
+    moderation, moderation_notes, notifications, platform, plugins, policy, posts, realtime, forum,
     search, subscriptions, tags, tenancy, votes, webhooks,
 };
 
@@ -61,6 +61,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(plugins::list_workspace_plugins)
         .service(plugins::set_workspace_plugin)
         .service(plugins::public_context)
+        .service(forum::get_public_presentation)
+        .service(forum::get_admin_presentation)
+        .service(forum::put_admin_presentation)
+        .service(forum::list_board_plugins)
+        .service(forum::toggle_board_plugin)
+        .service(forum::pin_post)
         .service(platform::get_build_info)
         .service(platform::get_storage_config)
         .service(platform::get_storage_usage)

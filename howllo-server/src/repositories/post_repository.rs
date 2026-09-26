@@ -33,6 +33,7 @@ pub struct PostDetailRecord {
     pub status: String,
     pub author_display_name: String,
     pub vote_count: i32,
+    pub is_pinned: bool,
     pub is_locked: bool,
     pub duplicate_of_post_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
@@ -196,7 +197,7 @@ pub async fn list_board_posts(
         r#"
         SELECT p.id, p.title, p.status, cat.name AS category_name, cat.color AS category_color,
                ARRAY(SELECT tag_name.name FROM post_tags post_tag JOIN tags tag_name ON tag_name.id=post_tag.tag_id WHERE post_tag.post_id=p.id ORDER BY tag_name.name) AS tag_names,
-               p.vote_count,
+               p.vote_count, (p.pinned_at IS NOT NULL) AS is_pinned,
                (SELECT count(*) FROM comments c WHERE c.post_id = p.id AND c.is_hidden = false) AS comment_count,
                p.duplicate_of_post_id, p.created_at, p.is_hidden, p.deleted_at
         FROM posts p
@@ -244,8 +245,9 @@ pub async fn list_board_posts(
     builder.push(" ORDER BY ");
     match query.sort {
         "top" => builder.push("p.vote_count DESC, p.created_at DESC"),
+        "hot" => builder.push("(CASE WHEN p.created_at > NOW() - INTERVAL '7 days' THEN 1 ELSE 0 END) DESC, (p.vote_count * 2 + (SELECT count(*) FROM comments hot_c WHERE hot_c.post_id=p.id AND hot_c.is_hidden=FALSE)) DESC, p.created_at DESC"),
         "oldest" => builder.push("p.created_at ASC"),
-        _ => builder.push("p.created_at DESC"),
+        _ => builder.push("p.pinned_at DESC NULLS LAST, p.created_at DESC"),
     };
 
     builder.push(" LIMIT ");
@@ -267,7 +269,7 @@ pub async fn find_post_detail(
     let row = sqlx::query!(
         r#"
         SELECT p.id, p.title, p.body, p.status, u.display_name as author_display_name,
-               p.vote_count, p.is_locked, p.duplicate_of_post_id, p.created_at, b.slug as board_slug,
+               p.vote_count, (p.pinned_at IS NOT NULL) AS "is_pinned!", p.is_locked, p.duplicate_of_post_id, p.created_at, b.slug as board_slug,
                p.attachments, cat.name AS "category_name?", cat.color AS "category_color?"
         FROM posts p
         JOIN boards b ON p.board_id = b.id
@@ -289,6 +291,7 @@ pub async fn find_post_detail(
         status: row.status,
         author_display_name: row.author_display_name,
         vote_count: row.vote_count,
+        is_pinned: row.is_pinned,
         is_locked: row.is_locked,
         duplicate_of_post_id: row.duplicate_of_post_id,
         created_at: row.created_at,

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ApiError, getBoardDetail, getComments, getPostDetail, getStatusHistory } from "@/lib/api";
+import { ApiError, getBoardDetail, getBoardPresentation, getComments, getPostDetail, getStatusHistory } from "@/lib/api";
 import {
   WorkspaceContextError,
   buildTenantPath,
@@ -48,6 +48,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
       getStatusHistory(tenant, postId, token),
     ]);
     const board = await getBoardDetail(tenant, post.board_slug, token);
+    const presentation = await getBoardPresentation(tenant, post.board_slug, token);
     const kind = boardKind(board.board_type);
     const bugSections = kind === "bug-reports" && post.body.startsWith("Steps to reproduce\n")
       ? post.body.split(/\n\n(?=(?:Expected result|Actual result|Environment)\n)/).map((part) => {
@@ -58,6 +59,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
 
     return (
       <div className={`post-thread post-thread--${kind}`}>
+        {presentation.plugins.filter((plugin) => /^\/plugins\/[a-z0-9-]+\.css$/.test(plugin.stylesheet_path)).map((plugin) => <link rel="stylesheet" href={plugin.stylesheet_path} key={plugin.id} />)}
         <RealtimeRefresh postId={post.id} tenantSlug={tenant} />
           <section className="post-detail">
             <div className="eyebrow-row">
@@ -75,6 +77,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                   {post.title}
                 </h1>
                 <div className="metric-row">
+                  {post.is_pinned ? <span className="experience__pinned">Pinned</span> : null}
                   {board.allow_votes ? <span><strong>{post.vote_count}</strong> {plural(post.vote_count, "vote")}</span> : null}
                   {board.allow_comments ? <span><strong>{comments.length}</strong> {plural(comments.length, "comment")}</span> : null}
                   <span>{new Date(post.created_at).toLocaleDateString()}</span>
@@ -162,6 +165,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
             postId={post.id}
             currentStatus={post.status}
             isLocked={post.is_locked}
+            isPinned={post.is_pinned}
           />
       </div>
     );
