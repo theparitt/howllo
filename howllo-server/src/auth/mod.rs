@@ -1,6 +1,7 @@
 pub mod api_token;
 pub mod context;
 pub mod current_user;
+pub mod customer_auth;
 pub mod hosted_rooiam;
 pub mod identity;
 pub mod local_admin;

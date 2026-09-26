@@ -5,12 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   createWorkspaceSession,
-  getWorkspaceAuthConfig,
 } from "@/lib/api";
-import {
-  ACTIVE_AUTH_PROVIDER,
-  authProviderLabel,
-} from "@/lib/auth-provider";
 import {
   clearRooiamOidcState,
   consumeRooiamReturnTo,
@@ -20,7 +15,7 @@ import {
 } from "@/lib/rooiam-auth";
 import { clearAllStoredBearerTokens, getWorkspaceSlugFromPath, persistBearerToken, writeAccountToken } from "@/components/dev-auth-panel";
 import { subdomainSlug } from "@/lib/subdomain";
-import { exchangeSignInCode } from "@/lib/auth-api";
+import { exchangeSignInCode, getCustomerRooiamConfig } from "@/lib/auth-api";
 
 function getTenantSlugFromReturnTo(returnTo: string) {
   try {
@@ -53,7 +48,7 @@ export function AuthCallback() {
   const [message, setMessage] = useState("Signing you in…");
   const [fallback, setFallback] = useState("/");
   const [genericCallback, setGenericCallback] = useState(false);
-  const providerLabel = authProviderLabel(ACTIVE_AUTH_PROVIDER);
+  const providerLabel = "RooIAM";
 
   useEffect(() => {
     let cancelled = false;
@@ -72,10 +67,6 @@ export function AuthCallback() {
           persistBearerToken(tenant, `Bearer ${session.session_token}`);
         }
         if (!cancelled) router.replace(target);
-        return;
-      }
-      if (ACTIVE_AUTH_PROVIDER !== "rooiam") {
-        setError(`${providerLabel} callback is not implemented in howllo-web yet.`);
         return;
       }
 
@@ -101,11 +92,7 @@ export function AuthCallback() {
       let rooiamClientId = "";
       let rooiamBaseUrl = "";
       if (tenantSlug) {
-        const workspaceAuth = await getWorkspaceAuthConfig(tenantSlug);
-        if (workspaceAuth.provider !== "rooiam") {
-          setError(`Workspace auth provider "${workspaceAuth.provider}" is not supported here.`);
-          return;
-        }
+        const workspaceAuth = await getCustomerRooiamConfig(tenantSlug);
         rooiamClientId = workspaceAuth.rooiam_client_id?.trim() ?? "";
         rooiamBaseUrl = workspaceAuth.rooiam_widget_base_url?.trim() ?? "";
       } else {

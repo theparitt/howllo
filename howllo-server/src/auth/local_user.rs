@@ -128,6 +128,20 @@ pub async fn issue_account_token(pool: &DbPool, user_id: Uuid) -> Result<Account
     issue_account_token_inner(pool, user_id, None).await
 }
 
+pub async fn issue_scoped_account_token(pool: &DbPool, user_id: Uuid, tenant_id: Option<Uuid>, provider: &str) -> Result<AccountToken, AppError> {
+    let token = issue_account_token_inner(pool, user_id, None).await?;
+    sqlx::query("UPDATE account_sessions SET tenant_id=$1, auth_provider=$2 WHERE token_hash=$3")
+        .bind(tenant_id).bind(provider).bind(token_hash(&token.access_token))
+        .execute(pool).await.map_err(db_error)?;
+    Ok(token)
+}
+
+pub async fn account_session_provider(pool: &DbPool, token: &str) -> Result<Option<(Option<Uuid>, String)>, AppError> {
+    if !is_account_token(token) { return Ok(None); }
+    sqlx::query_as("SELECT tenant_id, auth_provider FROM account_sessions WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at > NOW()")
+        .bind(token_hash(token)).fetch_optional(pool).await.map_err(db_error)
+}
+
 async fn issue_account_token_inner(pool: &DbPool, user_id: Uuid, req: Option<&HttpRequest>) -> Result<AccountToken, AppError> {
     let token = format!(
         "{PREFIX}{}{}",

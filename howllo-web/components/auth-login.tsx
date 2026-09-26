@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ApiError, createWorkspaceSession, getMe, getWorkspaceAuthConfig, revokeWorkspaceSession } from "@/lib/api";
-import { getLoginProviders, localSignIn, logoutAccount, resetLocalPassword, type LoginProvider } from "@/lib/auth-api";
+import { ApiError, createWorkspaceSession, getMe, revokeWorkspaceSession } from "@/lib/api";
+import { getLoginProviders, getCustomerRooiamConfig, localSignIn, logoutAccount, resetLocalPassword, type LoginProvider } from "@/lib/auth-api";
 import { API_BASE_URL } from "@/lib/config";
 import { ENABLED_AUTH_PROVIDERS } from "@/lib/auth-provider";
 import { rememberRooiamReturnTo } from "@/lib/rooiam-auth";
@@ -78,8 +78,16 @@ export function AuthLogin({ myHref }: AuthLoginProps) {
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    getLoginProviders().then(setProviders).catch(() => setProviderError("Could not load sign-in options. Please try again later."));
-  }, []);
+    let active = true;
+    setProviders([]);
+    setProviderError("");
+    setLocalOpen(false);
+    setLegacyOpen(false);
+    getLoginProviders(getCurrentWorkspaceSlug())
+      .then((value) => { if (active) setProviders(value); })
+      .catch(() => { if (active) setProviderError("Could not load sign-in options. Please try again later."); });
+    return () => { active = false; };
+  }, [pathname]);
 
   useEffect(() => {
     const workspace = getCurrentWorkspaceSlug();
@@ -135,17 +143,16 @@ export function AuthLogin({ myHref }: AuthLoginProps) {
   }, [loginOpen]);
 
   useEffect(() => {
-    if (loginOpen && ENABLED_AUTH_PROVIDERS.includes("rooiam") && configured && providers.length === 0) {
+    if (loginOpen && configured && providers.length === 0) {
       setLegacyOpen(true);
       setLocalOpen(false);
-    } else if (loginOpen && ENABLED_AUTH_PROVIDERS.length === 1 && ENABLED_AUTH_PROVIDERS[0] === "local" && providers.length === 1 && providers[0]?.kind === "local") {
+    } else if (loginOpen && !configured && providers.length === 1 && providers[0]?.kind === "local") {
       setLocalOpen(true);
       setLegacyOpen(false);
     }
   }, [loginOpen, configured, providers.length]);
 
   useEffect(() => {
-    if (!ENABLED_AUTH_PROVIDERS.includes("rooiam")) return;
     let cancelled = false;
 
     async function loadWorkspaceAuth() {
@@ -175,15 +182,7 @@ export function AuthLogin({ myHref }: AuthLoginProps) {
       }
 
       try {
-        const config = await getWorkspaceAuthConfig(workspace);
-        if (config.provider !== "rooiam") {
-          if (!cancelled) {
-            setWidgetUrl("");
-            setWidgetOrigin(null);
-            setConfigured(false);
-          }
-          return;
-        }
+        const config = await getCustomerRooiamConfig(workspace);
 
         const url = buildWidgetUrl(config);
         if (!cancelled) {
@@ -426,7 +425,7 @@ export function AuthLogin({ myHref }: AuthLoginProps) {
                 Continue with {provider.display_name}
               </button>
             ))}
-            {!recoveryCode && !legacyOpen && ENABLED_AUTH_PROVIDERS.includes("rooiam") && configured && widgetUrl && !providers.some((provider) => provider.id === "rooiam") ? (
+            {!recoveryCode && !legacyOpen && configured && widgetUrl && !providers.some((provider) => provider.id === "rooiam") ? (
               <button className="button" type="button" onClick={() => { setLegacyOpen(true); setLocalOpen(false); }}>Continue with RooIAM</button>
             ) : null}
             {recoveryCode ? (

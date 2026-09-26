@@ -33,3 +33,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 url = "2.5"
 argon2 = "0.5"
 rand = "0.8"
+aes-gcm = "0.10"

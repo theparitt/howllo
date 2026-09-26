@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::{
+    customer_auth::{parse_scoped_provider_id, scoped_oidc_provider},
     identity::{resolve_user, ExternalIdentity},
-    local_user::issue_account_token,
     providers::{oidc_provider, OidcProviderConfig},
 };
 use crate::{db::DbPool, errors::AppError};
@@ -120,6 +120,13 @@ fn web_origin() -> Result<String, AppError> {
         .filter(|value| !value.is_empty())
         .ok_or(AppError::InternalServerError)
 }
+fn customer_web_origin() -> Result<String, AppError> {
+    std::env::var("HOWLLO_CUSTOMER_WEB_ORIGIN")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .map(Ok)
+        .unwrap_or_else(web_origin)
+}
 fn callback_url(id: &str) -> Result<String, AppError> {
     Ok(format!(
         "{}/api/auth/callback/{id}",
@@ -133,10 +140,28 @@ fn client() -> Result<reqwest::Client, AppError> {
         .build()
         .map_err(|_| AppError::InternalServerError)
 }
-fn safe_endpoint(value: &str) -> Result<(), AppError> {
+fn safe_endpoint(value: &str, provider: &OidcProviderConfig) -> Result<(), AppError> {
     let url = url::Url::parse(value).map_err(|_| AppError::Unauthorized)?;
-    if url.scheme() == "https"
-        || (url.scheme() == "http" && matches!(url.host_str(), Some("localhost" | "127.0.0.1")))
+    let issuer = url::Url::parse(&provider.issuer).map_err(|_| AppError::Unauthorized)?;
+    let scoped = parse_scoped_provider_id(&provider.id).is_some();
+    let allowed_host = if provider.id.ends_with("-google") {
+        matches!(
+            url.host_str(),
+            Some("accounts.google.com" | "oauth2.googleapis.com" | "www.googleapis.com")
+        )
+    } else {
+        url.host_str() == issuer.host_str()
+            && url.port_or_known_default() == issuer.port_or_known_default()
+    };
+    if (!scoped
+        && (url.scheme() == "https"
+            || (url.scheme() == "http"
+                && matches!(url.host_str(), Some("localhost" | "127.0.0.1")))))
+        || (scoped
+            && url.scheme() == "https"
+            && allowed_host
+            && url.username().is_empty()
+            && url.password().is_none())
     {
         Ok(())
     } else {
@@ -164,9 +189,9 @@ async fn discovery(
     if document.issuer != provider.issuer {
         return Err(AppError::Unauthorized);
     }
-    safe_endpoint(&document.authorization_endpoint)?;
-    safe_endpoint(&document.token_endpoint)?;
-    safe_endpoint(&document.jwks_uri)?;
+    safe_endpoint(&document.authorization_endpoint, provider)?;
+    safe_endpoint(&document.token_endpoint, provider)?;
+    safe_endpoint(&document.jwks_uri, provider)?;
     Ok(document)
 }
 
@@ -176,7 +201,11 @@ pub async fn login(
     path: web::Path<String>,
     query: web::Query<LoginQuery>,
 ) -> Result<impl Responder, AppError> {
-    let provider = oidc_provider(&path)?;
+    let provider = if parse_scoped_provider_id(&path).is_some() {
+        scoped_oidc_provider(pool.get_ref(), &path).await?
+    } else {
+        oidc_provider(&path)?
+    };
     let http = client()?;
     let document = discovery(&provider, &http).await?;
     let state = random();
@@ -213,7 +242,11 @@ pub async fn callback(
     path: web::Path<String>,
     query: web::Query<CallbackQuery>,
 ) -> Result<impl Responder, AppError> {
-    let provider = oidc_provider(&path)?;
+    let provider = if parse_scoped_provider_id(&path).is_some() {
+        scoped_oidc_provider(pool.get_ref(), &path).await?
+    } else {
+        oidc_provider(&path)?
+    };
     let state = query
         .state
         .as_deref()
@@ -296,12 +329,18 @@ pub async fn callback(
     };
     let user = resolve_user(pool.get_ref(), &identity).await?;
     let exchange_code = random();
-    sqlx::query("INSERT INTO auth_exchange_codes (code_hash, user_id, return_to, expires_at) VALUES ($1, $2, $3, $4)")
+    let tenant_id = parse_scoped_provider_id(&provider.id).map(|(tenant_id, _)| tenant_id);
+    sqlx::query("INSERT INTO auth_exchange_codes (code_hash, user_id, return_to, expires_at, tenant_id, auth_provider) VALUES ($1, $2, $3, $4, $5, $6)")
         .bind(hash(&exchange_code)).bind(user.id).bind(&return_to)
-        .bind(Utc::now() + Duration::minutes(2)).execute(pool.get_ref()).await.map_err(storage_error)?;
+        .bind(Utc::now() + Duration::minutes(2)).bind(tenant_id).bind(&provider.id).execute(pool.get_ref()).await.map_err(storage_error)?;
+    let destination = if tenant_id.is_some() {
+        customer_web_origin()?
+    } else {
+        web_origin()?
+    };
     let mut target = url::Url::parse(&format!(
         "{}/auth/callback",
-        web_origin()?.trim_end_matches('/')
+        destination.trim_end_matches('/')
     ))
     .map_err(|_| AppError::InternalServerError)?;
     target
@@ -388,13 +427,19 @@ pub async fn exchange(
     pool: web::Data<DbPool>,
     body: web::Json<ExchangeRequest>,
 ) -> Result<impl Responder, AppError> {
-    let row: Option<(uuid::Uuid, String)> = sqlx::query_as(
-        "DELETE FROM auth_exchange_codes WHERE code_hash = $1 AND expires_at > NOW() RETURNING user_id, return_to"
+    let row: Option<(uuid::Uuid, String, Option<uuid::Uuid>, Option<String>)> = sqlx::query_as(
+        "DELETE FROM auth_exchange_codes WHERE code_hash = $1 AND expires_at > NOW() RETURNING user_id, return_to, tenant_id, auth_provider"
     ).bind(hash(&body.code)).fetch_optional(pool.get_ref()).await.map_err(storage_error)?;
-    let Some((user_id, return_to)) = row else {
+    let Some((user_id, return_to, tenant_id, provider_id)) = row else {
         return Err(AppError::Unauthorized);
     };
-    let token = issue_account_token(pool.get_ref(), user_id).await?;
+    let token = super::local_user::issue_scoped_account_token(
+        pool.get_ref(),
+        user_id,
+        tenant_id,
+        provider_id.as_deref().unwrap_or("oidc"),
+    )
+    .await?;
     Ok(HttpResponse::Ok()
         .insert_header(("Cache-Control", "no-store"))
         .json(ExchangeResponse {

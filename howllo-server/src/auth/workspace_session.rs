@@ -7,7 +7,7 @@ use uuid::Uuid;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 
 use crate::auth::identity::{resolve_user, ExternalIdentity};
-use crate::auth::local_user::resolve_account_token;
+use crate::auth::local_user::{account_session_provider, resolve_account_token};
 use crate::auth::rooiam::{resolve_rooiam_access_token, ResolvedRooiamIdentity, RooiamClaims};
 use crate::config::Settings;
 use crate::db::DbPool;
@@ -164,6 +164,7 @@ pub async fn create_workspace_session(
         return Err(AppError::Validation("tenant_slug is required".to_string()));
     }
 
+    let account_session = account_session_provider(pool.get_ref(), access_token).await?;
     let user = if let Some(user) = resolve_account_token(pool.get_ref(), access_token).await? {
         user
     } else {
@@ -177,6 +178,57 @@ pub async fn create_workspace_session(
     let tenant_id =
         crate::repositories::membership_repository::resolve_tenant_id(pool.get_ref(), tenant_slug)
             .await?;
+
+    // Staff sign-in stays independent of public board sign-in settings.
+    let is_staff: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM memberships WHERE tenant_id=$1 AND user_id=$2 AND role IN ('owner','admin','moderator'))")
+        .bind(tenant_id).bind(user.id).fetch_one(pool.get_ref()).await.map_err(|_| AppError::InternalServerError)?;
+    if account_session
+        .as_ref()
+        .and_then(|(scope, _)| *scope)
+        .is_some_and(|scope| scope != tenant_id)
+        || (is_staff
+            && account_session
+                .as_ref()
+                .and_then(|(scope, _)| *scope)
+                .is_some())
+    {
+        return Err(AppError::Forbidden);
+    }
+    if !is_staff {
+        if let Some((scope, provider)) = account_session {
+            if scope.is_some_and(|scope| scope != tenant_id)
+                || !crate::auth::customer_auth::is_customer_provider_enabled(
+                    pool.get_ref(),
+                    tenant_id,
+                    &provider,
+                )
+                .await?
+            {
+                return Err(AppError::Forbidden);
+            }
+        } else {
+            let legacy = settings.rooiam_legacy_hs256_enabled
+                && crate::auth::rooiam::RooiamClient::new(settings.rooiam_jwt_secret.clone())
+                    .validate_token(access_token)
+                    .is_ok();
+            if !legacy
+                && (!crate::auth::customer_auth::is_customer_provider_enabled(
+                    pool.get_ref(),
+                    tenant_id,
+                    "rooiam",
+                )
+                .await?
+                    || !crate::auth::customer_auth::verify_customer_rooiam_token(
+                        pool.get_ref(),
+                        tenant_id,
+                        access_token,
+                    )
+                    .await?)
+            {
+                return Err(AppError::Forbidden);
+            }
+        }
+    }
 
     let restricted: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM workspace_restrictions WHERE tenant_id = $1 AND user_id = $2 AND (expires_at IS NULL OR expires_at > NOW()))",
@@ -211,7 +263,14 @@ pub async fn create_workspace_session(
 
     // Attach any pending staff invitations for this email to the real account so
     // the user can accept/reject them. We do NOT auto-accept. See docs.
-    if !user.email.trim().is_empty() {
+    let is_rooiam_identity: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM user_identities WHERE user_id=$1 AND provider_id='rooiam')",
+    )
+    .bind(user.id)
+    .fetch_one(pool.get_ref())
+    .await
+    .map_err(|_| AppError::InternalServerError)?;
+    if is_rooiam_identity && !user.email.trim().is_empty() {
         let _ = crate::repositories::invitation_repository::bind_email_to_user(
             pool.get_ref(),
             &user.email.trim().to_lowercase(),

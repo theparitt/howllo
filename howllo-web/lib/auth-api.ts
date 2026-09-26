@@ -24,10 +24,18 @@ async function localAuthRequest(path: string, body: object): Promise<LocalAuthRe
   return response.json() as Promise<LocalAuthResult>;
 }
 
-export async function getLoginProviders(): Promise<LoginProvider[]> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/providers`, { cache: "no-store" });
+export async function getLoginProviders(tenantSlug?: string | null): Promise<LoginProvider[]> {
+  const endpoint = tenantSlug ? `/api/auth/customer-providers?tenant_slug=${encodeURIComponent(tenantSlug)}` : "/api/auth/providers";
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, { cache: "no-store" });
   if (!response.ok) throw new Error("Could not load sign-in options.");
   return response.json() as Promise<LoginProvider[]>;
+}
+
+export type CustomerRooiamConfig = { provider: "rooiam"; rooiam_workspace_id: string; rooiam_client_id: string; rooiam_widget_base_url: string };
+export async function getCustomerRooiamConfig(tenantSlug: string): Promise<CustomerRooiamConfig> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/customer-rooiam?tenant_slug=${encodeURIComponent(tenantSlug)}`, { cache: "no-store" });
+  if (!response.ok) throw new Error("RooIAM is not enabled for this workspace.");
+  return response.json() as Promise<CustomerRooiamConfig>;
 }
 
 export async function localSignIn(
