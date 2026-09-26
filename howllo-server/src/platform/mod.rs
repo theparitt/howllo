@@ -36,6 +36,8 @@ fn ensure_platform_admin(auth: &AuthenticatedUser) -> Result<(), AppError> {
 #[derive(Deserialize)]
 pub struct UploadRequest {
     pub tenant_slug: String,
+    /// When uploading for a post, name its board so private boards fail closed.
+    pub board_slug: Option<String>,
     /// Original filename (used only to pick an extension).
     pub filename: String,
     /// MIME type, e.g. "image/png". Must be an image.
@@ -68,6 +70,26 @@ pub async fn upload_image(
         crate::memberships::check_membership(pool.get_ref(), tenant_id, auth.0.id)
             .await
             .map_err(|_| AppError::Forbidden)?;
+    }
+    if let Some(board_slug) = body.board_slug.as_deref() {
+        let is_private: Option<bool> = sqlx::query_scalar(
+            "SELECT is_private FROM boards WHERE tenant_id=$1 AND slug=$2 AND is_enabled=TRUE",
+        )
+        .bind(tenant_id)
+        .bind(board_slug)
+        .fetch_optional(pool.get_ref())
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
+        match is_private {
+            Some(true) => {
+                return Err(AppError::Validation(
+                    "Screenshots are unavailable on private boards until private storage is configured."
+                        .into(),
+                ))
+            }
+            Some(false) => (),
+            None => return Err(AppError::NotFound),
+        }
     }
     let policy = crate::policy::workspace_policy(pool.get_ref(), tenant_id).await?;
     use base64::Engine;

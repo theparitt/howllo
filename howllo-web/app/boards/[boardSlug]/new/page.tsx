@@ -63,7 +63,7 @@ export default async function CreatePostPage({
         <p className="page-lead">{kind === "bug-reports" ? "Tell the team what happened and how to reproduce it." : kind === "discussions" ? "Ask a question or start a conversation." : "Describe the improvement you would like to see."}</p>
       </section>
 
-      <CreatePostForm boardSlug={boardSlug} tenantSlug={tenant} boardKind={kind} categories={categories} tags={tags} />
+      <CreatePostForm boardSlug={boardSlug} tenantSlug={tenant} boardKind={kind} isPrivate={board.is_private} categories={categories} tags={tags} />
     </div>
   );
 }

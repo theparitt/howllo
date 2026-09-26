@@ -274,6 +274,12 @@ pub async fn create_post(
     user_id: Uuid,
 ) -> Result<PostCreatedDto, AppError> {
     let board = ensure_board_access(req, pool, tenant_slug, board_slug).await?;
+    if board.is_private && !attachments.is_empty() {
+        return Err(AppError::Validation(
+            "Screenshots are unavailable on private boards until private storage is configured."
+                .into(),
+        ));
+    }
     if tag_ids.len() > 3
         || tag_ids
             .iter()

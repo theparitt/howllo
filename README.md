@@ -8,6 +8,11 @@ Howllo is open source under the [Apache License 2.0](LICENSE). Contributions are
 Multi-tenant feedback and roadmap platform. Customers submit and
 vote on feedback; product teams triage, set roadmap status, and respond.
 
+Optional plugins are written and shipped by the Howllo maintainer. The
+platform admin approves them; each workspace or board chooses which approved
+plugins to enable. Howllo does not load third-party plugin code or tenant
+plugin uploads. See [plugin guide](docs/plugins.md).
+
 Howllo is identity-provider agnostic. RooIAM is supported as an optional integration, but is not required. A fresh installation supports local accounts. You can also use Google, Microsoft Entra ID, Keycloak, Authentik or any compatible OpenID Connect provider through the generic OIDC adapter. See [authentication setup](docs/auth/README.md).
 
 ## Monorepo layout

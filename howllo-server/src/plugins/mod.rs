@@ -1,4 +1,5 @@
 //! Approved public-board appearance plugins. No tenant-supplied code runs here.
+pub mod registry;
 use actix_web::{get, patch, put, web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -61,9 +62,10 @@ pub async fn list_platform_plugins(
     if !local_admin::is_local_admin_user(&auth.0) {
         return Err(AppError::Forbidden);
     }
-    let plugins = sqlx::query_as::<_, PluginRow>(
+    let mut plugins = sqlx::query_as::<_, PluginRow>(
         "SELECT id, version, name, description, slot, stylesheet_path, is_approved FROM plugin_catalog ORDER BY slot, name"
     ).fetch_all(pool.get_ref()).await.map_err(db_error)?;
+    plugins.retain(|p| registry::matches(&p.id, &p.version, &p.slot, &p.stylesheet_path));
     Ok(HttpResponse::Ok()
         .insert_header(("Cache-Control", "no-store"))
         .json(plugins))
@@ -79,10 +81,15 @@ pub async fn set_platform_plugin_approval(
     if !local_admin::is_local_admin_user(&auth.0) {
         return Err(AppError::Forbidden);
     }
+    if registry::find(path.as_str()).is_none() {
+        return Err(AppError::NotFound);
+    }
     let mut tx = pool.begin().await.map_err(db_error)?;
-    let updated = sqlx::query("UPDATE plugin_catalog SET is_approved=$1 WHERE id=$2")
+    let built_in = registry::find(path.as_str()).ok_or(AppError::NotFound)?;
+    let updated = sqlx::query("UPDATE plugin_catalog SET is_approved=$1 WHERE id=$2 AND version=$3 AND slot=$4 AND stylesheet_path=$5")
         .bind(body.enabled)
         .bind(path.as_str())
+        .bind(built_in.version).bind(built_in.slot).bind(built_in.stylesheet_path)
         .execute(&mut *tx)
         .await
         .map_err(db_error)?;
@@ -106,9 +113,10 @@ pub async fn list_workspace_plugins(
     auth: AuthenticatedUser,
 ) -> Result<impl Responder, AppError> {
     let tenant = manage_tenant(pool.get_ref(), &path, auth.0.id).await?;
-    let plugins = sqlx::query_as::<_, WorkspacePluginRow>(
+    let mut plugins = sqlx::query_as::<_, WorkspacePluginRow>(
         "SELECT p.id, p.version, p.name, p.description, p.slot, p.stylesheet_path, COALESCE(w.enabled,FALSE) AS enabled FROM plugin_catalog p LEFT JOIN workspace_plugins w ON w.plugin_id=p.id AND w.tenant_id=$1 WHERE p.is_approved=TRUE AND p.slot NOT LIKE 'board.topics.%' ORDER BY p.slot,p.name"
     ).bind(tenant).fetch_all(pool.get_ref()).await.map_err(db_error)?;
+    plugins.retain(|p| registry::matches(&p.id, &p.version, &p.slot, &p.stylesheet_path));
     Ok(HttpResponse::Ok()
         .insert_header(("Cache-Control", "no-store"))
         .json(plugins))
@@ -122,18 +130,24 @@ pub async fn set_workspace_plugin(
     auth: AuthenticatedUser,
 ) -> Result<impl Responder, AppError> {
     let (slug, plugin_id) = path.into_inner();
+    let built_in = registry::find(&plugin_id).ok_or(AppError::NotFound)?;
     let tenant = manage_tenant(pool.get_ref(), &slug, auth.0.id).await?;
     let mut tx = pool.begin().await.map_err(db_error)?;
     // Hold the catalog row while enabling so a concurrent platform revocation
     // cannot leave an installation active after approval is removed.
     let row: Option<(String, bool)> =
-        sqlx::query_as("SELECT slot,is_approved FROM plugin_catalog WHERE id=$1 FOR SHARE")
+        sqlx::query_as("SELECT slot,is_approved FROM plugin_catalog WHERE id=$1 AND version=$2 AND slot=$3 AND stylesheet_path=$4 FOR SHARE")
             .bind(&plugin_id)
+            .bind(built_in.version).bind(built_in.slot).bind(built_in.stylesheet_path)
             .fetch_optional(&mut *tx)
             .await
             .map_err(db_error)?;
     let (slot, approved) = row.ok_or(AppError::NotFound)?;
-    if slot.starts_with("board.topics.") { return Err(AppError::Validation("Enable this plugin on an individual board".into())); }
+    if slot.starts_with("board.topics.") {
+        return Err(AppError::Validation(
+            "Enable this plugin on an individual board".into(),
+        ));
+    }
     if body.enabled && !approved {
         return Err(AppError::Forbidden);
     }
@@ -187,9 +201,16 @@ pub async fn public_context(
     } else {
         vec![]
     };
-    let plugins: Vec<ActivePlugin> = sqlx::query_as(
+    let mut plugins: Vec<ActivePlugin> = sqlx::query_as(
         "SELECT p.id,p.version,p.slot,p.stylesheet_path FROM workspace_plugins w JOIN plugin_catalog p ON p.id=w.plugin_id WHERE w.tenant_id=$1 AND w.enabled=TRUE AND p.is_approved=TRUE ORDER BY p.slot"
     ).bind(id).fetch_all(pool.get_ref()).await.map_err(db_error)?;
+    plugins.retain(|p| {
+        registry::find(&p.id).is_some_and(|built_in| {
+            built_in.version == p.version
+                && built_in.slot == p.slot
+                && built_in.stylesheet_path == p.stylesheet_path
+        })
+    });
     Ok(HttpResponse::Ok().insert_header(("Cache-Control", "no-store")).json(serde_json::json!({
         "api_version": 1,
         "workspace": { "slug": slug, "name": name, "site_name": site_name, "accent_color": accent_color, "background_color": background_color,
@@ -258,6 +279,47 @@ mod tests {
         assert_eq!(initial["boards"][0]["slug"], own.board_slug);
         assert!(!initial.to_string().contains(&own.private_board_slug));
         assert!(!initial.to_string().contains(&own.member_subject));
+
+        // A database row is not an installation source. Even an approved row
+        // must be present in the compiled first-party registry.
+        sqlx::query("INSERT INTO plugin_catalog (id, version, name, description, slot, stylesheet_path, is_approved) VALUES ('unshipped-type','1.0.0','Unshipped','Not bundled','workspace.typography','/plugins/unshipped-type.css',TRUE) ON CONFLICT (id) DO UPDATE SET is_approved=TRUE")
+            .execute(&pool).await.unwrap();
+        let unshipped = test::call_service(
+            &app,
+            test::TestRequest::put()
+                .uri(&format!(
+                    "/api/tenants/{}/plugins/unshipped-type",
+                    own.tenant_slug
+                ))
+                .insert_header(("Authorization", admin.clone()))
+                .set_json(json!({"enabled":true}))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(unshipped.status(), StatusCode::NOT_FOUND);
+        let own_id: uuid::Uuid = sqlx::query_scalar("SELECT id FROM tenants WHERE slug=$1")
+            .bind(&own.tenant_slug)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO workspace_plugins (tenant_id,plugin_id,slot,enabled) VALUES ($1,'unshipped-type','workspace.typography',TRUE)")
+            .bind(own_id).execute(&pool).await.unwrap();
+        let unshipped_context = read_json(
+            test::call_service(
+                &app,
+                test::TestRequest::get().uri(&context_url).to_request(),
+            )
+            .await,
+        )
+        .await;
+        assert!(unshipped_context["plugins"].as_array().unwrap().is_empty());
+        sqlx::query(
+            "DELETE FROM workspace_plugins WHERE tenant_id=$1 AND plugin_id='unshipped-type'",
+        )
+        .bind(own_id)
+        .execute(&pool)
+        .await
+        .unwrap();
 
         let url = format!("/api/tenants/{}/plugins/editorial-type", own.tenant_slug);
         let enable = test::call_service(
@@ -343,6 +405,10 @@ mod tests {
         .await;
         assert_eq!(unpublished.status(), StatusCode::NOT_FOUND);
         sqlx::query("UPDATE plugin_catalog SET is_approved=TRUE WHERE id='clean-type'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM plugin_catalog WHERE id='unshipped-type'")
             .execute(&pool)
             .await
             .unwrap();

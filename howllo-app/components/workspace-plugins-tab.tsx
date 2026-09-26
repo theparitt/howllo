@@ -53,7 +53,7 @@ export function WorkspacePluginsTab({ tenant }: { tenant: string }) {
   return <div className="page-stack" style={{ maxWidth: 850 }}>
     <section className="panel">
       <h2 className="section-title">Workspace plugins</h2>
-      <p className="section-subtitle">Change the public board’s look. Only platform-approved plugins appear here. One plugin can be active per area.</p>
+      <p className="section-subtitle">Choose an optional Howllo plugin for your public board. These plugins are built into Howllo and approved by the platform admin. One plugin can be active per area.</p>
     </section>
     {loading ? <section className="panel">Loading plugins…</section> : plugins.length === 0 ? <section className="panel">No plugins are available yet.</section> : plugins.map((plugin) => <section className="panel" key={plugin.id}>
       <div className="manage-row" style={{ justifyContent: "space-between", gap: "1rem" }}>

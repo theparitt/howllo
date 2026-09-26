@@ -12,6 +12,6 @@ While signed in, **My account → Local account security** lets a local user cha
 
 There is no email reset because local accounts have no verified email address or mail delivery configuration. If both the password and recovery code are lost, this version cannot safely prove account ownership. A server operator must use a separate, audited recovery procedure; Howllo does not offer an unauthenticated admin reset endpoint.
 
-The separate admin console is bootstrapped with `HOWLLO_ADMIN_BOOTSTRAP_KEY` and its own password. Set a strong `HOWLLO_ADMIN_JWT_SECRET` for that console. Never use the example secret on a network-facing deployment.
+The separate admin console is bootstrapped with `HOWLLO_ADMIN_BOOTSTRAP_KEY` and its own password (at least 12 characters on new setups). Admin setup and sign-in share a PostgreSQL-based limit of 30 attempts per minute across API instances. Set a strong `HOWLLO_ADMIN_JWT_SECRET` for that console. Never use the example secret on a network-facing deployment.
 
 Development with no external IdP: start PostgreSQL and MinIO, copy `howllo-server/.env.example`, run migrations, start the API and web. No RooIAM settings are needed.

@@ -13,6 +13,7 @@ type CreatePostFormProps = {
   tenantSlug: string;
   boardSlug: string;
   boardKind: BoardKind;
+  isPrivate: boolean;
   categories: BoardCategory[];
   tags: Tag[];
 };
@@ -26,7 +27,7 @@ function submissionMessage(error: unknown): string {
   return error.message;
 }
 
-export function CreatePostForm({ tenantSlug, boardSlug, boardKind, categories, tags }: CreatePostFormProps) {
+export function CreatePostForm({ tenantSlug, boardSlug, boardKind, isPrivate, categories, tags }: CreatePostFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [title, setTitle] = useState("");
@@ -56,7 +57,7 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind, categories, t
     setUploading(true);
     setError(null);
     try {
-      const urls = await Promise.all(files.map((file) => uploadImage(file, token, tenantSlug)));
+      const urls = await Promise.all(files.map((file) => uploadImage(file, token, tenantSlug, boardSlug)));
       setAttachments((current) => [...current, ...urls]);
     } catch (uploadError) {
       setError(
@@ -152,9 +153,7 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind, categories, t
       {categories.length ? <label className="manage-label">Category<select className="field" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}><option value="">Choose a category (optional)</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label> : null}
       {tags.length ? <fieldset className="experience__tag-picker"><legend>Tags (up to 3, optional)</legend><div>{tags.map((tag) => <label key={tag.id}><input type="checkbox" checked={tagIds.includes(tag.id)} disabled={!tagIds.includes(tag.id) && tagIds.length >= 3} onChange={(event) => setTagIds((current) => event.target.checked ? [...current, tag.id] : current.filter((id) => id !== tag.id))} /><span>#{tag.name}</span></label>)}</div></fieldset> : null}
       <div>
-        <div className="muted" style={{ marginBottom: "0.45rem", fontSize: "0.86rem" }}>
-          Screenshots (optional)
-        </div>
+        {!isPrivate ? <div className="muted" style={{ marginBottom: "0.45rem", fontSize: "0.86rem" }}>Screenshots (optional)</div> : null}
         {attachments.length > 0 ? (
           <div className="attachment-grid" style={{ marginBottom: "0.85rem" }}>
             {attachments.map((url) => (
@@ -181,7 +180,7 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind, categories, t
           onChange={onPickFiles}
         />
         <div className="form-actions">
-          <div className="form-actions__aside">
+          {!isPrivate ? <div className="form-actions__aside">
             <button
               type="button"
               className="ghost-button"
@@ -190,7 +189,7 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind, categories, t
             >
               {uploading ? "Uploading…" : "Add screenshot"}
             </button>
-          </div>
+          </div> : null}
           <div className="form-actions__primary">
             <button className="button" disabled={pending || uploading} type="submit">
               {pending ? "Posting…" : boardKind === "bug-reports" ? "Submit bug report" : boardKind === "discussions" ? "Start discussion" : "Submit idea"}

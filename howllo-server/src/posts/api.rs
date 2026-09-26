@@ -38,6 +38,43 @@ mod review_tests {
     use crate::startup;
 
     #[actix_web::test]
+    async fn private_board_rejects_public_screenshot_links() {
+        let _guard = lock_test_db().await;
+        let settings = test_settings();
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+        let admin = bearer_for(
+            &seed.admin_subject,
+            "admin@example.com",
+            "Admin",
+            &settings.rooiam_jwt_secret,
+        );
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool))
+                .app_data(web::Data::new(settings))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+        let upload = test::call_service(&app, test::TestRequest::post()
+            .uri("/api/uploads")
+            .insert_header(("Authorization", admin.clone()))
+            .set_json(json!({"tenant_slug":seed.tenant_slug,"board_slug":seed.private_board_slug,"filename":"image.png","content_type":"image/png","data":"AQ=="}))
+            .to_request()).await;
+        assert_eq!(upload.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let post = test::call_service(&app, test::TestRequest::post()
+            .uri(&format!("/api/boards/{}/posts",seed.private_board_slug))
+            .insert_header(("Authorization", admin))
+            .set_json(json!({"tenant_slug":seed.tenant_slug,"title":"Private issue","body":"Internal details","attachments":["https://example.com/image.png"]}))
+            .to_request()).await;
+        assert_eq!(post.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[actix_web::test]
     async fn held_post_is_private_until_approved_and_burst_is_limited() {
         let settings = test_settings();
         let _guard = lock_test_db().await;

@@ -66,7 +66,7 @@ export function BoardExtras({ tenant, boardId }: { tenant: string; boardId: stri
       <label className="manage-label">Footer text<textarea className="manage-input" rows={2} maxLength={1000} value={values.footer_text} onChange={(event) => setValues({ ...values, footer_text: event.target.value })} placeholder="A brief note below the topic list" /></label>
       <button type="button" className="button" disabled={busy || loading} onClick={() => void save()}>Save appearance</button>
     </div>
-    {plugins.length > 0 ? <div className="board-extras__plugins"><h3 className="section-title">Optional plugins</h3><p className="section-subtitle">Approved by the site admin. Each setting applies only to this board.</p>
+    {plugins.length > 0 ? <div className="board-extras__plugins"><h3 className="section-title">Optional plugins</h3><p className="section-subtitle">Built into Howllo and approved by the platform admin. Each setting applies only to this board.</p>
       {plugins.map((plugin) => <div className="manage-row" key={plugin.id} style={{ justifyContent: "space-between", gap: "1rem" }}><div><strong>{plugin.name}</strong><p className="section-subtitle">{plugin.description}</p></div><button type="button" className="ghost-button" disabled={busy} onClick={() => void toggle(plugin)}>{plugin.enabled ? "Disable" : "Enable"}</button></div>)}
     </div> : null}
     {message ? <p className="success-text" role="status">{message}</p> : null}

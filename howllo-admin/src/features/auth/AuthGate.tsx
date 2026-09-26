@@ -103,7 +103,8 @@ export function AuthGate() {
                 autoComplete={isSetup ? "new-password" : "current-password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={isSetup ? "At least 8 characters" : "Password"}
+                placeholder={isSetup ? "At least 12 characters" : "Password"}
+                minLength={isSetup ? 12 : undefined}
                 required
               />
             </label>

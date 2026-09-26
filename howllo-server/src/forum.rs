@@ -10,6 +10,7 @@ use crate::{
     db::DbPool,
     domain::permission::Permission,
     errors::AppError,
+    plugins::registry,
     services::board_service,
 };
 
@@ -85,8 +86,8 @@ pub async fn get_public_presentation(
     .fetch_optional(pool.get_ref())
     .await
     .map_err(db_error)?;
-    let plugins: Vec<(String, String)> = sqlx::query_as(
-        "SELECT p.id,p.stylesheet_path FROM board_plugins bp JOIN plugin_catalog p ON p.id=bp.plugin_id WHERE bp.board_id=$1 AND bp.enabled=TRUE AND p.is_approved=TRUE ORDER BY p.slot"
+    let plugins: Vec<(String, String, String, String)> = sqlx::query_as(
+        "SELECT p.id,p.version,p.slot,p.stylesheet_path FROM board_plugins bp JOIN plugin_catalog p ON p.id=bp.plugin_id WHERE bp.board_id=$1 AND bp.enabled=TRUE AND p.is_approved=TRUE ORDER BY p.slot"
     ).bind(board.id).fetch_all(pool.get_ref()).await.map_err(db_error)?;
     let presentation = presentation.unwrap_or(Presentation {
         announcement: String::new(),
@@ -97,7 +98,7 @@ pub async fn get_public_presentation(
         "announcement": presentation.announcement,
         "sidebar_text": presentation.sidebar_text,
         "footer_text": presentation.footer_text,
-        "plugins": plugins.into_iter().map(|(id, stylesheet_path)| serde_json::json!({ "id": id, "stylesheet_path": stylesheet_path })).collect::<Vec<_>>()
+        "plugins": plugins.into_iter().filter(|(id, version, slot, path)| registry::matches(id, version, slot, path)).map(|(id, _, _, stylesheet_path)| serde_json::json!({ "id": id, "stylesheet_path": stylesheet_path })).collect::<Vec<_>>()
     })))
 }
 
@@ -154,8 +155,9 @@ pub async fn list_board_plugins(
 ) -> Result<impl Responder, AppError> {
     let id = path.into_inner();
     board_tenant(pool.get_ref(), id, auth.0.id, Permission::ManageBoards).await?;
-    let plugins: Vec<BoardPlugin> = sqlx::query_as("SELECT p.id,p.version,p.name,p.description,p.slot,p.stylesheet_path,COALESCE(bp.enabled,FALSE) AS enabled FROM plugin_catalog p LEFT JOIN board_plugins bp ON bp.plugin_id=p.id AND bp.board_id=$1 WHERE p.is_approved=TRUE AND p.slot LIKE 'board.topics.%' ORDER BY p.slot,p.name")
+    let mut plugins: Vec<BoardPlugin> = sqlx::query_as("SELECT p.id,p.version,p.name,p.description,p.slot,p.stylesheet_path,COALESCE(bp.enabled,FALSE) AS enabled FROM plugin_catalog p LEFT JOIN board_plugins bp ON bp.plugin_id=p.id AND bp.board_id=$1 WHERE p.is_approved=TRUE AND p.slot LIKE 'board.topics.%' ORDER BY p.slot,p.name")
         .bind(id).fetch_all(pool.get_ref()).await.map_err(db_error)?;
+    plugins.retain(|p| registry::matches(&p.id, &p.version, &p.slot, &p.stylesheet_path));
     Ok(HttpResponse::Ok()
         .insert_header(("Cache-Control", "no-store"))
         .json(plugins))
@@ -169,6 +171,7 @@ pub async fn toggle_board_plugin(
     auth: AuthenticatedUser,
 ) -> Result<impl Responder, AppError> {
     let (board_id, plugin_id) = path.into_inner();
+    let built_in = registry::find(&plugin_id).ok_or(AppError::NotFound)?;
     board_tenant(
         pool.get_ref(),
         board_id,
@@ -178,8 +181,9 @@ pub async fn toggle_board_plugin(
     .await?;
     let mut tx = pool.begin().await.map_err(db_error)?;
     let row: Option<(String, bool)> =
-        sqlx::query_as("SELECT slot,is_approved FROM plugin_catalog WHERE id=$1 FOR SHARE")
+        sqlx::query_as("SELECT slot,is_approved FROM plugin_catalog WHERE id=$1 AND version=$2 AND slot=$3 AND stylesheet_path=$4 FOR SHARE")
             .bind(&plugin_id)
+            .bind(built_in.version).bind(built_in.slot).bind(built_in.stylesheet_path)
             .fetch_optional(&mut *tx)
             .await
             .map_err(db_error)?;
@@ -337,6 +341,37 @@ mod tests {
         let body = read_json(visible).await;
         assert_eq!(body["announcement"], "Board news");
         assert_eq!(body["plugins"][0]["id"], "compact-topics");
+
+        // An approved catalog row alone cannot introduce an external asset.
+        sqlx::query("INSERT INTO plugin_catalog (id,version,name,description,slot,stylesheet_path,is_approved) VALUES ('unshipped-board','1.0.0','Unshipped','Not in Howllo','board.topics.typography','/plugins/unshipped-board.css',TRUE) ON CONFLICT (id) DO UPDATE SET is_approved=TRUE")
+            .execute(&pool).await.unwrap();
+        let rogue_toggle = test::call_service(
+            &app,
+            test::TestRequest::put()
+                .uri(&format!(
+                    "/api/admin/boards/{board_id}/plugins/unshipped-board"
+                ))
+                .insert_header(("Authorization", own_admin.clone()))
+                .set_json(json!({"enabled":true}))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(rogue_toggle.status(), StatusCode::NOT_FOUND);
+        sqlx::query("INSERT INTO board_plugins (board_id,plugin_id,slot,enabled) VALUES ($1,'unshipped-board','board.topics.typography',TRUE)")
+            .bind(board_id).execute(&pool).await.unwrap();
+        let public_again = read_json(
+            test::call_service(
+                &app,
+                test::TestRequest::get().uri(&public_path).to_request(),
+            )
+            .await,
+        )
+        .await;
+        assert_eq!(public_again["plugins"].as_array().unwrap().len(), 1);
+        sqlx::query("DELETE FROM plugin_catalog WHERE id='unshipped-board'")
+            .execute(&pool)
+            .await
+            .unwrap();
 
         let private_path = format!(
             "/api/boards/{}/presentation?tenant_slug={}",

@@ -1,7 +1,10 @@
 # Workspace plugins (API v1)
 
-Howllo Web has named extension points. A package is installed by the platform,
-approved by the platform admin, and enabled by a workspace owner/admin. One
+Howllo Web has named extension points. **Only the Howllo maintainer writes and
+ships plugins with the application.** There are no third-party submissions,
+tenant uploads, external plugin URLs or plugin marketplace. A package is added
+in source code, approved by the platform admin, and enabled by a workspace
+owner/admin. One
 plugin per extension point can be active in a workspace. Disabling a package in
 Platform settings turns off its workspace installations; a tenant must enable
 it again after the platform admin reapproves it.
@@ -22,14 +25,18 @@ The public board presentation endpoint returns only approved and enabled
 stylesheets, and checks private-board access before returning data.
 
 Packages in v1 are stylesheet assets under `howllo-web/public/plugins/`. They
-are versioned in `plugin_catalog`. Add a migration for a new package with its
-ID, version, name, description, slot and stylesheet path. The migration should
+are versioned in `plugin_catalog` and must also match the compiled first-party
+registry in `howllo-server/src/plugins/registry.rs`. Add the CSS asset, a
+registry entry and a migration for a new package with its ID, version, name,
+description, slot and stylesheet path. The migration should
 set `is_approved=FALSE`; a platform admin reviews and approves it in **Platform
 settings → Plugins**. A tenant then enables it in **Workspace → Plugins**.
-Tenant managers cannot provide stylesheet URLs or arbitrary JavaScript.
+Tenant managers cannot provide stylesheet URLs or arbitrary JavaScript. A
+catalog row with an unknown ID or a mismatched asset path, version or slot is
+ignored by public and management APIs, even if its database approval is true.
 
-Code highlighting, custom renderers and third-party widgets need a reviewed
-renderer and isolation model before they can run on visitor pages. The v1
+Code highlighting and custom renderers need a reviewed first-party renderer
+and isolation model before they can run on visitor pages. The v1
 plugin system intentionally supports vetted CSS packages only. Core posting,
 replies, voting, categories, tags, search, pinning and sorting do not depend
 on plugins.
@@ -66,7 +73,7 @@ member identities, credentials, IP addresses, moderation queues, drafts or
 private settings. Plugin authors can use the existing public board and post
 endpoints for more public data; all normal visibility rules still apply.
 
-Howllo Web loads only approved stylesheet paths under `/plugins/` for the
+Howllo Web loads only approved first-party stylesheet paths under `/plugins/` for the
 current workspace. A new slot or API version requires an explicit core change
-and documentation before packages can rely on it. JavaScript interactions are
-reserved for a future isolated extension mechanism.
+and documentation before packages can rely on it. JavaScript interactions
+require an explicit, reviewed first-party core change.

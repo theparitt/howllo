@@ -39,7 +39,34 @@ const LOCAL_ADMIN_SUBJECT: &str = "local-admin";
 const LOCAL_ADMIN_EMAIL: &str = "admin@howllo.local";
 const LOCAL_ADMIN_NAME: &str = "Administrator";
 const TOKEN_TTL_HOURS: i64 = 8;
-const MIN_PASSWORD_LEN: usize = 8;
+const MIN_PASSWORD_LEN: usize = 12;
+const MAX_LOGIN_ATTEMPTS_PER_MINUTE: i32 = 30;
+
+async fn limit_admin_auth(pool: &DbPool) -> Result<(), AppError> {
+    // One operator identity: use one PostgreSQL counter shared by all API
+    // instances. A caller cannot bypass it with proxy headers.
+    let attempts: i32 = sqlx::query_scalar(
+        "INSERT INTO admin_auth_rate_limit (id,window_start,attempts)
+         VALUES (TRUE,date_trunc('minute',clock_timestamp()),1)
+         ON CONFLICT (id) DO UPDATE SET
+           attempts = CASE WHEN admin_auth_rate_limit.window_start < date_trunc('minute',clock_timestamp())
+                           THEN 1 ELSE admin_auth_rate_limit.attempts + 1 END,
+           window_start = date_trunc('minute',clock_timestamp())
+         RETURNING attempts",
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|error| {
+        tracing::error!(%error, "failed to apply admin authentication limit");
+        AppError::InternalServerError
+    })?;
+    if attempts > MAX_LOGIN_ATTEMPTS_PER_MINUTE {
+        return Err(AppError::TooManyRequests(
+            "Too many admin sign-in attempts. Try again in a minute.".into(),
+        ));
+    }
+    Ok(())
+}
 
 pub fn is_local_admin_user(user: &User) -> bool {
     user.rooiam_subject.as_deref() == Some(LOCAL_ADMIN_SUBJECT)
@@ -137,10 +164,14 @@ fn verify_password(password: &str, stored_hash: &str) -> bool {
 }
 
 pub async fn verify_operator_password(pool: &DbPool, password: &str) -> Result<bool, AppError> {
-    let stored: Option<String> = sqlx::query_scalar("SELECT password_hash FROM admin_credentials WHERE id = TRUE")
-        .fetch_optional(pool)
-        .await
-        .map_err(|error| { tracing::error!(%error, "failed to verify operator password"); AppError::InternalServerError })?;
+    let stored: Option<String> =
+        sqlx::query_scalar("SELECT password_hash FROM admin_credentials WHERE id = TRUE")
+            .fetch_optional(pool)
+            .await
+            .map_err(|error| {
+                tracing::error!(%error, "failed to verify operator password");
+                AppError::InternalServerError
+            })?;
     Ok(stored.is_some_and(|hash| verify_password(password, &hash)))
 }
 
@@ -239,6 +270,7 @@ pub async fn auth_setup(
         // Password already set; the bootstrap key no longer grants access.
         return Err(AppError::Forbidden);
     }
+    limit_admin_auth(pool.get_ref()).await?;
 
     // Constant-ish comparison; bootstrap key is single-use so timing is moot.
     if body.bootstrap_key.trim() != configured_key {
@@ -286,6 +318,7 @@ pub async fn auth_login(
     settings: web::Data<Settings>,
     body: web::Json<LoginRequest>,
 ) -> Result<impl Responder, AppError> {
+    limit_admin_auth(pool.get_ref()).await?;
     let stored = sqlx::query!("SELECT password_hash FROM admin_credentials LIMIT 1")
         .fetch_optional(pool.get_ref())
         .await
@@ -318,4 +351,60 @@ pub async fn auth_login(
             email: LOCAL_ADMIN_EMAIL,
         },
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use actix_web::{http::StatusCode, test, web, App};
+    use serde_json::json;
+
+    use crate::{
+        db,
+        http::test_support::{lock_test_db, test_settings},
+        startup,
+    };
+
+    #[actix_web::test]
+    async fn admin_login_limit_is_shared_and_resets_after_window() {
+        let _guard = lock_test_db().await;
+        let settings = test_settings();
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO admin_auth_rate_limit (id,window_start,attempts) VALUES (TRUE,date_trunc('minute',clock_timestamp()),30) ON CONFLICT (id) DO UPDATE SET window_start=EXCLUDED.window_start,attempts=EXCLUDED.attempts")
+            .execute(&pool).await.unwrap();
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings))
+                .configure(startup::configure),
+        )
+        .await;
+        let denied = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/api/admin/auth/login")
+                .set_json(json!({"password":"incorrect"}))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(denied.status(), StatusCode::TOO_MANY_REQUESTS);
+        sqlx::query("UPDATE admin_auth_rate_limit SET window_start=NOW()-INTERVAL '2 minutes'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let after_window = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/api/admin/auth/login")
+                .set_json(json!({"password":"incorrect"}))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(after_window.status(), StatusCode::UNAUTHORIZED);
+        sqlx::query("DELETE FROM admin_auth_rate_limit")
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
 }

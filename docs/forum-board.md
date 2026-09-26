@@ -1,5 +1,10 @@
 # Forum board basics
 
+Screenshots on private boards are temporarily unavailable. The current object
+store is public-read; Howllo rejects new private-board screenshot uploads and
+attachment references until private object delivery is implemented. Previously
+uploaded links may still be public and should be reviewed by the operator.
+
 Each workspace can have several boards. A board contains topics and replies.
 Visitors see a familiar topic list, search, categories, tags and pagination.
 The board type changes the posting language and status display: discussions,

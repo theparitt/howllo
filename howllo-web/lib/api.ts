@@ -761,7 +761,7 @@ export async function createPost(input: {
 }
 
 /** Upload an image (base64) and return its public URL. */
-export async function uploadImage(file: File, token: string, tenantSlug: string): Promise<string> {
+export async function uploadImage(file: File, token: string, tenantSlug: string, boardSlug?: string): Promise<string> {
   if (file.size > 8 * 1024 * 1024) {
     throw new Error("Image exceeds the 8 MB upload limit.");
   }
@@ -777,6 +777,7 @@ export async function uploadImage(file: File, token: string, tenantSlug: string)
     headers: { "content-type": "application/json", Authorization: token },
     body: JSON.stringify({
       tenant_slug: tenantSlug,
+      board_slug: boardSlug,
       filename: file.name,
       content_type: file.type,
       data: base64,

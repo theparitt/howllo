@@ -18,6 +18,10 @@ loop, staff roles and invitations, workspace bans/suspensions, audit logs and
 local customer accounts with Argon2id passwords and recovery codes. It has
 per-user/per-board post and comment limits, burst cooldowns, quotas, IP/country
 rules, manual or automatic post review, and approved appearance plugins.
+The first-party plugin registry now rejects unknown catalog rows, and local
+operator setup requires a 12-character password. Operator setup and login
+share a PostgreSQL-based attempt limit. These changes do not close the other
+release blockers below.
 
 ## Phase 0 — release blockers: identity, privacy and abuse
 
@@ -29,7 +33,9 @@ rules, manual or automatic post review, and approved appearance plugins.
    `store_public_asset`, and MinIO preflight makes its bucket public-read.
    Private-board attachments need a private object path and authenticated
    download or short-lived signed URLs. Audit existing private content before
-   promising that all board data is private.
+   promising that all board data is private. New private-board screenshot
+   uploads and attachment references are currently rejected; existing public
+   object URLs attached to private posts still require an audit and migration.
 3. **Make rate limits work behind proxies and across replicas.** Local auth has
    a ten-per-minute in-memory limit keyed by TCP peer. Behind one reverse proxy
    that peer may be shared by all customers; process restart/replicas reset the
@@ -97,14 +103,18 @@ Measure queue age, false positives and 429 responses.
 between two tagged releases and restores a backup to a new environment,
 without a Cloudflare or RooIAM account.
 
-## Phase 3 — reviewed optional extensions
+## Phase 3 — first-party optional extensions
+
+Only the Howllo maintainer may author and ship plugins. The platform admin
+approves each built-in plugin; tenants can only enable approved choices per
+workspace or board. There are no outside submissions or external plugin URLs.
 
 Extend the approved plugin catalog with a versioned manifest, board scope,
 compatibility range, required public API version, permissions, CSP policy and
 disable/rollback behavior. Never execute arbitrary tenant JavaScript in the
 board origin.
 
-Early plugins: sanitized Markdown with fenced-code highlighting, polls,
+Early first-party plugins: sanitized Markdown with fenced-code highlighting, polls,
 accepted answers for support boards, emoji reactions, richer themes and custom
 navigation/footer links. Later: external spam scoring, chat notifications,
 embeddable widget and AI suggestions. Security-sensitive OIDC and storage
@@ -118,7 +128,8 @@ or orphaned data. Core posting works with all plugins disabled.
 
 Use measured demand to decide on custom domains, richer search, email digests,
 large-community moderation tools and horizontal scaling. Do not add AI or a
-large plugin marketplace before the release and moderation gates pass.
+outside plugin marketplace. Keep new functionality in core or reviewed
+first-party plugins after the release and moderation gates pass.
 
 ## References used for release criteria
 
