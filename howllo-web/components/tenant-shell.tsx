@@ -12,6 +12,7 @@ import type { TenantBranding } from "@/lib/types";
 import { buildTenantPath } from "@/lib/default-tenant";
 import { subdomainSlug } from "@/lib/subdomain";
 import { contrastInk, hexToRgba } from "@/lib/theme";
+import { getPluginContext, type PublicPlugin } from "@/lib/plugins";
 
 const RESERVED_TOP_LEVEL_ROUTES = new Set([
   "",
@@ -54,6 +55,7 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
   const [branding, setBranding] = useState<TenantBranding>(DEFAULT_BRANDING);
   const [canManage, setCanManage] = useState(false);
   const [hasSession, setHasSession] = useState(false);
+  const [plugins, setPlugins] = useState<PublicPlugin[]>([]);
 
   useEffect(() => {
     const sync = () => setHasSession(Boolean(readAnyStoredBearerToken().trim()));
@@ -134,6 +136,28 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
     return () => { icon?.remove(); };
   }, [branding.logo_url]);
 
+  useEffect(() => {
+    let active = true;
+    if (!branding.tenant_slug) { setPlugins([]); return; }
+    getPluginContext(branding.tenant_slug)
+      .then((context) => { if (active) setPlugins(context.plugins); })
+      .catch(() => { if (active) setPlugins([]); });
+    return () => { active = false; };
+  }, [branding.tenant_slug]);
+
+  useEffect(() => {
+    const links = plugins.filter((plugin) => /^\/plugins\/[a-z0-9-]+\.css$/.test(plugin.stylesheet_path))
+      .map((plugin) => {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = plugin.stylesheet_path;
+        link.dataset.howlloPlugin = plugin.id;
+        document.head.appendChild(link);
+        return link;
+      });
+    return () => { links.forEach((link) => link.remove()); };
+  }, [plugins]);
+
   const shellStyle = useMemo(() => {
     const style: Record<string, string> = {};
 
@@ -169,7 +193,7 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
   const loginHome = pathname === "/" && !hasSession && ENABLED_AUTH_PROVIDERS.length === 1 && ENABLED_AUTH_PROVIDERS[0] === "rooiam";
 
   return (
-    <div className={`app-shell app-shell--themed${loginHome ? " app-shell--login" : ""}${managerMode ? " app-shell--manager" : ""}`} style={shellStyle}>
+    <div data-howllo-plugin-surface className={`app-shell app-shell--themed${loginHome ? " app-shell--login" : ""}${managerMode ? " app-shell--manager" : ""}`} style={shellStyle}>
       <header className={`site-header${loginHome ? " site-header--login" : ""}`}>
         <div className="site-header__inner">
           <div className="brand">

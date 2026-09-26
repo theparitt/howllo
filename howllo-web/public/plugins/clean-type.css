@@ -1,0 +1,5 @@
+[data-howllo-plugin-surface] {
+  --font-sans: Arial, "Helvetica Neue", sans-serif;
+  --font-display: Arial, "Helvetica Neue", sans-serif;
+  font-family: var(--font-sans);
+}

@@ -10,8 +10,9 @@ import type {
 import { useSession } from "../../lib/session";
 import { Panel } from "../../components/Panel";
 import { PlatformPolicyTab } from "./PlatformPolicyTab";
+import { PluginCatalogTab } from "./PluginCatalogTab";
 
-type Tab = "status" | "storage" | "database" | "limits";
+type Tab = "status" | "storage" | "database" | "limits" | "plugins";
 
 export function PlatformSettingsPage() {
   const [tab, setTab] = useState<Tab>("status");
@@ -44,6 +45,7 @@ export function PlatformSettingsPage() {
           Database
         </button>
         <button className={tab === "limits" ? "seg-tab active" : "seg-tab"} onClick={() => setTab("limits")}>Limits</button>
+        <button className={tab === "plugins" ? "seg-tab active" : "seg-tab"} onClick={() => setTab("plugins")}>Plugins</button>
       </div>
 
       {tab === "status" ? (
@@ -52,6 +54,8 @@ export function PlatformSettingsPage() {
         <StorageTab />
       ) : tab === "limits" ? (
         <PlatformPolicyTab />
+      ) : tab === "plugins" ? (
+        <PluginCatalogTab />
       ) : (
         <DatabaseTab />
       )}

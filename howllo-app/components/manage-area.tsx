@@ -39,16 +39,18 @@ import { ModerationTab } from "./moderation-tab";
 import { BrandingTab } from "./branding-tab";
 import { SecurityTab } from "./security-tab";
 import { CustomerSignInTab } from "./customer-signin-tab";
+import { WorkspacePluginsTab } from "./workspace-plugins-tab";
 import { prepareBrandImage } from "../lib/prepare-brand-image";
 import { LIST_PAGE_SIZE, ListPager, ListSearch } from "./list-controls";
 
 const INVITE_ROLES = ["admin", "moderator"];
 const MEMBER_ROLES = ["owner", "admin", "moderator", "member"];
 const PUBLIC_WEB_URL = (process.env.NEXT_PUBLIC_HOWLLO_PUBLIC_WEB_URL || "http://localhost:7703").replace(/\/$/, "");
-type ManageTab = "team" | "boards" | "branding" | "security" | "signin" | "external_sso" | "participants" | "moderation";
+type ManageTab = "team" | "boards" | "branding" | "plugins" | "security" | "signin" | "external_sso" | "participants" | "moderation";
 const NAV_ITEMS: { key: ManageTab; label: string; group: string; icon: string }[] = [
   { key: "boards", label: "Boards", group: "Workspace", icon: "M4 5h16v14H4zM4 10h16M10 10v9" },
   { key: "branding", label: "Board site", group: "Workspace", icon: "M3 5h18v14H3zM3 9h18M7 14h4" },
+  { key: "plugins", label: "Plugins", group: "Workspace", icon: "M9 3v5H4v5h5v5h5v-5h5V8h-5V3z" },
   { key: "team", label: "Staff", group: "People", icon: "M16 19v-1a4 4 0 00-8 0v1M12 11a3 3 0 100-6 3 3 0 000 6" },
   { key: "participants", label: "Board members", group: "People", icon: "M4 19v-1a4 4 0 018 0v1M8 11a3 3 0 100-6 3 3 0 000 6M16 8h5M16 12h5" },
   { key: "moderation", label: "Moderation", group: "People", icon: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4" },
@@ -205,6 +207,8 @@ export function ManageArea() {
           <ParticipantsTab tenant={tenant} />
         ) : tab === "branding" ? (
           <BrandingTab tenant={tenant} />
+        ) : tab === "plugins" ? (
+          <WorkspacePluginsTab tenant={tenant} />
         ) : tab === "security" ? (
           <SecurityTab tenant={tenant} />
         ) : tab === "team" ? (

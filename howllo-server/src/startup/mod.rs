@@ -3,7 +3,7 @@ use actix_web::{get, web, HttpResponse, Responder};
 
 use crate::{
     ai, api_tokens, audit, auth, boards, comments, exports, invitations, me, memberships,
-    moderation, moderation_notes, notifications, platform, policy, posts, realtime, search,
+    moderation, moderation_notes, notifications, platform, plugins, policy, posts, realtime, search,
     subscriptions, tags, tenancy, votes, webhooks,
 };
 
@@ -56,6 +56,11 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(auth::create_sso_session)
         .service(auth::revoke_workspace_session)
         .service(platform::get_platform_status)
+        .service(plugins::list_platform_plugins)
+        .service(plugins::set_platform_plugin_approval)
+        .service(plugins::list_workspace_plugins)
+        .service(plugins::set_workspace_plugin)
+        .service(plugins::public_context)
         .service(platform::get_build_info)
         .service(platform::get_storage_config)
         .service(platform::get_storage_usage)

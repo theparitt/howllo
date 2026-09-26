@@ -1,0 +1,13 @@
+[data-howllo-plugin-surface] [data-howllo-slot="board.directory"] {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+}
+
+[data-howllo-plugin-surface] [data-howllo-slot="board.directory"] .list-row {
+  min-height: 9rem;
+  align-items: flex-start;
+  border: 1px solid color-mix(in srgb, var(--primary) 16%, transparent);
+  border-radius: 1.25rem;
+  box-shadow: 0 10px 30px rgb(30 25 21 / 5%);
+}

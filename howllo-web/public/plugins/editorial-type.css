@@ -1,0 +1,6 @@
+[data-howllo-plugin-surface] {
+  --font-sans: Georgia, "Times New Roman", serif;
+  --font-display: Georgia, "Times New Roman", serif;
+  font-family: var(--font-sans);
+  line-height: 1.55;
+}

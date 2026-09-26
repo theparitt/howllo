@@ -31,7 +31,7 @@ export default async function TenantRootPage({ params }: TenantRootPageProps) {
           <h1 className="page-title">Boards</h1>
           <p className="page-lead">Choose where to post or read feedback.</p>
         </section>
-        {boards.length ? <section className="list-stack" aria-label="Public boards">
+        {boards.length ? <section className="list-stack" data-howllo-slot="board.directory" aria-label="Public boards">
           {boards.map((board) => (
             <Link
               className="list-row"
