@@ -286,6 +286,17 @@ pub async fn delete_board(pool: &DbPool, board_id: Uuid, user_id: Uuid) -> Resul
         })?
         .ok_or(AppError::NotFound)?;
 
+    let asset_urls: Vec<String> = sqlx::query_scalar(
+        "SELECT url FROM (SELECT jsonb_array_elements_text(attachments) AS url FROM posts WHERE board_id = $1 UNION SELECT icon_url AS url FROM boards WHERE id = $1) assets WHERE url IS NOT NULL",
+    )
+    .bind(board_id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(|error| {
+        tracing::error!(%error, %board_id, "error collecting board assets before delete");
+        AppError::InternalServerError
+    })?;
+
     if previous.is_default {
         board_repository::disable_default_board_for_tenant(&mut tx, previous.tenant_id)
             .await
@@ -329,7 +340,72 @@ pub async fn delete_board(pool: &DbPool, board_id: Uuid, user_id: Uuid) -> Resul
         AppError::InternalServerError
     })?;
 
+    let cleanup_pool = pool.clone();
+    let tenant_id = previous.tenant_id;
+    tokio::spawn(async move {
+        cleanup_deleted_board_assets(&cleanup_pool, tenant_id, asset_urls).await;
+    });
+
     Ok(())
+}
+
+async fn cleanup_deleted_board_assets(pool: &DbPool, tenant_id: Uuid, urls: Vec<String>) {
+    let cfg = match crate::storage::load_platform_storage_config(pool).await {
+        Ok(cfg) => cfg,
+        Err(error) => {
+            tracing::warn!(%error, %tenant_id, "could not load storage settings for deleted board cleanup");
+            return;
+        }
+    };
+    let prefix = format!(
+        "{}/workspaces/{tenant_id}/uploads/",
+        cfg.public_base_url.trim_end_matches('/')
+    );
+    for url in urls {
+        let Some(file_name) = url.strip_prefix(&prefix) else {
+            continue;
+        };
+        if file_name.is_empty()
+            || file_name.contains('/')
+            || file_name.contains('\\')
+            || file_name.contains("..")
+        {
+            continue;
+        }
+        let relative_path = format!("workspaces/{tenant_id}/uploads/{file_name}");
+        let owned = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM workspace_assets WHERE tenant_id = $1 AND relative_path = $2)",
+        )
+        .bind(tenant_id)
+        .bind(&relative_path)
+        .fetch_one(pool)
+        .await;
+        if !matches!(owned, Ok(true)) {
+            continue;
+        }
+        let referenced = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM posts WHERE attachments @> jsonb_build_array($1::text)) OR EXISTS(SELECT 1 FROM boards WHERE icon_url = $1) OR EXISTS(SELECT 1 FROM tenant_branding WHERE logo_url = $1)",
+        )
+        .bind(&url)
+        .fetch_one(pool)
+        .await;
+        if !matches!(referenced, Ok(false)) {
+            continue;
+        }
+        if let Err(error) = crate::storage::delete_public_asset(pool, &relative_path).await {
+            tracing::warn!(%error, %tenant_id, %relative_path, "could not remove orphaned board asset");
+            continue;
+        }
+        if let Err(error) =
+            sqlx::query("DELETE FROM workspace_assets WHERE tenant_id = $1 AND relative_path = $2")
+                .bind(tenant_id)
+                .bind(&relative_path)
+                .execute(pool)
+                .await
+        {
+            tracing::warn!(%error, %tenant_id, %relative_path, "could not clear deleted board asset quota");
+        }
+    }
 }
 
 fn validate_optional_color(value: Option<&str>, field: &str) -> Result<(), AppError> {

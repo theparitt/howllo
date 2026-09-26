@@ -29,6 +29,7 @@ pub struct BoardDetailDto {
     pub board_type: String,
     pub is_private: bool,
     pub is_enabled: bool,
+    pub first_enabled_at: Option<DateTime<Utc>>,
     pub icon_url: Option<String>,
     pub background_color: Option<String>,
     pub dashboard_sections: Vec<String>,
@@ -428,6 +429,8 @@ pub struct BoardSummaryDto {
     pub posts_by_status: HashMap<String, i64>,
     pub total_votes: i64,
     pub total_comments: i64,
+    pub delete_posts_count: i64,
+    pub delete_comments_count: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

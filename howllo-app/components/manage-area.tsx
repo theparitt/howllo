@@ -12,6 +12,8 @@ import {
   type SsoConfig,
   managerCreateInvitation,
   managerCreateBoard,
+  managerDeleteBoard,
+  managerGetBoardSummary,
   managerListBoards,
   managerListInvitations,
   managerListMembers,
@@ -19,6 +21,7 @@ import {
   managerUpdateBoard,
   managerUpdateMemberRole,
   managerWithdrawInvitation,
+  type BoardSummary,
 } from "@/lib/api";
 import {
   getCurrentWorkspaceSlug,
@@ -328,7 +331,7 @@ function BoardsTab({ tenant }: { tenant: string }) {
       const [list, settings] = await Promise.all([managerListBoards(tenant, t), getTenantManagementSettings(tenant, t)]);
       setBoards(list);
       setWorkspacePublished(settings.is_published);
-      setSelected((cur) => cur ?? list[0]?.id ?? null);
+      setSelected((cur) => (cur && list.some((item) => item.id === cur) ? cur : list[0]?.id ?? null));
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load boards.");
@@ -339,6 +342,11 @@ function BoardsTab({ tenant }: { tenant: string }) {
   useEffect(() => { void reload(); }, [reload]);
 
   const board = boards.find((b) => b.id === selected) ?? null;
+
+  const afterDelete = async () => {
+    setSelected(null);
+    await reload();
+  };
 
   async function createBoard(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -399,12 +407,12 @@ function BoardsTab({ tenant }: { tenant: string }) {
           {boards.map((b) => (
             <button type="button" key={b.id} className={`manage-board-tab${b.id === selected ? " manage-board-tab--active" : ""}`} onClick={() => setSelected(b.id)}>
               <strong>{b.name}</strong>
-              <span className="section-subtitle">{b.board_type}{b.is_private ? " · private" : ""}{!b.is_enabled ? " · draft" : ""}</span>
+              <span className="section-subtitle">{b.board_type}{b.is_private ? " · private" : ""} · {b.is_enabled ? workspacePublished ? "Active" : "Ready" : b.first_enabled_at ? "Paused" : "Draft"}</span>
             </button>
           ))}
         </div>
       </section>
-      {board ? <BoardEditor key={board.id} board={board} tenant={tenant} workspacePublished={workspacePublished} onSaved={reload} /> : (
+      {board ? <BoardEditor key={board.id} board={board} tenant={tenant} workspacePublished={workspacePublished} onSaved={reload} onDeleted={afterDelete} /> : (
         <section className="panel"><p className="section-subtitle">Select a board to edit.</p></section>
       )}
       </section>
@@ -412,17 +420,20 @@ function BoardsTab({ tenant }: { tenant: string }) {
   );
 }
 
-function BoardEditor({ board, tenant, workspacePublished, onSaved }: { board: ManageBoard; tenant: string; workspacePublished: boolean; onSaved: () => void }) {
+function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: { board: ManageBoard; tenant: string; workspacePublished: boolean; onSaved: () => Promise<void>; onDeleted: () => Promise<void> }) {
   const [name, setName] = useState(board.name);
   const [description, setDescription] = useState(board.description ?? "");
   const [boardType, setBoardType] = useState(board.board_type);
   const [isPrivate, setIsPrivate] = useState(board.is_private);
-  const [isEnabled, setIsEnabled] = useState(board.is_enabled);
   const [bg, setBg] = useState(board.background_color ?? "#fff1ea");
   const [iconUrl, setIconUrl] = useState(board.icon_url);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteSummary, setDeleteSummary] = useState<BoardSummary | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [confirmSlug, setConfirmSlug] = useState("");
 
   const save = async () => {
     setBusy(true); setError(null); setNotice(null);
@@ -432,13 +443,13 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved }: { board: Ma
         description: description.trim() || undefined,
         board_type: boardType,
         is_private: isPrivate,
-        is_enabled: isEnabled,
+        is_enabled: board.is_enabled,
         background_color: bg || undefined,
         dashboard_sections: board.dashboard_sections,
         icon_url: iconUrl,
       }, readStoredBearerToken(tenant).trim());
       setNotice("Saved.");
-      onSaved();
+      await onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save");
     } finally {
@@ -446,15 +457,52 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved }: { board: Ma
     }
   };
 
+  const setPublication = async (enabled: boolean) => {
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      await managerUpdateBoard(board.id, {
+        name: board.name,
+        description: board.description,
+        board_type: board.board_type,
+        is_private: board.is_private,
+        is_enabled: enabled,
+        background_color: board.background_color,
+        dashboard_sections: board.dashboard_sections,
+        icon_url: board.icon_url,
+      }, readStoredBearerToken(tenant).trim());
+      await onSaved();
+      setNotice(enabled ? workspacePublished ? "Board is active." : "Board is ready. Publish the workspace to make it visible." : "Board is paused. Its posts are hidden until you resume it.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not update board."); }
+    finally { setBusy(false); }
+  };
+
+  const openDelete = async () => {
+    setDeleteOpen(true); setDeleteSummary(null); setDeleteLoading(true); setConfirmSlug(""); setError(null);
+    try {
+      setDeleteSummary(await managerGetBoardSummary(board.id, tenant, readStoredBearerToken(tenant).trim()));
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not check board contents."); }
+    finally { setDeleteLoading(false); }
+  };
+
+  const deleteBoard = async () => {
+    if (confirmSlug !== board.slug || !deleteSummary) return;
+    setBusy(true); setError(null);
+    try {
+      await managerDeleteBoard(board.id, readStoredBearerToken(tenant).trim());
+      await onDeleted();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not delete board."); }
+    finally { setBusy(false); }
+  };
+
   return (
     <section className="panel">
-      <h2 className="section-title">{board.name}</h2>
+      <div className="manage-board-heading"><h2 className="section-title">{board.name}</h2><strong>{board.is_enabled ? workspacePublished ? "Active" : "Ready" : board.first_enabled_at ? "Paused" : "Draft"}</strong></div>
       <div className="manage-board-links">
         {board.is_enabled && workspacePublished ? <a className="button" href={publicBoardUrl(tenant, board.slug)}>Open board ↗</a> : null}
         {!board.is_private && board.is_enabled && workspacePublished ? <button className="button" type="button" onClick={() => {
           const url = publicBoardUrl(tenant, board.slug);
           void navigator.clipboard.writeText(url).then(() => setNotice("Public board link copied.")).catch(() => setError("Could not copy link. Open the board and copy its URL."));
-        }}>Copy public link</button> : <span className="section-subtitle">{!board.is_enabled ? "Draft board" : !workspacePublished ? "Publish this workspace in Public site to share its boards." : "Private: workspace members only"}</span>}
+        }}>Copy public link</button> : <span className="section-subtitle">{!board.is_enabled ? "Hidden from visitors" : !workspacePublished ? "Publish this workspace in Public site to share its boards." : "Private: workspace members only"}</span>}
       </div>
       <div className="manage-fields" style={{ marginTop: "1rem" }}>
         <label className="manage-label">Name<input className="manage-input" value={name} onChange={(e) => setName(e.target.value)} /></label>
@@ -487,11 +535,21 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved }: { board: Ma
           {iconUrl ? <button type="button" className="ghost-button" disabled={busy} onClick={() => setIconUrl(null)}>Remove icon</button> : null}
         </div>
         <label className="manage-check"><input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} /> Private board (members only)</label>
-        <label className="manage-check"><input type="checkbox" checked={isEnabled} onChange={(e) => setIsEnabled(e.target.checked)} /> Publish board</label>
       </div>
-      <div style={{ marginTop: "1rem", display: "flex", gap: "0.6rem", alignItems: "center" }}>
+      <div className="manage-board-links">
         <button type="button" className="button button--cta" disabled={busy || !name.trim()} onClick={save}>{busy ? "Saving…" : "Save changes"}</button>
+        <button type="button" className="ghost-button" disabled={busy} onClick={() => void setPublication(!board.is_enabled)}>{board.is_enabled ? "Pause board" : board.first_enabled_at ? "Resume board" : "Publish board"}</button>
         {notice ? <span className="success-text">{notice}</span> : null}
+      </div>
+      <div className="board-danger-zone">
+        {!deleteOpen ? <button type="button" className="ghost-button button--danger" disabled={busy} onClick={() => void openDelete()}>Delete board</button> : <>
+          <h3 className="section-title">Delete {board.name}?</h3>
+          {deleteSummary ? <>
+            <p className="section-subtitle">This board currently has {deleteSummary.delete_posts_count} posts and {deleteSummary.delete_comments_count} comments. Deleting it removes the board and all its content permanently.</p>
+            <label className="manage-label">Type <strong>{board.slug}</strong> to confirm<input className="manage-input" value={confirmSlug} onChange={(event) => setConfirmSlug(event.target.value)} autoComplete="off" /></label>
+            <div className="manage-board-links"><button type="button" className="ghost-button button--danger" disabled={busy || confirmSlug !== board.slug} onClick={() => void deleteBoard()}>{busy ? "Deleting…" : "Delete permanently"}</button><button type="button" className="ghost-button" disabled={busy} onClick={() => setDeleteOpen(false)}>Cancel</button></div>
+          </> : deleteLoading ? <p className="section-subtitle">Checking board contents…</p> : <button type="button" className="ghost-button" onClick={() => setDeleteOpen(false)}>Cancel</button>}
+        </>}
       </div>
       {error ? <p className="error-text">{error}</p> : null}
     </section>

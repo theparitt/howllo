@@ -63,7 +63,7 @@ pub async fn get_public_board_by_slug(
 ) -> Result<Option<BoardDetailDto>, sqlx::Error> {
     sqlx::query_as::<_, BoardDetailDto>(
         r#"
-        SELECT b.id, b.slug, b.name, b.description, b.board_type, b.is_private, b.is_enabled, b.icon_url, b.background_color, b.dashboard_sections
+        SELECT b.id, b.slug, b.name, b.description, b.board_type, b.is_private, b.is_enabled, b.first_enabled_at, b.icon_url, b.background_color, b.dashboard_sections
         FROM boards b
         JOIN tenants t ON b.tenant_id = t.id
         WHERE t.slug = $1 AND t.is_published = TRUE AND b.slug = $2
@@ -81,7 +81,7 @@ pub async fn list_admin_boards(
 ) -> Result<Vec<BoardDetailDto>, sqlx::Error> {
     sqlx::query_as::<_, BoardDetailDto>(
         r#"
-        SELECT id, slug, name, description, board_type, is_private, is_enabled, icon_url, background_color, dashboard_sections
+        SELECT id, slug, name, description, board_type, is_private, is_enabled, first_enabled_at, icon_url, background_color, dashboard_sections
         FROM boards
         WHERE tenant_id = $1
         ORDER BY created_at ASC
@@ -109,7 +109,7 @@ pub async fn create_board(
         r#"
         INSERT INTO boards (tenant_id, slug, name, description, board_type, is_private, icon_url, background_color, dashboard_sections, is_enabled)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE)
-        RETURNING id, slug, name, description, board_type, is_private, is_enabled, icon_url, background_color, dashboard_sections
+        RETURNING id, slug, name, description, board_type, is_private, is_enabled, first_enabled_at, icon_url, background_color, dashboard_sections
         "#,
     )
     .bind(tenant_id)
@@ -185,9 +185,10 @@ pub async fn update_board(
             background_color = $6,
             dashboard_sections = $7,
             is_enabled = COALESCE($9, is_enabled),
+            first_enabled_at = CASE WHEN $9 = TRUE THEN COALESCE(first_enabled_at, NOW()) ELSE first_enabled_at END,
             updated_at = NOW()
         WHERE id = $8
-        RETURNING id, slug, name, description, board_type, is_private, is_enabled, icon_url, background_color, dashboard_sections
+        RETURNING id, slug, name, description, board_type, is_private, is_enabled, first_enabled_at, icon_url, background_color, dashboard_sections
         "#,
     )
     .bind(name)
@@ -261,6 +262,8 @@ pub struct BoardSummaryData {
     pub posts_by_status: HashMap<String, i64>,
     pub total_votes: i64,
     pub total_comments: i64,
+    pub delete_posts_count: i64,
+    pub delete_comments_count: i64,
 }
 
 pub async fn get_board_summary(
@@ -283,6 +286,18 @@ pub async fn get_board_summary(
     .fetch_one(pool)
     .await
     .unwrap_or(0);
+
+    let delete_posts_count =
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM posts WHERE board_id = $1")
+            .bind(board_id)
+            .fetch_one(pool)
+            .await?;
+    let delete_comments_count = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM comments c JOIN posts p ON c.post_id = p.id WHERE p.board_id = $1",
+    )
+    .bind(board_id)
+    .fetch_one(pool)
+    .await?;
 
     let status_rows = sqlx::query!(
         "SELECT status, count(*)::bigint AS cnt FROM posts WHERE board_id = $1 AND is_hidden = false AND deleted_at IS NULL GROUP BY status",
@@ -319,5 +334,7 @@ pub async fn get_board_summary(
         posts_by_status,
         total_votes,
         total_comments,
+        delete_posts_count,
+        delete_comments_count,
     }))
 }

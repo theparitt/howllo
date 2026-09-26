@@ -175,6 +175,8 @@ pub async fn get_board_summary(
         posts_by_status: summary.posts_by_status,
         total_votes: summary.total_votes,
         total_comments: summary.total_comments,
+        delete_posts_count: summary.delete_posts_count,
+        delete_comments_count: summary.delete_comments_count,
     }))
 }
 
@@ -228,7 +230,7 @@ mod tests {
                 "/api/boards/{}?tenant_slug={}",
                 seed.private_board_slug, seed.tenant_slug
             ))
-            .insert_header(("Authorization", token))
+            .insert_header(("Authorization", token.clone()))
             .to_request();
         let member_response = test::call_service(&app, member_request).await;
         assert_eq!(member_response.status(), StatusCode::OK);
@@ -276,6 +278,8 @@ mod tests {
         let create_response = test::call_service(&app, create_request).await;
         assert_eq!(create_response.status(), StatusCode::CREATED);
         let created_body = read_json(create_response).await;
+        assert_eq!(created_body["is_enabled"], false);
+        assert!(created_body["first_enabled_at"].is_null());
         assert_eq!(
             created_body
                 .get("background_color")
@@ -301,7 +305,7 @@ mod tests {
 
         let update_request = test::TestRequest::patch()
             .uri(&format!("/api/admin/boards/{board_id}"))
-            .insert_header(("Authorization", token))
+            .insert_header(("Authorization", token.clone()))
             .set_json(json!({
                 "name": "Releases",
                 "description": "Product release communication",
@@ -319,6 +323,33 @@ mod tests {
                 .and_then(|value| value.as_str()),
             Some("#e8f4ff")
         );
+        for enabled in [true, false, true] {
+            let request = test::TestRequest::patch()
+                .uri(&format!("/api/admin/boards/{board_id}"))
+                .insert_header(("Authorization", token.clone()))
+                .set_json(json!({"name": "Releases", "description": "Product release communication", "board_type": "changelog", "is_private": false, "is_enabled": enabled}))
+                .to_request();
+            let response = test::call_service(&app, request).await;
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = read_json(response).await;
+            assert_eq!(body["is_enabled"], enabled);
+            assert!(body["first_enabled_at"].is_string());
+
+            let public_request = test::TestRequest::get()
+                .uri(&format!(
+                    "/api/boards/release-notes?tenant_slug={}",
+                    seed.tenant_slug
+                ))
+                .to_request();
+            assert_eq!(
+                test::call_service(&app, public_request).await.status(),
+                if enabled {
+                    StatusCode::OK
+                } else {
+                    StatusCode::NOT_FOUND
+                }
+            );
+        }
     }
 
     #[actix_web::test]
@@ -397,12 +428,43 @@ mod tests {
         .await
         .unwrap();
         let board_id = board_row.id.to_string();
+        let tenant_id: uuid::Uuid =
+            sqlx::query_scalar("SELECT tenant_id FROM boards WHERE id = $1")
+                .bind(board_row.id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let asset_root =
+            std::env::temp_dir().join(format!("howllo-board-delete-{}", uuid::Uuid::new_v4()));
+        let asset_key = format!("workspaces/{tenant_id}/uploads/unique.png");
+        let asset_file = asset_root.join(&asset_key);
+        std::fs::create_dir_all(asset_file.parent().unwrap()).unwrap();
+        std::fs::write(&asset_file, b"image").unwrap();
+        for (key, value) in [
+            ("storage_backend", "local".to_string()),
+            (
+                "storage_local_path",
+                asset_root.to_string_lossy().to_string(),
+            ),
+            ("storage_public_base_url", "https://assets.test".to_string()),
+        ] {
+            sqlx::query("INSERT INTO system_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value")
+                .bind(key).bind(value).execute(&pool).await.unwrap();
+        }
+        sqlx::query("INSERT INTO workspace_assets (tenant_id, relative_path, size_bytes) VALUES ($1, $2, 5)")
+            .bind(tenant_id).bind(&asset_key).execute(&pool).await.unwrap();
+        sqlx::query("UPDATE posts SET attachments = jsonb_build_array($1::text) WHERE id = $2")
+            .bind(format!("https://assets.test/{asset_key}"))
+            .bind(seed.canonical_post_id)
+            .execute(&pool)
+            .await
+            .unwrap();
         let request = test::TestRequest::get()
             .uri(&format!(
                 "/api/admin/boards/{board_id}/summary?tenant_slug={}",
                 seed.tenant_slug
             ))
-            .insert_header(("Authorization", token))
+            .insert_header(("Authorization", token.clone()))
             .to_request();
         let response = test::call_service(&app, request).await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -417,6 +479,55 @@ mod tests {
             .get("posts_by_status")
             .and_then(|v| v.as_object())
             .is_some());
+        assert!(
+            body["delete_posts_count"].as_i64().unwrap() >= body["total_posts"].as_i64().unwrap()
+        );
+        assert!(
+            body["delete_comments_count"].as_i64().unwrap()
+                >= body["total_comments"].as_i64().unwrap()
+        );
+
+        let delete_request = test::TestRequest::delete()
+            .uri(&format!("/api/admin/boards/{board_id}"))
+            .insert_header(("Authorization", token))
+            .to_request();
+        assert_eq!(
+            test::call_service(&app, delete_request).await.status(),
+            StatusCode::NO_CONTENT
+        );
+        let remaining_posts: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM posts WHERE board_id = $1")
+                .bind(board_row.id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(remaining_posts, 0);
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let remaining: i64 = sqlx::query_scalar(
+                    "SELECT count(*) FROM workspace_assets WHERE tenant_id = $1 AND relative_path = $2",
+                )
+                .bind(tenant_id)
+                .bind(&asset_key)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+                if !asset_file.exists() && remaining == 0 { break; }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("deleted board assets should be cleaned up");
+        let remaining_assets: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM workspace_assets WHERE tenant_id = $1 AND relative_path = $2",
+        )
+        .bind(tenant_id)
+        .bind(&asset_key)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(remaining_assets, 0);
+        std::fs::remove_dir_all(asset_root).unwrap();
     }
 
     #[actix_web::test]

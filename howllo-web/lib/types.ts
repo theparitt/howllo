@@ -260,6 +260,7 @@ export type ManageBoard = {
   board_type: string;
   is_private: boolean;
   is_enabled: boolean;
+  first_enabled_at: string | null;
   icon_url: string | null;
   background_color: string | null;
   dashboard_sections: DashboardSection[];

@@ -361,6 +361,23 @@ export async function managerUpdateBoard(
   await managerWrite(`/api/admin/boards/${boardId}`, "PATCH", token, input);
 }
 
+export type BoardSummary = {
+  delete_posts_count: number;
+  delete_comments_count: number;
+};
+
+export async function managerGetBoardSummary(boardId: string, tenantSlug: string, token: string): Promise<BoardSummary> {
+  const response = await apiFetch(buildUrl(`/api/admin/boards/${encodeURIComponent(boardId)}/summary?tenant_slug=${encodeURIComponent(tenantSlug)}`), {
+    cache: "no-store",
+    headers: { Authorization: token },
+  });
+  return unwrap<BoardSummary>(response);
+}
+
+export async function managerDeleteBoard(boardId: string, token: string): Promise<void> {
+  await managerWrite(`/api/admin/boards/${encodeURIComponent(boardId)}`, "DELETE", token);
+}
+
 export type SsoConfig = { enabled: boolean; secret: string | null; session_path: string };
 
 export async function getSsoConfig(tenantSlug: string, token: string): Promise<SsoConfig> {

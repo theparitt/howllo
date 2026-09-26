@@ -261,6 +261,43 @@ pub async fn store_public_asset(
     Ok(public_url(&cfg.public_base_url, relative_path))
 }
 
+/// Remove a Howllo-owned asset after its database references have been deleted.
+pub async fn delete_public_asset(db: &PgPool, relative_path: &str) -> Result<(), AppError> {
+    if relative_path.starts_with('/')
+        || relative_path.contains("..")
+        || relative_path.contains('\\')
+        || !relative_path.starts_with("workspaces/")
+    {
+        return Err(AppError::Validation("Invalid asset path.".to_string()));
+    }
+    let cfg = load_platform_storage_config(db).await?;
+    match cfg.backend {
+        StorageBackend::Local => {
+            let absolute = Path::new(cfg.local_path.trim()).join(relative_path);
+            match std::fs::remove_file(&absolute) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(error) => {
+                    Err(AppError::InternalServerError.with_log(format!("delete upload: {error}")))
+                }
+            }
+        }
+        StorageBackend::Minio => {
+            let secret = effective_minio_secret(db).await;
+            delete_minio_object(
+                &cfg.minio_endpoint,
+                &cfg.minio_bucket,
+                relative_path,
+                &cfg.minio_access_key,
+                &secret,
+                cfg.minio_use_ssl,
+            )
+            .await
+            .map_err(|error| AppError::InternalServerError.with_log(error))
+        }
+    }
+}
+
 // ── Connection tests ───────────────────────────────────────────────────────────
 
 pub fn test_local_storage(path: &str) -> Result<String, String> {
