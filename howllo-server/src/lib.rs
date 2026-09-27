@@ -8,6 +8,7 @@ pub mod config;
 pub mod db;
 pub mod domain;
 pub mod dto;
+pub mod email;
 pub mod errors;
 pub mod exports;
 pub mod forum;

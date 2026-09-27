@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ApiError, createWorkspaceSession, getMe, revokeWorkspaceSession } from "@/lib/api";
-import { getLoginProviders, getCustomerRooiamConfig, localSignIn, logoutAccount, resetLocalPassword, type LoginProvider } from "@/lib/auth-api";
+import { getLoginProviders, getCustomerRooiamConfig, localSignIn, logoutAccount, resetLocalPassword, emailAvailable, requestEmailReset, confirmEmailReset, type LoginProvider } from "@/lib/auth-api";
 import { API_BASE_URL } from "@/lib/config";
 import { ENABLED_AUTH_PROVIDERS } from "@/lib/auth-provider";
 import { rememberRooiamReturnTo } from "@/lib/rooiam-auth";
@@ -73,9 +73,19 @@ export function AuthLogin({ myHref }: AuthLoginProps) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [recoveryInput, setRecoveryInput] = useState("");
   const [recoveryCode, setRecoveryCode] = useState("");
+  const [emailEnabled, setEmailEnabled] = useState(false);
+  const [emailResetMode, setEmailResetMode] = useState(false);
+  const [emailResetSent, setEmailResetSent] = useState(false);
+  const [emailResetAddress, setEmailResetAddress] = useState("");
+  const [emailResetToken, setEmailResetToken] = useState("");
+  const [emailResetRecovery, setEmailResetRecovery] = useState("");
   const [pendingToken, setPendingToken] = useState("");
   const [busy, setBusy] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    emailAvailable().then(setEmailEnabled).catch(() => setEmailEnabled(false));
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -414,7 +424,7 @@ export function AuthLogin({ myHref }: AuthLoginProps) {
 
           <div style={{ padding: "1.6rem", display: "grid", gap: "0.75rem", width: "min(420px, calc(100vw - 2rem))" }}>
             <h2 style={{ margin: 0 }}>Sign in to Howllo</h2>
-            {!recoveryCode && !localOpen && !legacyOpen && providers.map((provider) => provider.kind === "oidc" ? (
+            {!recoveryCode && !localOpen && !legacyOpen && !emailResetMode && providers.map((provider) => provider.kind === "oidc" ? (
               <button key={provider.id} className="button" type="button" onClick={() => {
                 const url = new URL(`${API_BASE_URL}${provider.login_url}`);
                 url.searchParams.set("return_to", `${window.location.pathname}${window.location.search}`);
@@ -425,7 +435,7 @@ export function AuthLogin({ myHref }: AuthLoginProps) {
                 Continue with {provider.display_name}
               </button>
             ))}
-            {!recoveryCode && !legacyOpen && configured && widgetUrl && !providers.some((provider) => provider.id === "rooiam") ? (
+            {!recoveryCode && !legacyOpen && !emailResetMode && configured && widgetUrl && !providers.some((provider) => provider.id === "rooiam") ? (
               <button className="button" type="button" onClick={() => { setLegacyOpen(true); setLocalOpen(false); }}>Continue with RooIAM</button>
             ) : null}
             {recoveryCode ? (
@@ -437,7 +447,13 @@ export function AuthLogin({ myHref }: AuthLoginProps) {
                 <button className="button button--cta" type="button" disabled={busy} onClick={() => void continueAfterRecoveryCode()}>I saved the code — continue</button>
               </div>
             ) : null}
-            {localOpen && !recoveryCode ? (
+            {emailResetMode ? emailResetRecovery ? <div className="stack" role="status"><h3>Save your new recovery code</h3><p>Your password was changed and all sessions were signed out. Save this code now; it will not be shown again.</p><code style={{ overflowWrap: "anywhere", userSelect: "all" }}>{emailResetRecovery}</code><button className="button" type="button" onClick={() => void navigator.clipboard.writeText(emailResetRecovery)}>Copy code</button><button className="button button--cta" type="button" onClick={() => { setEmailResetMode(false); setEmailResetRecovery(""); setEmailResetSent(false); setLocalOpen(true); }}>Sign in</button></div> : <form className="field-grid" onSubmit={async (event) => { event.preventDefault(); setBusy(true); setProviderError(""); try { if (!emailResetSent) { await requestEmailReset(emailResetAddress); setEmailResetSent(true); } else { if (password !== confirmPassword) throw new Error("Passwords do not match."); setEmailResetRecovery(await confirmEmailReset(emailResetToken, password)); setPassword(""); setConfirmPassword(""); } } catch (cause) { setProviderError(cause instanceof Error ? cause.message : "Could not reset password."); } finally { setBusy(false); } }}>
+              <p>{emailResetSent ? "Enter the one-time code from your email." : "If this verified address belongs to a local account, we will send a reset code."}</p>
+              {!emailResetSent ? <label>Email address<input className="field" type="email" required value={emailResetAddress} onChange={(e) => setEmailResetAddress(e.target.value)} /></label> : <><label>Reset code<input className="field" required autoComplete="one-time-code" value={emailResetToken} onChange={(e) => setEmailResetToken(e.target.value)} /></label><label>New password<input className="field" type="password" minLength={12} required value={password} onChange={(e) => setPassword(e.target.value)} /></label><label>Confirm new password<input className="field" type="password" minLength={12} required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} /></label></>}
+              <button className="button button--cta" disabled={busy}>{emailResetSent ? "Reset password" : "Send reset code"}</button>
+              <button className="button" type="button" onClick={() => { setEmailResetMode(false); setLocalOpen(true); }}>Back to sign in</button>
+            </form> : null}
+            {localOpen && !recoveryCode && !emailResetMode ? (
               <form onSubmit={(event) => void submitLocal(event)} style={{ display: "grid", gap: "0.6rem" }}>
                 <label htmlFor="howllo-username">Username</label>
                 <input id="howllo-username" className="field" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required />
@@ -450,6 +466,7 @@ export function AuthLogin({ myHref }: AuthLoginProps) {
                 <button className="button button--cta" disabled={busy} type="submit">{resetMode ? "Reset password" : registerMode ? "Create account" : "Sign in"}</button>
                 <button className="button" type="button" onClick={() => { const creating = !registerMode && !resetMode; setResetMode(false); setRegisterMode(creating); setPassword(""); }}>{registerMode || resetMode ? "Back to sign in" : "Create a local account"}</button>
                 {!registerMode ? <button className="button" type="button" onClick={() => { setResetMode((value) => !value); setPassword(""); }}>{resetMode ? "Use password instead" : "Forgot password? Use recovery code"}</button> : null}
+                {!registerMode && emailEnabled ? <button className="button" type="button" onClick={() => { setEmailResetMode(true); setLocalOpen(false); setResetMode(false); setPassword(""); }}>Reset by verified email</button> : null}
               </form>
             ) : null}
             {providerError ? <p role="alert" className="notice notice--error">{providerError}</p> : null}

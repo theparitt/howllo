@@ -67,7 +67,7 @@ fn username(value: &str) -> Result<String, AppError> {
     Ok(value)
 }
 
-fn validate_password(value: &str) -> Result<(), AppError> {
+pub(crate) fn validate_password(value: &str) -> Result<(), AppError> {
     if !(12..=128).contains(&value.len()) {
         return Err(AppError::Validation(
             "password must be 12–128 characters".into(),
@@ -76,7 +76,7 @@ fn validate_password(value: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-fn password_hash(value: &str) -> Result<String, AppError> {
+pub(crate) fn password_hash(value: &str) -> Result<String, AppError> {
     Ok(Argon2::default()
         .hash_password(value.as_bytes(), &SaltString::generate(&mut OsRng))
         .map_err(|_| AppError::InternalServerError)?
@@ -139,7 +139,7 @@ async fn limit_request(
     Ok(())
 }
 
-fn new_recovery_code() -> String {
+pub(crate) fn new_recovery_code() -> String {
     let mut bytes = [0u8; 32];
     OsRng.fill_bytes(&mut bytes);
     format!("howllo_rc_{}", URL_SAFE_NO_PAD.encode(bytes))
@@ -565,7 +565,7 @@ pub async fn issue_admin_recovery(
         .json(serde_json::json!({"recovery_code": code})))
 }
 
-async fn revoke_user_sessions(
+pub(crate) async fn revoke_user_sessions(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     user_id: Uuid,
 ) -> Result<(), AppError> {

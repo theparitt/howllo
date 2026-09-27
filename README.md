@@ -104,6 +104,9 @@ browsers. The backend CORS list must include both frontend origins.
 
 Howllo Web reads login options from `GET /api/auth/providers`. Keep
 `HOWLLO_AUTH_LOCAL_ENABLED=true` on the server for its end-user accounts.
+Email is optional and disabled on a new installation. Platform admins configure
+SMTP, send a test message, and enable delivery; workspaces then choose their
+email features. See the [email setup and MailHog test guide](docs/email.md).
 Howllo App uses the RooIAM widget and callback on port 7702. To add an
 OIDC provider, set `HOWLLO_PUBLIC_API_URL`, `HOWLLO_WEB_ORIGIN` and
 `HOWLLO_OIDC_PROVIDERS` as described in [docs/auth/oidc.md](docs/auth/oidc.md).

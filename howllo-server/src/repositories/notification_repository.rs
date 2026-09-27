@@ -35,15 +35,31 @@ pub async fn create_follow_notifications(
         "#,
     );
 
-    sqlx::query(&query)
+    let recipients: Vec<Uuid> = sqlx::query_scalar(&format!("{query} RETURNING user_id"))
         .bind(tenant_id)
         .bind(post_id)
         .bind(event_type)
         .bind(title)
         .bind(body)
         .bind(actor_user_id)
-        .execute(pool)
+        .fetch_all(pool)
         .await?;
+
+    for recipient in recipients {
+        if let Err(error) = crate::email::delivery::enqueue_notification(
+            pool,
+            tenant_id,
+            recipient,
+            event_type,
+            title,
+            body,
+            Some(post_id),
+        )
+        .await
+        {
+            tracing::warn!(%error, user_id = %recipient, "notification email could not be queued");
+        }
+    }
 
     Ok(())
 }
@@ -73,6 +89,13 @@ pub async fn create_notification(
     .bind(body)
     .execute(pool)
     .await?;
+    if let Err(error) = crate::email::delivery::enqueue_notification(
+        pool, tenant_id, user_id, event_type, title, body, post_id,
+    )
+    .await
+    {
+        tracing::warn!(%error, user_id = %user_id, "notification email could not be queued");
+    }
     Ok(())
 }
 

@@ -2,9 +2,9 @@ use crate::db::DbPool;
 use actix_web::{get, web, HttpResponse, Responder};
 
 use crate::{
-    ai, api_tokens, audit, auth, boards, comments, exports, invitations, me, memberships,
-    moderation, moderation_notes, notifications, platform, plugins, policy, posts, realtime, forum,
-    search, subscriptions, tags, tenancy, votes, webhooks,
+    ai, api_tokens, audit, auth, boards, comments, email, exports, forum, invitations, me,
+    memberships, moderation, moderation_notes, notifications, platform, plugins, policy, posts,
+    realtime, search, subscriptions, tags, tenancy, votes, webhooks,
 };
 
 #[get("/api/health")]
@@ -56,6 +56,23 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(auth::create_sso_session)
         .service(auth::revoke_workspace_session)
         .service(platform::get_platform_status)
+        .service(email::availability)
+        .service(email::get_platform_email)
+        .service(email::put_platform_email)
+        .service(email::test_platform_email)
+        .service(email::set_platform_email_enabled)
+        .service(email::list_suppression)
+        .service(email::add_suppression)
+        .service(email::remove_suppression)
+        .service(email::workspace::get_tenant_email)
+        .service(email::workspace::put_tenant_email)
+        .service(email::workspace::get_user_email_prefs)
+        .service(email::workspace::put_user_email_prefs)
+        .service(email::workspace::send_broadcast)
+        .service(email::account::request_verification)
+        .service(email::account::confirm_verification)
+        .service(email::account::request_email_reset)
+        .service(email::account::confirm_email_reset)
         .service(plugins::list_platform_plugins)
         .service(plugins::set_platform_plugin_approval)
         .service(plugins::list_workspace_plugins)

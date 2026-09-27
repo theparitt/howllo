@@ -34,3 +34,5 @@ url = "2.5"
 argon2 = "0.5"
 rand = "0.8"
 aes-gcm = "0.10"
+lettre = { version = "0.11.23", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls", "ring", "webpki-roots"] }
+async-trait = "0.1"

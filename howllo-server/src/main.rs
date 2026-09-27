@@ -16,6 +16,7 @@ async fn main() -> std::io::Result<()> {
 
     let settings = config::Settings::from_env();
     let pool = preflight::run(&settings).await?;
+    email::delivery::start_worker(pool.clone());
     let pool_data = web::Data::new(pool);
     let settings_data = web::Data::new(settings.clone());
     // Single, process-wide realtime hub shared across all workers.

@@ -50,6 +50,27 @@ export async function resetLocalPassword(username: string, recoveryCode: string,
   return localAuthRequest("reset-password", { username, recovery_code: recoveryCode, new_password: newPassword });
 }
 
+export async function emailAvailable(): Promise<boolean> {
+  const response = await fetch(`${API_BASE_URL}/api/email/availability`, { cache: "no-store" });
+  return response.ok && ((await response.json()) as { enabled: boolean }).enabled;
+}
+
+export async function requestEmailReset(email: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/local/request-email-reset`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email }),
+  });
+  if (!response.ok) throw new Error(response.status === 429 ? "Too many requests. Please try later." : "Could not request a reset code.");
+}
+
+export async function confirmEmailReset(token: string, newPassword: string): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/local/confirm-email-reset`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  if (!response.ok) throw new Error(response.status === 401 ? "Code is invalid, expired, or already used." : response.status === 429 ? "Too many attempts. Please try later." : "Could not reset password.");
+  const result = await response.json() as { recovery_code: string };
+  return result.recovery_code;
+}
+
 export async function getLocalAccountStatus(token: string): Promise<{ has_local_credentials: boolean; has_recovery_code: boolean }> {
   const response = await fetch(`${API_BASE_URL}/api/auth/local/status`, { headers: { Authorization: token }, cache: "no-store" });
   if (!response.ok) throw new Error("Could not load local account status.");

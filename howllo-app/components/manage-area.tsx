@@ -42,6 +42,7 @@ import { BrandingTab } from "./branding-tab";
 import { SecurityTab } from "./security-tab";
 import { CustomerSignInTab } from "./customer-signin-tab";
 import { WorkspacePluginsTab } from "./workspace-plugins-tab";
+import { WorkspaceEmailTab } from "./workspace-email-tab";
 import { prepareBrandImage } from "../lib/prepare-brand-image";
 import { BoardTaxonomyEditor } from "./board-taxonomy-editor";
 import { BoardExtras } from "./board-extras";
@@ -51,7 +52,7 @@ import { LIST_PAGE_SIZE, ListPager, ListSearch } from "./list-controls";
 const INVITE_ROLES = ["admin", "moderator"];
 const MEMBER_ROLES = ["owner", "admin", "moderator", "member"];
 const PUBLIC_WEB_URL = (process.env.NEXT_PUBLIC_HOWLLO_PUBLIC_WEB_URL || "http://localhost:7703").replace(/\/$/, "");
-type ManageTab = "team" | "boards" | "branding" | "plugins" | "security" | "signin" | "external_sso" | "participants" | "moderation";
+type ManageTab = "team" | "boards" | "branding" | "plugins" | "security" | "signin" | "external_sso" | "participants" | "moderation" | "email";
 const NAV_ITEMS: { key: ManageTab; label: string; group: string; icon: string }[] = [
   { key: "boards", label: "Boards", group: "Workspace", icon: "M4 5h16v14H4zM4 10h16M10 10v9" },
   { key: "branding", label: "Board site", group: "Workspace", icon: "M3 5h18v14H3zM3 9h18M7 14h4" },
@@ -60,6 +61,7 @@ const NAV_ITEMS: { key: ManageTab; label: string; group: string; icon: string }[
   { key: "participants", label: "Board members", group: "People", icon: "M4 19v-1a4 4 0 018 0v1M8 11a3 3 0 100-6 3 3 0 000 6M16 8h5M16 12h5" },
   { key: "moderation", label: "Moderation", group: "People", icon: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4" },
   { key: "security", label: "Security", group: "Settings", icon: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" },
+  { key: "email", label: "Email", group: "Settings", icon: "M3 6h18v12H3zM3 7l9 7 9-7" },
   { key: "signin", label: "Customer sign-in", group: "Settings", icon: "M10 17l5-5-5-5M15 12H3M13 4h5a2 2 0 012 2v12a2 2 0 01-2 2h-5" },
   { key: "external_sso", label: "External SSO", group: "Settings", icon: "M4 8h16M4 16h16M8 4v16" },
 ];
@@ -97,6 +99,14 @@ export function ManageArea() {
   const [moderatorBoardCount, setModeratorBoardCount] = useState<number | null>(null);
   const [boardLoadError, setBoardLoadError] = useState("");
   const [boardRefresh, setBoardRefresh] = useState(0);
+  const [emailAvailable, setEmailAvailable] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/email/availability`, { cache: "no-store" })
+      .then((res) => res.ok ? res.json() : { enabled: false })
+      .then((result: { enabled: boolean }) => setEmailAvailable(result.enabled))
+      .catch(() => setEmailAvailable(false));
+  }, []);
 
   useEffect(() => { setCollapsed(window.localStorage.getItem("howllo.staff.sidebar.collapsed") === "true"); }, []);
   const toggleSidebar = () => setCollapsed((value) => { window.localStorage.setItem("howllo.staff.sidebar.collapsed", String(!value)); return !value; });
@@ -191,7 +201,7 @@ export function ManageArea() {
   }
 
   const noBoards = boardList?.length === 0;
-  const visibleNav = NAV_ITEMS.filter((item) => (role !== "moderator" || item.key === "moderation") && (!noBoards || !BOARD_NAV_ITEMS.has(item.key)));
+  const visibleNav = NAV_ITEMS.filter((item) => (role !== "moderator" || item.key === "moderation") && (!noBoards || !BOARD_NAV_ITEMS.has(item.key)) && (item.key !== "email" || emailAvailable));
 
   return (
     <div className={`manage-layout${collapsed ? " manage-layout--collapsed" : ""}`}>
@@ -216,6 +226,8 @@ export function ManageArea() {
           <WorkspacePluginsTab tenant={tenant} />
         ) : tab === "security" ? (
           <SecurityTab tenant={tenant} />
+        ) : tab === "email" ? (
+          <WorkspaceEmailTab tenant={tenant} />
         ) : tab === "team" ? (
           <TeamTab tenant={tenant} myRole={role!} />
         ) : tab === "boards" ? (
@@ -306,7 +318,7 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
             {busy ? "Sending…" : "Send invite"}
           </button>
         </div>
-        <p className="section-subtitle" style={{ marginTop: "0.6rem" }}>They accept or decline in Howllo App after signing in with RooIAM. Email delivery is not configured.</p>
+        <p className="section-subtitle" style={{ marginTop: "0.6rem" }}>They accept or decline in Howllo App after signing in with RooIAM. When platform email is enabled, they also receive an invitation email.</p>
         {notice ? <p className="success-text">{notice}</p> : null}
         {error ? <p className="error-text">{error}</p> : null}
       </section>

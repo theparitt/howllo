@@ -1,4 +1,5 @@
 use serde_json::json;
+use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::audit::{self, record, AuditEntry};
@@ -14,7 +15,7 @@ use crate::repositories::{
 
 fn normalize_email(raw: &str) -> Result<String, AppError> {
     let email = raw.trim().to_lowercase();
-    if email.is_empty() || !email.contains('@') {
+    if lettre::Address::from_str(&email).is_err() {
         return Err(AppError::Validation(
             "a valid email is required".to_string(),
         ));
@@ -45,6 +46,15 @@ pub async fn create_invitation(
 
     let email = normalize_email(email)?;
     let role = parse_invite_role(role)?;
+    let attempts: i32 = sqlx::query_scalar("INSERT INTO invitation_email_limits(tenant_id,actor_user_id,window_start,attempts) VALUES($1,$2,NOW(),1) ON CONFLICT(tenant_id,actor_user_id) DO UPDATE SET attempts=CASE WHEN invitation_email_limits.window_start<NOW()-INTERVAL '1 day' THEN 1 ELSE invitation_email_limits.attempts+1 END,window_start=CASE WHEN invitation_email_limits.window_start<NOW()-INTERVAL '1 day' THEN NOW() ELSE invitation_email_limits.window_start END RETURNING attempts")
+        .bind(tenant_id).bind(actor_user_id).fetch_one(pool).await.map_err(|error| {
+            tracing::error!(%error, "invitation limit check failed"); AppError::InternalServerError
+        })?;
+    if attempts > 20 {
+        return Err(AppError::TooManyRequests(
+            "Daily invitation limit reached.".into(),
+        ));
+    }
 
     let existing_user = invitation_repository::find_user_id_by_email(pool, &email)
         .await
@@ -103,6 +113,25 @@ pub async fn create_invitation(
     )
     .await?;
 
+    // Email is optional. An invitation remains available in-app when disabled
+    // or when the mail queue cannot accept a message.
+    let workspace_name: String = sqlx::query_scalar("SELECT name FROM tenants WHERE id=$1")
+        .bind(tenant_id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or_else(|_| tenant_slug.to_string());
+    if let Err(error) = crate::email::delivery::enqueue_invitation(
+        pool,
+        tenant_id,
+        invitation.id,
+        &email,
+        &workspace_name,
+    )
+    .await
+    {
+        tracing::warn!(%error, invitation_id = %invitation.id, "invitation email could not be queued");
+    }
+
     Ok(invitation)
 }
 
@@ -145,6 +174,7 @@ pub async fn withdraw_invitation(
             AppError::InternalServerError
         })?
         .ok_or(AppError::NotFound)?;
+    cancel_invitation_email(pool, invitation.id).await;
 
     if let Some(user_id) = invitation.user_id {
         let _ = notification_repository::create_notification(
@@ -278,6 +308,7 @@ pub async fn accept_invitation(
         tracing::error!(%error, invitation_id = %invitation_id, "error committing invitation acceptance");
         AppError::InternalServerError
     })?;
+    cancel_invitation_email(pool, invitation.id).await;
 
     if let Some(inviter) = invitation.invited_by {
         let _ = notification_repository::create_notification(
@@ -313,6 +344,7 @@ pub async fn reject_invitation(
             AppError::InternalServerError
         })?
         .ok_or(AppError::NotFound)?;
+    cancel_invitation_email(pool, invitation.id).await;
 
     if let Some(inviter) = invitation.invited_by {
         let _ = notification_repository::create_notification(
@@ -343,4 +375,12 @@ pub async fn reject_invitation(
     .await?;
 
     Ok(())
+}
+
+async fn cancel_invitation_email(pool: &DbPool, invitation_id: Uuid) {
+    if let Err(error) = sqlx::query("UPDATE email_messages SET status='cancelled',body='' WHERE dedupe_key=$1 AND status='queued'")
+        .bind(format!("invitation:{invitation_id}"))
+        .execute(pool).await {
+        tracing::warn!(%error, %invitation_id, "could not cancel pending invitation email");
+    }
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AvatarCropper } from "@/components/avatar-cropper";
+import { EmailPreferences } from "@/components/email-preferences";
 import { clearAllStoredBearerTokens, readAccountToken, readStoredBearerToken } from "@/components/dev-auth-panel";
 import { updateMe, uploadImage } from "@/lib/api";
 import { changeLocalPassword, getLocalAccountStatus, rotateLocalRecoveryCode } from "@/lib/auth-api";
@@ -194,6 +195,8 @@ export function MyAccountPanel({ howlloUser, tenantSlug }: MyAccountPanelProps) 
             <button className="button" type="button" onClick={() => void navigator.clipboard.writeText(recoveryCode)}>Copy code</button>
           </div> : null}
         </article> : null}
+
+        <EmailPreferences tenantSlug={tenantSlug} />
 
         {message ? <div className="notice">{message}</div> : null}
         {error ? <div className="notice notice--error">{error}</div> : null}
