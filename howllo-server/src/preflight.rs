@@ -316,15 +316,30 @@ async fn check_storage(pool: &DbPool) -> io::Result<()> {
                     paint("90", &cfg.minio_bucket)
                 ),
             );
-            test_minio_storage(
+            let result = test_minio_storage(
                 &cfg.minio_endpoint,
                 &cfg.minio_bucket,
                 &cfg.minio_access_key,
                 &secret,
                 cfg.minio_use_ssl,
             )
-            .await
-            .map_err(io::Error::other)?;
+            .await;
+            if let Err(error) = result {
+                // A full bucket cannot accept uploads, but reads and text-only
+                // boards still work. Keep the API available while operators
+                // restore capacity; invalid credentials/config still fail boot.
+                if error.contains("XMinioStorageFull") || error.contains("PUT returned 507") {
+                    line(
+                        Level::Warning,
+                        "storage",
+                        "minio",
+                        "full; uploads unavailable until space is restored",
+                    );
+                    tracing::warn!(%error, "MinIO is full; starting API in degraded mode");
+                    return Ok(());
+                }
+                return Err(io::Error::other(error));
+            }
             line(
                 Level::Ok,
                 "storage",
@@ -420,6 +435,8 @@ pub enum Level {
     Skip,
     /// Informational (no pass/fail).
     Info,
+    /// A dependency is degraded but the server can still serve requests.
+    Warning,
     /// A check failed.
     Fail,
 }
@@ -432,6 +449,7 @@ impl Level {
             Level::Pending => "[ .. ]",
             Level::Skip => "[SKIP]",
             Level::Info => "[INFO]",
+            Level::Warning => "[WARN]",
             Level::Fail => "[FAIL]",
         }
     }
@@ -443,6 +461,7 @@ impl Level {
             Level::Pending => "1;33", // yellow
             Level::Skip => "1;90",    // grey
             Level::Info => "1;36",    // cyan
+            Level::Warning => "1;33", // yellow
             Level::Fail => "1;31",    // red
         }
     }
