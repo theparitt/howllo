@@ -23,10 +23,6 @@ if [[ ! -f "$env_file" ]]; then
   } > "$env_file"
 fi
 
-if command -v git >/dev/null 2>&1 && git -C "$repo_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  export HOWLLO_IMAGE_TAG="$(git -C "$repo_dir" rev-parse HEAD)"
-fi
-
 compose=(docker compose --env-file "$env_file" -f "$repo_dir/compose.quickstart.yml")
 "${compose[@]}" pull
 "${compose[@]}" up -d

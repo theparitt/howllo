@@ -1,7 +1,7 @@
 {
   "name": "howllo",
   "version": "0.1.0",
-  "description": "Howllo — open-source multi-tenant feedback and roadmap platform.",
+  "description": "Howllo — open-source multi-tenant discussion boards with feedback and roadmaps.",
   "license": "Apache-2.0",
   "homepage": "https://howllo.dev",
   "repository": {

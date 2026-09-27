@@ -3,8 +3,8 @@
 </h1>
 
 <p align="center">
-  <strong>Open-source feedback boards for ideas, bug reports, and product roadmaps.</strong><br />
-  Customers post and vote. Product teams triage and share what happens next.
+  <strong>Open-source discussion boards for communities and product teams.</strong><br />
+  Talk, ask questions, report bugs, suggest features, and share a roadmap.
 </p>
 
 <p align="center">
