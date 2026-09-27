@@ -325,20 +325,18 @@ async fn check_storage(pool: &DbPool) -> io::Result<()> {
             )
             .await;
             if let Err(error) = result {
-                // A full bucket cannot accept uploads, but reads and text-only
-                // boards still work. Keep the API available while operators
-                // restore capacity; invalid credentials/config still fail boot.
-                if error.contains("XMinioStorageFull") || error.contains("PUT returned 507") {
-                    line(
-                        Level::Warning,
-                        "storage",
-                        "minio",
-                        "full; uploads unavailable until space is restored",
-                    );
-                    tracing::warn!(%error, "MinIO is full; starting API in degraded mode");
-                    return Ok(());
-                }
-                return Err(io::Error::other(error));
+                // Storage is required for media uploads, not for reading boards
+                // or text-only posts. Report the failure, keep the API online,
+                // and let the platform storage status surface the detail.
+                let message =
+                    if error.contains("XMinioStorageFull") || error.contains("PUT returned 507") {
+                        "full; uploads unavailable until space is restored"
+                    } else {
+                        "unavailable; uploads may fail until storage is restored"
+                    };
+                line(Level::Warning, "storage", "minio", message);
+                tracing::warn!(%error, "MinIO check failed; starting API in degraded mode");
+                return Ok(());
             }
             line(
                 Level::Ok,

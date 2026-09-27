@@ -255,7 +255,16 @@ pub async fn store_public_asset(
                 cfg.minio_use_ssl,
             )
             .await
-            .map_err(|e| AppError::InternalServerError.with_log(e))?;
+            .map_err(|error| {
+                if error.contains("XMinioStorageFull") || error.contains("PUT returned 507") {
+                    tracing::warn!(%error, "storage is full; upload rejected");
+                    AppError::ServiceUnavailable(
+                        "Uploads are temporarily unavailable because storage is full.".into(),
+                    )
+                } else {
+                    AppError::InternalServerError.with_log(error)
+                }
+            })?;
         }
     }
     Ok(public_url(&cfg.public_base_url, relative_path))
