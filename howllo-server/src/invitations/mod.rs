@@ -106,6 +106,7 @@ pub async fn reject_invitation(
 mod tests {
     use actix_web::{http::StatusCode, test, web, App};
     use serde_json::json;
+    use uuid::Uuid;
 
     use crate::db;
     use crate::http::test_support::{
@@ -332,5 +333,431 @@ mod tests {
             test::call_service(&app, make(member)).await.status(),
             StatusCode::FORBIDDEN
         );
+
+        let pending: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM workspace_invitations WHERE email = $1 AND status = 'pending'",
+        )
+        .bind(STAFF_EMAIL)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            pending, 1,
+            "a duplicate or denied invite must not mutate state"
+        );
+    }
+
+    #[actix_web::test]
+    async fn accepted_invitation_cannot_be_replayed_or_rejected() {
+        let _guard = lock_test_db().await;
+        let (settings, pool, seed) = setup().await;
+        let app = app!(pool, settings);
+        let admin = bearer_for(
+            &seed.admin_subject,
+            "admin@example.com",
+            "Admin",
+            &settings.rooiam_jwt_secret,
+        );
+        let staff = bearer_for(
+            STAFF_SUBJECT,
+            STAFF_EMAIL,
+            "New Staff",
+            &settings.rooiam_jwt_secret,
+        );
+
+        let created = read_json(test::call_service(&app, test::TestRequest::post()
+            .uri("/api/admin/invitations")
+            .insert_header(("Authorization", admin))
+            .set_json(json!({"tenant_slug": seed.tenant_slug, "email": STAFF_EMAIL, "role": "moderator"}))
+            .to_request()).await).await;
+        let id = created["id"].as_str().unwrap();
+        let invite_id = Uuid::parse_str(id).unwrap();
+
+        let mine = test::call_service(
+            &app,
+            test::TestRequest::get()
+                .uri("/api/me/invitations")
+                .insert_header(("Authorization", staff.clone()))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(mine.status(), StatusCode::OK);
+        let accept_uri = format!("/api/me/invitations/{id}/accept");
+        let reject_uri = format!("/api/me/invitations/{id}/reject");
+        assert_eq!(
+            test::call_service(
+                &app,
+                test::TestRequest::post()
+                    .uri(&accept_uri)
+                    .insert_header(("Authorization", staff.clone()))
+                    .to_request()
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+        assert_eq!(
+            test::call_service(
+                &app,
+                test::TestRequest::post()
+                    .uri(&accept_uri)
+                    .insert_header(("Authorization", staff.clone()))
+                    .to_request()
+            )
+            .await
+            .status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            test::call_service(
+                &app,
+                test::TestRequest::post()
+                    .uri(&reject_uri)
+                    .insert_header(("Authorization", staff))
+                    .to_request()
+            )
+            .await
+            .status(),
+            StatusCode::NOT_FOUND
+        );
+
+        let (status, membership_count, audit_count): (String, i64, i64) = sqlx::query_as(
+            "SELECT i.status, (SELECT COUNT(*) FROM memberships WHERE tenant_id = i.tenant_id AND user_id = i.user_id), (SELECT COUNT(*) FROM audit_logs WHERE entity_id = i.id AND action = 'invitation_accepted') FROM workspace_invitations i WHERE i.id = $1",
+        ).bind(invite_id).fetch_one(&pool).await.unwrap();
+        assert_eq!(status, "accepted");
+        assert_eq!(membership_count, 1);
+        assert_eq!(audit_count, 1);
+    }
+
+    #[actix_web::test]
+    async fn expired_invitation_cannot_be_accepted() {
+        let _guard = lock_test_db().await;
+        let (settings, pool, seed) = setup().await;
+        let app = app!(pool, settings);
+        let admin = bearer_for(
+            &seed.admin_subject,
+            "admin@example.com",
+            "Admin",
+            &settings.rooiam_jwt_secret,
+        );
+        let staff = bearer_for(
+            STAFF_SUBJECT,
+            STAFF_EMAIL,
+            "New Staff",
+            &settings.rooiam_jwt_secret,
+        );
+
+        let created = read_json(test::call_service(&app, test::TestRequest::post()
+            .uri("/api/admin/invitations")
+            .insert_header(("Authorization", admin))
+            .set_json(json!({"tenant_slug": seed.tenant_slug, "email": STAFF_EMAIL, "role": "admin"}))
+            .to_request()).await).await;
+        let invite_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+        let expiration: Option<chrono::DateTime<chrono::Utc>> =
+            sqlx::query_scalar("SELECT expires_at FROM workspace_invitations WHERE id = $1")
+                .bind(invite_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert!(
+            expiration.is_some(),
+            "new invitations must have a finite lifetime"
+        );
+        let mine = test::call_service(
+            &app,
+            test::TestRequest::get()
+                .uri("/api/me/invitations")
+                .insert_header(("Authorization", staff.clone()))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(mine.status(), StatusCode::OK);
+        sqlx::query("UPDATE workspace_invitations SET expires_at = NOW() - INTERVAL '1 second' WHERE id = $1")
+            .bind(invite_id).execute(&pool).await.unwrap();
+        let accept = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri(&format!("/api/me/invitations/{invite_id}/accept"))
+                .insert_header(("Authorization", staff))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(accept.status(), StatusCode::NOT_FOUND);
+        let (status, membership_count): (String, i64) = sqlx::query_as(
+            "SELECT i.status, (SELECT COUNT(*) FROM memberships WHERE tenant_id = i.tenant_id AND user_id = i.user_id) FROM workspace_invitations i WHERE i.id = $1",
+        ).bind(invite_id).fetch_one(&pool).await.unwrap();
+        assert_eq!(status, "expired");
+        assert_eq!(membership_count, 0);
+    }
+
+    #[actix_web::test]
+    async fn withdrawn_invitation_cannot_be_accepted() {
+        let _guard = lock_test_db().await;
+        let (settings, pool, seed) = setup().await;
+        let app = app!(pool, settings);
+        let admin = bearer_for(
+            &seed.admin_subject,
+            "admin@example.com",
+            "Admin",
+            &settings.rooiam_jwt_secret,
+        );
+        let staff = bearer_for(
+            STAFF_SUBJECT,
+            STAFF_EMAIL,
+            "New Staff",
+            &settings.rooiam_jwt_secret,
+        );
+
+        let created = read_json(test::call_service(&app, test::TestRequest::post()
+            .uri("/api/admin/invitations")
+            .insert_header(("Authorization", admin.clone()))
+            .set_json(json!({"tenant_slug": seed.tenant_slug, "email": STAFF_EMAIL, "role": "admin"}))
+            .to_request()).await).await;
+        let invite_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+        let mine = test::call_service(
+            &app,
+            test::TestRequest::get()
+                .uri("/api/me/invitations")
+                .insert_header(("Authorization", staff.clone()))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(mine.status(), StatusCode::OK);
+        assert_eq!(
+            test::call_service(
+                &app,
+                test::TestRequest::post()
+                    .uri(&format!(
+                        "/api/admin/invitations/{invite_id}/withdraw?tenant_slug={}",
+                        seed.tenant_slug
+                    ))
+                    .insert_header(("Authorization", admin))
+                    .to_request()
+            )
+            .await
+            .status(),
+            StatusCode::NO_CONTENT
+        );
+        assert_eq!(
+            test::call_service(
+                &app,
+                test::TestRequest::post()
+                    .uri(&format!("/api/me/invitations/{invite_id}/accept"))
+                    .insert_header(("Authorization", staff))
+                    .to_request()
+            )
+            .await
+            .status(),
+            StatusCode::NOT_FOUND
+        );
+        let membership_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM memberships m JOIN workspace_invitations i ON i.tenant_id = m.tenant_id AND i.user_id = m.user_id WHERE i.id = $1",
+        ).bind(invite_id).fetch_one(&pool).await.unwrap();
+        assert_eq!(membership_count, 0);
+    }
+
+    #[actix_web::test]
+    async fn rejected_invitation_does_not_grant_membership() {
+        let _guard = lock_test_db().await;
+        let (settings, pool, seed) = setup().await;
+        let app = app!(pool, settings);
+        let admin = bearer_for(
+            &seed.admin_subject,
+            "admin@example.com",
+            "Admin",
+            &settings.rooiam_jwt_secret,
+        );
+        let staff = bearer_for(
+            STAFF_SUBJECT,
+            STAFF_EMAIL,
+            "New Staff",
+            &settings.rooiam_jwt_secret,
+        );
+
+        let created = read_json(
+            test::call_service(
+                &app,
+                test::TestRequest::post()
+                    .uri("/api/admin/invitations")
+                    .insert_header(("Authorization", admin))
+                    .set_json(json!({"tenant_slug": seed.tenant_slug, "email": STAFF_EMAIL, "role": "moderator"}))
+                    .to_request(),
+            )
+            .await,
+        )
+        .await;
+        let invite_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+        let mine = test::call_service(
+            &app,
+            test::TestRequest::get()
+                .uri("/api/me/invitations")
+                .insert_header(("Authorization", staff.clone()))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(mine.status(), StatusCode::OK);
+        assert_eq!(
+            test::call_service(
+                &app,
+                test::TestRequest::post()
+                    .uri(&format!("/api/me/invitations/{invite_id}/reject"))
+                    .insert_header(("Authorization", staff.clone()))
+                    .to_request(),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+        assert_eq!(
+            test::call_service(
+                &app,
+                test::TestRequest::post()
+                    .uri(&format!("/api/me/invitations/{invite_id}/accept"))
+                    .insert_header(("Authorization", staff))
+                    .to_request(),
+            )
+            .await
+            .status(),
+            StatusCode::NOT_FOUND
+        );
+        let (status, membership_count, audit_count): (String, i64, i64) = sqlx::query_as(
+            "SELECT i.status, (SELECT COUNT(*) FROM memberships WHERE tenant_id = i.tenant_id AND user_id = i.user_id), (SELECT COUNT(*) FROM audit_logs WHERE entity_id = i.id AND action = 'invitation_rejected') FROM workspace_invitations i WHERE i.id = $1",
+        )
+        .bind(invite_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(status, "rejected");
+        assert_eq!(membership_count, 0);
+        assert_eq!(audit_count, 1);
+    }
+
+    #[actix_web::test]
+    async fn revoked_members_permission_takes_effect_without_new_login() {
+        let _guard = lock_test_db().await;
+        let (settings, pool, seed) = setup().await;
+        let app = app!(pool, settings);
+        let admin = bearer_for(
+            &seed.admin_subject,
+            "admin@example.com",
+            "Admin",
+            &settings.rooiam_jwt_secret,
+        );
+
+        let invite = |email: &str| {
+            test::TestRequest::post()
+                .uri("/api/admin/invitations")
+                .insert_header(("Authorization", admin.clone()))
+                .set_json(
+                    json!({"tenant_slug": seed.tenant_slug, "email": email, "role": "moderator"}),
+                )
+                .to_request()
+        };
+        assert_eq!(
+            test::call_service(&app, invite("first@example.com"))
+                .await
+                .status(),
+            StatusCode::CREATED
+        );
+        sqlx::query("UPDATE memberships SET role = 'member' WHERE tenant_id = (SELECT id FROM tenants WHERE slug = $1) AND user_id = $2")
+            .bind(&seed.tenant_slug)
+            .bind(seed.admin_user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            test::call_service(&app, invite("second@example.com"))
+                .await
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+        let second_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM workspace_invitations WHERE email = 'second@example.com'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(second_count, 0);
+    }
+
+    #[actix_web::test]
+    async fn foreign_workspace_admin_cannot_withdraw_invitation() {
+        let _guard = lock_test_db().await;
+        let (settings, pool, seed) = setup().await;
+        let app = app!(pool, settings);
+        let original_admin = bearer_for(
+            &seed.admin_subject,
+            "admin@example.com",
+            "Admin",
+            &settings.rooiam_jwt_secret,
+        );
+        let foreign_user_id = Uuid::new_v4();
+        let foreign_subject = format!("foreign-admin-{}", Uuid::new_v4().simple());
+        let foreign_admin = bearer_for(
+            &foreign_subject,
+            "foreign-admin@example.com",
+            "Foreign Admin",
+            &settings.rooiam_jwt_secret,
+        );
+        let foreign_tenant_id = Uuid::new_v4();
+        let foreign_slug = format!("foreign-{}", Uuid::new_v4().simple());
+        sqlx::query("INSERT INTO tenants (id, slug, name) VALUES ($1, $2, 'Foreign')")
+            .bind(foreign_tenant_id)
+            .bind(&foreign_slug)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO users (id, rooiam_subject, email, display_name) VALUES ($1, $2, 'foreign-admin@example.com', 'Foreign Admin')")
+            .bind(foreign_user_id)
+            .bind(&foreign_subject)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO memberships (tenant_id, user_id, role) VALUES ($1, $2, 'admin')")
+            .bind(foreign_tenant_id)
+            .bind(foreign_user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let created = read_json(
+            test::call_service(
+                &app,
+                test::TestRequest::post()
+                    .uri("/api/admin/invitations")
+                    .insert_header(("Authorization", original_admin))
+                    .set_json(json!({"tenant_slug": seed.tenant_slug, "email": STAFF_EMAIL, "role": "admin"}))
+                    .to_request(),
+            )
+            .await,
+        )
+        .await;
+        let invite_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+        sqlx::query("UPDATE workspace_invitations SET expires_at = NOW() - INTERVAL '1 second' WHERE id = $1")
+            .bind(invite_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            test::call_service(
+                &app,
+                test::TestRequest::post()
+                    .uri(&format!(
+                        "/api/admin/invitations/{invite_id}/withdraw?tenant_slug={foreign_slug}"
+                    ))
+                    .insert_header(("Authorization", foreign_admin))
+                    .to_request(),
+            )
+            .await
+            .status(),
+            StatusCode::NOT_FOUND
+        );
+        let status: String =
+            sqlx::query_scalar("SELECT status FROM workspace_invitations WHERE id = $1")
+                .bind(invite_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(status, "pending");
     }
 }

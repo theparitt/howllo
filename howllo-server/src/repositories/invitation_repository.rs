@@ -52,10 +52,11 @@ pub async fn create(
     invited_by: Uuid,
     user_id: Option<Uuid>,
 ) -> Result<InvitationRow, sqlx::Error> {
+    expire_for_email(pool, tenant_id, email_lower).await?;
     sqlx::query_as::<_, InvitationRow>(&format!(
         r#"
-        INSERT INTO workspace_invitations (tenant_id, email, role, invited_by, user_id)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO workspace_invitations (tenant_id, email, role, invited_by, user_id, expires_at)
+        VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '7 days')
         RETURNING {ROW_COLS}
         "#
     ))
@@ -81,6 +82,12 @@ pub async fn list_for_tenant(
     pool: &DbPool,
     tenant_id: Uuid,
 ) -> Result<Vec<InvitationListItem>, sqlx::Error> {
+    sqlx::query(
+        "UPDATE workspace_invitations SET status = 'expired', responded_at = NOW() WHERE tenant_id = $1 AND status = 'pending' AND COALESCE(expires_at, created_at + INTERVAL '7 days') <= NOW()",
+    )
+    .bind(tenant_id)
+    .execute(pool)
+    .await?;
     sqlx::query_as::<_, InvitationListItem>(
         r#"
         SELECT i.id, i.email, i.role, i.status,
@@ -103,6 +110,12 @@ pub async fn list_pending_for_user(
     pool: &DbPool,
     user_id: Uuid,
 ) -> Result<Vec<InvitationListItem>, sqlx::Error> {
+    sqlx::query(
+        "UPDATE workspace_invitations SET status = 'expired', responded_at = NOW() WHERE user_id = $1 AND status = 'pending' AND COALESCE(expires_at, created_at + INTERVAL '7 days') <= NOW()",
+    )
+    .bind(user_id)
+    .execute(pool)
+    .await?;
     sqlx::query_as::<_, InvitationListItem>(
         r#"
         SELECT i.id, i.email, i.role, i.status,
@@ -133,6 +146,7 @@ pub async fn withdraw(
         UPDATE workspace_invitations
         SET status = 'withdrawn', responded_at = NOW()
         WHERE id = $1 AND tenant_id = $2 AND status = 'pending'
+          AND COALESCE(expires_at, created_at + INTERVAL '7 days') > NOW()
         RETURNING {ROW_COLS}
         "#
     ))
@@ -154,6 +168,7 @@ pub async fn respond(
         UPDATE workspace_invitations
         SET status = $3, responded_at = NOW()
         WHERE id = $1 AND user_id = $2 AND status = 'pending'
+          AND COALESCE(expires_at, created_at + INTERVAL '7 days') > NOW()
         RETURNING {ROW_COLS}
         "#
     ))
@@ -162,6 +177,77 @@ pub async fn respond(
     .bind(new_status)
     .fetch_optional(pool)
     .await
+}
+
+/// The acceptance path uses one transaction for the invitation transition,
+/// membership grant and audit record.
+pub async fn respond_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    id: Uuid,
+    user_id: Uuid,
+    new_status: &str,
+) -> Result<Option<InvitationRow>, sqlx::Error> {
+    sqlx::query_as::<_, InvitationRow>(&format!(
+        r#"
+        UPDATE workspace_invitations
+        SET status = $3, responded_at = NOW()
+        WHERE id = $1 AND user_id = $2 AND status = 'pending'
+          AND COALESCE(expires_at, created_at + INTERVAL '7 days') > NOW()
+        RETURNING {ROW_COLS}
+        "#
+    ))
+    .bind(id)
+    .bind(user_id)
+    .bind(new_status)
+    .fetch_optional(&mut **tx)
+    .await
+}
+
+/// Expire a pending invitation before acting on it. A pre-expiry invitation
+/// created before `expires_at` was populated still has a seven-day lifetime.
+pub async fn expire_for_id_in_tenant(
+    pool: &DbPool,
+    id: Uuid,
+    tenant_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE workspace_invitations SET status = 'expired', responded_at = NOW() WHERE id = $1 AND tenant_id = $2 AND status = 'pending' AND COALESCE(expires_at, created_at + INTERVAL '7 days') <= NOW()",
+    )
+    .bind(id)
+    .bind(tenant_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn expire_for_id_for_user(
+    pool: &DbPool,
+    id: Uuid,
+    user_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE workspace_invitations SET status = 'expired', responded_at = NOW() WHERE id = $1 AND user_id = $2 AND status = 'pending' AND COALESCE(expires_at, created_at + INTERVAL '7 days') <= NOW()",
+    )
+    .bind(id)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn expire_for_email(
+    pool: &DbPool,
+    tenant_id: Uuid,
+    email_lower: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE workspace_invitations SET status = 'expired', responded_at = NOW() WHERE tenant_id = $1 AND lower(email) = $2 AND status = 'pending' AND COALESCE(expires_at, created_at + INTERVAL '7 days') <= NOW()",
+    )
+    .bind(tenant_id)
+    .bind(email_lower)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 /// On sign-in, attach the user's account to any pending invites for their email

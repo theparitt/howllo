@@ -8,6 +8,9 @@ type TenantBoardPageProps = {
   searchParams: Promise<{
     sort?: string;
     status?: string;
+    category?: string;
+    tag?: string;
+    q?: string;
     page?: string;
   }>;
 };
@@ -25,6 +28,9 @@ export default async function TenantBoardPage({
       tenant: tenantSlug,
       sort: query.sort,
       status: query.status,
+      category: query.category,
+      tag: query.tag,
+      q: query.q,
       page: query.page,
     }),
   });

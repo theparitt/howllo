@@ -131,6 +131,13 @@ pub async fn withdraw_invitation(
     let tenant_id = membership_repository::resolve_tenant_id(pool, tenant_slug).await?;
     require_permission(pool, tenant_id, actor_user_id, Permission::ManageMembers).await?;
 
+    invitation_repository::expire_for_id_in_tenant(pool, invitation_id, tenant_id)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, invitation_id = %invitation_id, "error expiring invitation");
+            AppError::InternalServerError
+        })?;
+
     let invitation = invitation_repository::withdraw(pool, invitation_id, tenant_id)
         .await
         .map_err(|error| {
@@ -214,7 +221,17 @@ pub async fn accept_invitation(
     if !is_staff_identity {
         return Err(AppError::Forbidden);
     }
-    let invitation = invitation_repository::respond(pool, invitation_id, user_id, "accepted")
+    invitation_repository::expire_for_id_for_user(pool, invitation_id, user_id)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, invitation_id = %invitation_id, "error expiring invitation");
+            AppError::InternalServerError
+        })?;
+    let mut tx = pool.begin().await.map_err(|error| {
+        tracing::error!(%error, invitation_id = %invitation_id, "error starting invitation acceptance");
+        AppError::InternalServerError
+    })?;
+    let invitation = invitation_repository::respond_in_tx(&mut tx, invitation_id, user_id, "accepted")
         .await
         .map_err(|error| {
             tracing::error!(error = %error, invitation_id = %invitation_id, "error accepting invitation");
@@ -235,10 +252,30 @@ pub async fn accept_invitation(
     .bind(invitation.tenant_id)
     .bind(user_id)
     .bind(&invitation.role)
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .map_err(|error| {
         tracing::error!(error = %error, tenant_id = %invitation.tenant_id, user_id = %user_id, "error granting membership on accept");
+        AppError::InternalServerError
+    })?;
+
+    audit::record_in_tx(
+        &mut tx,
+        AuditEntry {
+            tenant_id: invitation.tenant_id,
+            actor_user_id: user_id,
+            entity_type: "invitation",
+            entity_id: invitation.id,
+            action: audit::INVITATION_ACCEPTED,
+            old_value: None,
+            new_value: Some(json!({ "role": invitation.role })),
+            reason: None,
+        },
+    )
+    .await?;
+
+    tx.commit().await.map_err(|error| {
+        tracing::error!(%error, invitation_id = %invitation_id, "error committing invitation acceptance");
         AppError::InternalServerError
     })?;
 
@@ -255,21 +292,6 @@ pub async fn accept_invitation(
         .await;
     }
 
-    record(
-        pool,
-        AuditEntry {
-            tenant_id: invitation.tenant_id,
-            actor_user_id: user_id,
-            entity_type: "invitation",
-            entity_id: invitation.id,
-            action: audit::INVITATION_ACCEPTED,
-            old_value: None,
-            new_value: Some(json!({ "role": invitation.role })),
-            reason: None,
-        },
-    )
-    .await?;
-
     Ok(())
 }
 
@@ -278,6 +300,12 @@ pub async fn reject_invitation(
     user_id: Uuid,
     invitation_id: Uuid,
 ) -> Result<(), AppError> {
+    invitation_repository::expire_for_id_for_user(pool, invitation_id, user_id)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, invitation_id = %invitation_id, "error expiring invitation");
+            AppError::InternalServerError
+        })?;
     let invitation = invitation_repository::respond(pool, invitation_id, user_id, "rejected")
         .await
         .map_err(|error| {

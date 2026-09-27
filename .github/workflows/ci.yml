@@ -66,3 +66,41 @@ jobs:
         run: docker build --file howllo-server/Dockerfile --tag howllo-server:ci .
       - name: Check image runs without root privileges
         run: docker run --rm --entrypoint /bin/sh howllo-server:ci -c 'test "$(id -u)" != 0 && test -x /usr/local/bin/howllo-server && test -d /app/data/uploads'
+
+  deterministic_e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: howllo_e2e_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      HOWLLO_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/howllo_e2e_ci
+    steps:
+      - uses: actions/checkout@v6
+      - name: Rust toolchain
+        run: rustup update stable && rustup default stable
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Test capability discovery
+        run: python3 -m unittest discover -s howllo-tests/discovery -v
+      - name: Build isolated server
+        run: cargo build --locked --manifest-path howllo-server/Cargo.toml
+      - name: Run deterministic API regression
+        run: node howllo-tests/runner/run.mjs
+      - name: Upload regression report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: howllo-deterministic-e2e
+          path: howllo-tests/reports/*.json
+          if-no-files-found: ignore
