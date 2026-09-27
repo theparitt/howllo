@@ -1,7 +1,20 @@
-# Howllo
+<h1 align="center">
+  <img src="art/howllo-logo-wordmark-horizontal.png" width="430" alt="Howllo" />
+</h1>
 
-[![Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
-[![GitHub](https://img.shields.io/badge/GitHub-theparitt%2Fhowllo-181717?logo=github)](https://github.com/theparitt/howllo)
+<p align="center">
+  <strong>Open-source feedback boards for ideas, bug reports, and product roadmaps.</strong><br />
+  Customers post and vote. Product teams triage and share what happens next.
+</p>
+
+<p align="center">
+  <img src="art/howllo-cartoon.jpg" width="180" alt="Howllo wolf mascot pointing to the board" />
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-blue.svg" alt="Apache-2.0 license" /></a>
+  <a href="https://github.com/theparitt/howllo"><img src="https://img.shields.io/badge/GitHub-theparitt%2Fhowllo-181717?logo=github" alt="Howllo on GitHub" /></a>
+</p>
 
 Howllo is open source under the [Apache License 2.0](LICENSE). Contributions are welcome on [GitHub](https://github.com/theparitt/howllo).
 
@@ -9,9 +22,6 @@ Howllo is open source under the [Apache License 2.0](LICENSE). Contributions are
 production release has open security and operations gates. See the
 [release roadmap](docs/roadmap.md) before using private boards or sensitive
 customer data.
-
-Multi-tenant feedback and roadmap platform. Customers submit and
-vote on feedback; product teams triage, set roadmap status, and respond.
 
 Optional plugins are written and shipped by the Howllo maintainer. The
 platform admin approves them; each workspace or board chooses which approved
