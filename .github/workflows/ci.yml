@@ -57,3 +57,12 @@ jobs:
       - run: npm -w howllo-admin run build
       - run: npm -w howllo-app run build
       - run: npm -w howllo-web run build
+
+  server_image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build API image from the repository root
+        run: docker build --file howllo-server/Dockerfile --tag howllo-server:ci .
+      - name: Check image runs without root privileges
+        run: docker run --rm --entrypoint /bin/sh howllo-server:ci -c 'test "$(id -u)" != 0 && test -x /usr/local/bin/howllo-server && test -d /app/data/uploads'
