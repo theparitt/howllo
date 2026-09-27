@@ -28,6 +28,7 @@ class DiscoveryTests(unittest.TestCase):
         self.assertIn("moderator", result["role_policy"]["roles"])
         self.assertNotIn("ManageBoards", result["role_policy"]["grants"]["moderator"])
         self.assertTrue(result["post_statuses"]["consistent"])
+        self.assertIn("announcements", result["board_types"]["staff_only_post_types"])
 
     def test_fifth_type_is_discovered_without_code_change(self):
         with tempfile.TemporaryDirectory() as directory:

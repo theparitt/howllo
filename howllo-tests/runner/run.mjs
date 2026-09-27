@@ -36,7 +36,8 @@ function jwt(claims) {
 
 function actor(id, ipOrdinal) {
   const email = `${id.toLowerCase()}-${suffix}@example.test`;
-  const accountToken = jwt({ sub: `howllo-test-${runId}-${id}`, email, name: id, exp: Math.floor(Date.now() / 1000) + 3600 });
+  const accountToken = id === "U-GUEST" ? null
+    : jwt({ sub: `howllo-test-${runId}-${id}`, email, name: id, exp: Math.floor(Date.now() / 1000) + 3600 });
   const sessions = new Map();
   return Object.freeze({
     id,
@@ -170,7 +171,7 @@ async function scenario(manifest) {
     requireCheck(`INV-${decision.toUpperCase()}-${person.id}`, person.id, A, response.status === 200,
       `invitee ${decision}s invitation`, response);
     const replay = await person.request("POST", `/api/me/invitations/${inviteId}/accept`, undefined, null, true);
-    check(`INV-REPLAY-${person.id}`, person.id, A, replay.status >= 400,
+    check(`INV-REPLAY-${person.id}`, person.id, A, [404, 409, 422].includes(replay.status),
       "resolved invitation cannot be replayed", replay, "P0");
     const state = observe(`SELECT json_build_object('status',i.status,'role',m.role,'audit_count',(SELECT count(*) FROM audit_logs al WHERE al.entity_id=i.id AND al.action='invitation_${decision === "accept" ? "accepted" : "rejected"}')) FROM workspace_invitations i LEFT JOIN memberships m ON m.tenant_id=i.tenant_id AND m.user_id=i.user_id WHERE i.id='${inviteId}'`);
     check(`INV-DB-RESOLVED-${person.id}`, "SYS-02", A,
@@ -201,7 +202,7 @@ async function scenario(manifest) {
   requireCheck("INV-WITHDRAW", ownerA.id, A, withdrawn.status === 204,
     "owner withdraws pending invitation", withdrawn);
   const revokedAccept = await rejectedInvitee.request("POST", `/api/me/invitations/${revokedId}/accept`, undefined, null, true);
-  check("INV-WITHDRAWN-CANNOT-ACCEPT", rejectedInvitee.id, A, revokedAccept.status >= 400,
+  check("INV-WITHDRAWN-CANNOT-ACCEPT", rejectedInvitee.id, A, [404, 409, 422].includes(revokedAccept.status),
     "withdrawn invitation cannot be accepted", revokedAccept, "P0");
   const revokedState = observe(`SELECT json_build_object('status',status,'membership',(SELECT count(*) FROM memberships m WHERE m.tenant_id=i.tenant_id AND m.user_id=i.user_id)) FROM workspace_invitations i WHERE id='${revokedId}'`);
   check("INV-WITHDRAWN-DB", "SYS-02", A, revokedState?.status === "withdrawn" && revokedState?.membership === 0,
@@ -235,6 +236,46 @@ async function scenario(manifest) {
 
   for (const person of [author, voter1, voter2, voter3, answer]) await person.join(A);
   await foreign.join(B);
+  for (const [index, preset] of presets.entries()) {
+    if (preset.type === chosen.type) continue;
+    const participant = actor(`U-BOARD-${index + 1}`, 30 + index);
+    const me = await participant.request("GET", "/api/me", undefined, null, true);
+    requireCheck(`MATRIX-IDENTITY-${preset.type}`, participant.id, A,
+      me.status === 200 && !!me.body?.id && !identities.has(me.body.id),
+      "board-type actor has a distinct account", me);
+    identities.add(me.body.id);
+    await participant.join(A);
+    const board = assets.boards[preset.type];
+    const postPayload = { tenant_slug: A, title: `${preset.type} ${suffix}`, body: `Board type scenario for ${preset.type}.` };
+    const staffOnly = manifest.board_types.staff_only_post_types.includes(preset.type);
+    if (staffOnly) {
+      const denied = await participant.request("POST", `/api/boards/${board.slug}/posts`, postPayload, A);
+      check(`MATRIX-STAFF-ONLY-${preset.type}`, participant.id, A, denied.status === 403,
+        "regular member cannot publish staff-only board post", denied, "P1");
+    }
+    const creator = staffOnly ? admin : participant;
+    const post = await creator.request("POST", `/api/boards/${board.slug}/posts`, postPayload, A);
+    requireCheck(`MATRIX-POST-${preset.type}`, creator.id, A, post.status === 201 && !!post.body?.id,
+      "authorized actor can post on discovered board type", post);
+    const matrixPostId = uuid(post.body.id);
+    const scope = observe(`SELECT json_build_object('board_id',board_id,'tenant_id',tenant_id,'review_state',review_state) FROM posts WHERE id='${matrixPostId}'`);
+    check(`MATRIX-SCOPE-${preset.type}`, "SYS-02", A, scope?.board_id === board.id && scope?.tenant_id === a.body.id,
+      "board-type post is stored under the correct board and workspace", { status: 200, body: scope }, "P0");
+    const publicList = await guest.request("GET", `/api/boards/${board.slug}/posts?tenant_slug=${encodeURIComponent(A)}`, undefined, A);
+    check(`MATRIX-PUBLIC-${preset.type}`, guest.id, A,
+      publicList.status === 200 && Array.isArray(publicList.body?.items) && publicList.body.items.some(item => item.id === matrixPostId),
+      "guest can see approved post for this public board type", publicList);
+    if (!preset.default_votes) {
+      const vote = await participant.request("POST", `/api/posts/${matrixPostId}/vote`, undefined, A);
+      check(`MATRIX-VOTE-DISABLED-${preset.type}`, participant.id, A, vote.status === 403,
+        "board default disables voting", vote, "P1");
+    }
+    if (!preset.default_comments) {
+      const comment = await participant.request("POST", `/api/posts/${matrixPostId}/comments`, { body: "Should be blocked" }, A);
+      check(`MATRIX-COMMENTS-DISABLED-${preset.type}`, participant.id, A, comment.status === 403,
+        "board default disables comments", comment, "P1");
+    }
+  }
   const list = await guest.request("GET", `/api/boards?tenant_slug=${encodeURIComponent(A)}`, undefined, A);
   check("BOARD-PUBLIC-LIST", guest.id, A, list.status === 200 && Array.isArray(list.body) && list.body.some(item => item.slug === chosenBoard.slug),
     "guest sees enabled public board", list);
@@ -314,7 +355,7 @@ async function scenario(manifest) {
       expected: "target matrix grants moderator ChangeStatus", observed: { role_policy: manifest.role_policy.source } });
   }
   const invalidTransition = await admin.request("PATCH", `/api/admin/posts/${postId}/status`, { status: "done" }, A);
-  check("STATUS-INVALID-TRANSITION", admin.id, A, invalidTransition.status >= 400,
+  check("STATUS-INVALID-TRANSITION", admin.id, A, invalidTransition.status === 422,
     "admin cannot skip from under_review to done", invalidTransition, "P1");
   for (const [from, to] of [["under_review", "planned"], ["planned", "in_progress"], ["in_progress", "done"]]) {
     const changed = await admin.request("PATCH", `/api/admin/posts/${postId}/status`, { status: to }, A);
@@ -335,7 +376,7 @@ async function scenario(manifest) {
     const locked = await moderator.request("PATCH", `/api/admin/posts/${postId}/lock`, { is_locked: true }, A);
     requireCheck("MOD-LOCK", moderator.id, A, locked.status === 200, "moderator locks post", locked);
     const blockedComment = await author.request("POST", `/api/posts/${postId}/comments`, { body: "Should be blocked" }, A);
-    check("MOD-LOCK-BLOCKS-COMMENT", author.id, A, blockedComment.status >= 400,
+    check("MOD-LOCK-BLOCKS-COMMENT", author.id, A, blockedComment.status === 403,
       "locked post rejects new comment", blockedComment, "P1");
     const unlocked = await moderator.request("PATCH", `/api/admin/posts/${postId}/lock`, { is_locked: false }, A);
     requireCheck("MOD-UNLOCK", moderator.id, A, unlocked.status === 200, "moderator unlocks post", unlocked);
@@ -365,7 +406,7 @@ async function scenario(manifest) {
   const decisions = await Promise.all([admin.request("PATCH", `/api/admin/posts/${duplicateId}/review`, { action: "approve" }, A),
     moderator.request("PATCH", `/api/admin/posts/${duplicateId}/review`, { action: "reject" }, A)]);
   check("MOD-CONCURRENT-ONE-WINNER", "SYS-01", A,
-    decisions.filter(row => row.status === 200).length === 1 && decisions.filter(row => row.status >= 400).length === 1,
+    decisions.filter(row => row.status === 200).length === 1 && decisions.filter(row => row.status === 422).length === 1,
     "one concurrent moderator decision wins and the other conflicts", { status: decisions.map(row => row.status).join(",") }, "P0");
   const reviewed = observe(`SELECT json_build_object('review_state',p.review_state,'is_hidden',p.is_hidden,'audit',(SELECT count(*) FROM audit_logs a WHERE a.entity_id=p.id AND a.action IN ('post_approved','post_rejected'))) FROM posts p WHERE p.id='${duplicateId}'`);
   check("MOD-CONCURRENT-DB-AUDIT", "SYS-03", A,
@@ -402,6 +443,12 @@ async function scenario(manifest) {
 async function main() {
   const reportPath = resolve(root, "howllo-tests/reports", `${runId}.json`);
   const manifest = discover();
+  for (const [name, capability] of Object.entries(manifest.capabilities)) {
+    if (capability.status === "MISSING_CAPABILITY") {
+      records.push({ id: `CAP-${name}`, actor: "SYS-01", workspace: null, status: "MISSING_CAPABILITY",
+        expected: "required route or schema capability exists", observed: capability });
+    }
+  }
   try {
     try {
       const response = await fetch(`${base}/api/ready`, { signal: AbortSignal.timeout(500) });
@@ -434,7 +481,7 @@ async function main() {
     mkdirSync(dirname(reportPath), { recursive: true });
     const missing = [...new Set([
       ...Object.entries(manifest.capabilities).filter(([, value]) => value.status === "MISSING_CAPABILITY").map(([name]) => name),
-      ...records.filter(row => row.status === "MISSING_CAPABILITY").map(row => row.id),
+      ...records.filter(row => row.status === "MISSING_CAPABILITY" && !row.id.startsWith("CAP-")).map(row => row.id),
     ])];
     const failed = records.filter(row => row.status === "FAIL");
     const report = { run_id: runId, generated_at: new Date().toISOString(), target: "isolated-local-api", certification: "NOT_CERTIFIED",

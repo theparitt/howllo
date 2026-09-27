@@ -109,12 +109,19 @@ def board_types(root: Path) -> dict:
     schema = read(root, "howllo-server/db/migrations/20240101000000_init.sql")
     all_migrations = "\n".join(path.read_text(encoding="utf-8") for path in sorted(migration_dir.glob("*.sql")))
     backend = read(root, "howllo-server/src/dto/mod.rs")
+    post_service = read(root, "howllo-server/src/services/post_service.rs")
+    staff_only_match = re.search(
+        r"if\s+matches!\(\s*board\.board_type\.as_str\(\)\s*,(.*?)\)\s*\{",
+        post_service, re.S,
+    )
+    staff_only_types = re.findall(r'"([^"\n]+)"', staff_only_match.group(1)) if staff_only_match else []
     free_form = bool(re.search(r"board_type\s+VARCHAR\([^)]*\)\s+NOT NULL", schema)) and \
         not bool(re.search(r"CHECK\s*\(\s*board_type\s+IN", all_migrations, re.I))
     return {
         "frontend_presets": presets,
         "database_accepts_free_form_type": free_form,
         "backend_requires_nonempty_type": 'board_type is required' in backend,
+        "staff_only_post_types": staff_only_types,
         "source": "howllo-web/lib/board-experience.ts",
         "schema_source": "howllo-server/db/migrations/20240101000000_init.sql",
     }
