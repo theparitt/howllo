@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::audit::{self, record, AuditEntry};
 use crate::auth::require_permission;
 use crate::db::DbPool;
+use crate::config::Settings;
 use crate::domain::permission::Permission;
 use crate::domain::role::Role;
 use crate::errors::AppError;
@@ -39,6 +40,7 @@ fn parse_invite_role(raw: &str) -> Result<Role, AppError> {
 
 pub async fn create_invitation(
     pool: &DbPool,
+    settings: &Settings,
     tenant_slug: &str,
     actor_user_id: Uuid,
     email: &str,
@@ -57,6 +59,45 @@ pub async fn create_invitation(
         return Err(AppError::TooManyRequests(
             "Daily invitation limit reached.".into(),
         ));
+    }
+
+    if crate::external_identity::linked_workspace(pool, settings, tenant_id).await? {
+        let duplicate: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workspace_invitations WHERE tenant_id=$1 AND lower(email)=$2 AND status='pending' AND COALESCE(expires_at,created_at+INTERVAL '7 days')>NOW())")
+            .bind(tenant_id).bind(&email).fetch_one(pool).await
+            .map_err(|_| AppError::InternalServerError)?;
+        if duplicate { return Err(AppError::BadRequest("there is already a pending invitation for this email".into())); }
+        let provider_id = crate::external_identity::provider_id(settings)?;
+        let sent = crate::external_identity::call_bridge(
+            settings, reqwest::Method::POST,
+            &format!("/v1/workspaces/{tenant_id}/invitations"), None,
+            Some(&json!({"email": email})),
+        ).await?;
+        let provider_invitation_id = sent.get("id").and_then(|id| id.as_str())
+            .and_then(|id| Uuid::parse_str(id).ok())
+            .ok_or_else(|| AppError::ServiceUnavailable("Identity provider returned an invalid invitation.".into()))?;
+        let invitation = match invitation_repository::create_provider(
+            pool, tenant_id, &email, role.as_db_str(), actor_user_id,
+            provider_id, provider_invitation_id,
+        ).await {
+            Ok(invitation) => invitation,
+            Err(error) => {
+                let already_recorded: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workspace_invitations WHERE provider_id=$1 AND provider_invitation_id=$2)")
+                    .bind(provider_id).bind(provider_invitation_id).fetch_one(pool).await.unwrap_or(true);
+                if !already_recorded {
+                    let _ = crate::external_identity::call_bridge(settings, reqwest::Method::DELETE,
+                        &format!("/v1/workspaces/{tenant_id}/invitations/{provider_invitation_id}"), None, None).await;
+                }
+                if let sqlx::Error::Database(db) = &error {
+                    if db.is_unique_violation() { return Err(AppError::BadRequest("there is already a pending invitation for this email".into())); }
+                }
+                tracing::error!(%error, "could not save linked staff invitation");
+                return Err(AppError::InternalServerError);
+            }
+        };
+        record(pool, AuditEntry { tenant_id, actor_user_id, entity_type: "invitation",
+            entity_id: invitation.id, action: audit::INVITATION_CREATED, old_value: None,
+            new_value: Some(json!({"email": email, "role": role.as_db_str(), "provider_id": provider_id})), reason: None }).await?;
+        return Ok(CreatedInvitation { invitation, redemption_code: String::new() });
     }
 
     let existing_user = invitation_repository::find_user_id_by_email(pool, &email)
@@ -153,22 +194,33 @@ pub struct CreatedInvitation {
 
 pub async fn list_invitations(
     pool: &DbPool,
+    settings: &Settings,
     tenant_slug: &str,
     actor_user_id: Uuid,
 ) -> Result<Vec<InvitationListItem>, AppError> {
     let tenant_id = membership_repository::resolve_tenant_id(pool, tenant_slug).await?;
     require_permission(pool, tenant_id, actor_user_id, Permission::ManageMembers).await?;
 
-    invitation_repository::list_for_tenant(pool, tenant_id)
+    let mut items = invitation_repository::list_for_tenant(pool, tenant_id)
         .await
         .map_err(|error| {
             tracing::error!(error = %error, tenant_id = %tenant_id, "error listing invitations");
             AppError::InternalServerError
-        })
+        })?;
+    for item in &mut items {
+        if item.status != "pending" || item.provider_id.is_none() { continue; }
+        let row = invitation_repository::get(pool, item.id).await
+            .map_err(|_| AppError::InternalServerError)?.ok_or(AppError::NotFound)?;
+        let status = refresh_provider_invitation(pool, settings, &row).await?;
+        item.provider_status = Some(status.clone());
+        item.status = match status.as_str() { "declined" => "rejected", "revoked" => "withdrawn", "expired" => "expired", _ => "pending" }.into();
+    }
+    Ok(items)
 }
 
 pub async fn withdraw_invitation(
     pool: &DbPool,
+    settings: &Settings,
     tenant_slug: &str,
     actor_user_id: Uuid,
     invitation_id: Uuid,
@@ -182,6 +234,18 @@ pub async fn withdraw_invitation(
             tracing::error!(%error, invitation_id = %invitation_id, "error expiring invitation");
             AppError::InternalServerError
         })?;
+
+    let pending = invitation_repository::get(pool, invitation_id).await
+        .map_err(|_| AppError::InternalServerError)?
+        .filter(|row| row.tenant_id == tenant_id && row.status == "pending")
+        .ok_or(AppError::NotFound)?;
+    if let Some(provider_invitation_id) = pending.provider_invitation_id {
+        if refresh_provider_invitation(pool, settings, &pending).await? != "pending" {
+            return Err(AppError::BadRequest("This invitation can no longer be withdrawn.".into()));
+        }
+        crate::external_identity::call_bridge(settings, reqwest::Method::DELETE,
+            &format!("/v1/workspaces/{tenant_id}/invitations/{provider_invitation_id}"), None, None).await?;
+    }
 
     let invitation = invitation_repository::withdraw(pool, invitation_id, tenant_id)
         .await
@@ -225,6 +289,7 @@ pub async fn withdraw_invitation(
 
 pub async fn list_my_invitations(
     pool: &DbPool,
+    settings: &Settings,
     user_id: Uuid,
 ) -> Result<Vec<InvitationListItem>, AppError> {
     // A RooIAM staff member may first visit the App account home without
@@ -244,16 +309,62 @@ pub async fn list_my_invitations(
                 AppError::InternalServerError
             })?;
     }
-    invitation_repository::list_pending_for_user(pool, user_id)
+    let mut items = invitation_repository::list_pending_for_user(pool, user_id)
         .await
         .map_err(|error| {
             tracing::error!(error = %error, user_id = %user_id, "error listing my invitations");
             AppError::InternalServerError
-        })
+        })?;
+    let mut visible = Vec::with_capacity(items.len());
+    for mut item in items.drain(..) {
+        if item.provider_id.is_some() {
+            let row = invitation_repository::get(pool, item.id).await
+                .map_err(|_| AppError::InternalServerError)?.ok_or(AppError::NotFound)?;
+            let status = refresh_provider_invitation(pool, settings, &row).await?;
+            if !matches!(status.as_str(), "pending" | "accepted") { continue; }
+            item.provider_status = Some(status);
+        }
+        visible.push(item);
+    }
+    Ok(visible)
+}
+
+async fn refresh_provider_invitation(pool: &DbPool, settings: &Settings, row: &InvitationRow) -> Result<String, AppError> {
+    let provider_invitation_id = row.provider_invitation_id.ok_or(AppError::InternalServerError)?;
+    if !crate::external_identity::linked_workspace(pool, settings, row.tenant_id).await? {
+        return Err(AppError::ServiceUnavailable("Identity provider is not linked to this workspace.".into()));
+    }
+    let detail = crate::external_identity::call_bridge(settings, reqwest::Method::GET,
+        &format!("/v1/workspaces/{}/invitations/{provider_invitation_id}", row.tenant_id), None, None).await?;
+    if detail.get("id").and_then(|value| value.as_str()) != Some(provider_invitation_id.to_string().as_str())
+        || detail.get("email").and_then(|value| value.as_str())
+            .is_none_or(|email| !email.eq_ignore_ascii_case(&row.email)) {
+        return Err(AppError::ServiceUnavailable("Identity provider returned inconsistent invitation data.".into()));
+    }
+    let status = detail.get("status").and_then(|value| value.as_str())
+        .ok_or_else(|| AppError::ServiceUnavailable("Identity provider returned an invalid invitation.".into()))?;
+    if !matches!(status, "pending" | "accepted" | "declined" | "revoked" | "expired") {
+        return Err(AppError::ServiceUnavailable("Identity provider returned an invalid invitation status.".into()));
+    }
+    let local_status = match status { "declined" => Some("rejected"), "revoked" => Some("withdrawn"), "expired" => Some("expired"), _ => None };
+    if let Some(local_status) = local_status {
+        let changed = sqlx::query("UPDATE workspace_invitations SET status=$2,responded_at=NOW() WHERE id=$1 AND status='pending'")
+            .bind(row.id).bind(local_status).execute(pool).await
+            .map_err(|_| AppError::InternalServerError)?.rows_affected() > 0;
+        if changed && status == "declined" {
+            if let Some(inviter) = row.invited_by {
+                let _ = notification_repository::create_notification(pool, row.tenant_id, inviter,
+                    "invitation_rejected", "Invitation declined",
+                    &format!("{} declined your invitation.", row.email), None).await;
+            }
+        }
+    }
+    Ok(status.to_string())
 }
 
 pub async fn accept_invitation(
     pool: &DbPool,
+    settings: &Settings,
     user_id: Uuid,
     invitation_id: Uuid,
 ) -> Result<(), AppError> {
@@ -263,11 +374,74 @@ pub async fn accept_invitation(
             tracing::error!(%error, invitation_id = %invitation_id, "error expiring invitation");
             AppError::InternalServerError
         })?;
+    if let Some(invitation) = invitation_repository::pending_for_user(pool, invitation_id, user_id)
+        .await.map_err(|_| AppError::InternalServerError)? {
+        let linked = crate::external_identity::linked_workspace(pool, settings, invitation.tenant_id).await?;
+        if linked && invitation.provider_id.is_none() { return Err(AppError::Forbidden); }
+        if let (Some(provider_id), Some(provider_invitation_id)) =
+            (&invitation.provider_id, invitation.provider_invitation_id) {
+            verify_provider_invitation(pool, settings, &invitation, provider_id, provider_invitation_id, user_id).await?;
+        }
+    }
     accept_bound_invitation(pool, user_id, invitation_id, None).await
 }
 
-pub async fn redeem_invitation(pool: &DbPool, user_id: Uuid, code: &str) -> Result<(), AppError> {
+async fn verify_provider_invitation(pool: &DbPool, settings: &Settings, invitation: &InvitationRow,
+    provider_id: &str, provider_invitation_id: Uuid, user_id: Uuid) -> Result<(), AppError> {
+    if crate::external_identity::provider_id(settings)? != provider_id
+        || !crate::external_identity::linked_workspace(pool, settings, invitation.tenant_id).await? {
+        return Err(AppError::ServiceUnavailable("Identity provider is not linked to this workspace.".into()));
+    }
+    let subject: String = sqlx::query_scalar("SELECT subject FROM user_identities WHERE user_id=$1 AND provider_id=$2")
+        .bind(user_id).bind(provider_id).fetch_optional(pool).await
+        .map_err(|_| AppError::InternalServerError)?.ok_or(AppError::Forbidden)?;
+    let subject_segment = crate::external_identity::encoded_subject(&subject)?;
+    let provider_invitation = crate::external_identity::call_bridge(settings, reqwest::Method::GET,
+        &format!("/v1/workspaces/{}/invitations/{provider_invitation_id}", invitation.tenant_id), None, None).await?;
+    if provider_invitation.get("id").and_then(|value| value.as_str()) != Some(provider_invitation_id.to_string().as_str())
+        || provider_invitation.get("email").and_then(|value| value.as_str())
+            .is_none_or(|email| !email.eq_ignore_ascii_case(&invitation.email)) {
+        return Err(AppError::ServiceUnavailable("Identity provider returned inconsistent invitation data.".into()));
+    }
+    if !provider_invitation_allows(&provider_invitation, &subject) {
+        return Err(AppError::Forbidden);
+    }
+    let member = crate::external_identity::call_bridge(settings, reqwest::Method::GET,
+        &format!("/v1/workspaces/{}/subjects/{subject_segment}", invitation.tenant_id), None, None).await?;
+    if member.get("subject").and_then(|value| value.as_str()) != Some(subject.as_str())
+        || member.get("status").and_then(|value| value.as_str()) != Some("active") {
+        return Err(AppError::Forbidden);
+    }
+    Ok(())
+}
+
+fn provider_invitation_allows(invitation: &serde_json::Value, subject: &str) -> bool {
+    invitation.get("status").and_then(|value| value.as_str()) == Some("accepted")
+        && invitation.get("accepted_user_id").and_then(|value| value.as_str()) == Some(subject)
+}
+
+#[cfg(test)]
+mod provider_invitation_tests {
+    use super::provider_invitation_allows;
+    use serde_json::json;
+
+    #[test]
+    fn only_the_verified_accepting_subject_can_activate_staff_access() {
+        let active = json!({"status":"accepted", "accepted_user_id":"user-a"});
+        assert!(provider_invitation_allows(&active, "user-a"));
+        assert!(!provider_invitation_allows(&active, "user-b"));
+        assert!(!provider_invitation_allows(&json!({"status":"pending", "accepted_user_id":"user-a"}), "user-a"));
+        assert!(!provider_invitation_allows(&json!({"status":"declined", "accepted_user_id":"user-a"}), "user-a"));
+        assert!(!provider_invitation_allows(&json!({"status":"accepted"}), "user-a"));
+    }
+}
+
+pub async fn redeem_invitation(pool: &DbPool, settings: &Settings, user_id: Uuid, code: &str) -> Result<(), AppError> {
     let code_hash = validate_invitation_code(pool, user_id, code).await?;
+    let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM workspace_invitations WHERE redemption_code_hash=$1 AND status='pending' AND COALESCE(expires_at,created_at+INTERVAL '7 days')>NOW()")
+        .bind(&code_hash).fetch_optional(pool).await.map_err(|_| AppError::InternalServerError)?
+        .ok_or(AppError::NotFound)?;
+    if crate::external_identity::linked_workspace(pool, settings, tenant_id).await? { return Err(AppError::Forbidden); }
     accept_bound_invitation(pool, user_id, Uuid::nil(), Some(&code_hash)).await
 }
 
@@ -417,6 +591,7 @@ async fn accept_bound_invitation(
 
 pub async fn reject_invitation(
     pool: &DbPool,
+    settings: &Settings,
     user_id: Uuid,
     invitation_id: Uuid,
 ) -> Result<(), AppError> {
@@ -426,6 +601,16 @@ pub async fn reject_invitation(
             tracing::error!(%error, invitation_id = %invitation_id, "error expiring invitation");
             AppError::InternalServerError
         })?;
+    if let Some(pending) = invitation_repository::pending_for_user(pool, invitation_id, user_id)
+        .await.map_err(|_| AppError::InternalServerError)? {
+        if let Some(provider_invitation_id) = pending.provider_invitation_id {
+            if refresh_provider_invitation(pool, settings, &pending).await? != "pending" {
+                return Err(AppError::BadRequest("This invitation can no longer be declined here.".into()));
+            }
+            crate::external_identity::call_bridge(settings, reqwest::Method::DELETE,
+                &format!("/v1/workspaces/{}/invitations/{provider_invitation_id}", pending.tenant_id), None, None).await?;
+        }
+    }
     let invitation = invitation_repository::respond(pool, invitation_id, user_id, "rejected")
         .await
         .map_err(|error| {

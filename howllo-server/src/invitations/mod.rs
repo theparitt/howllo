@@ -3,6 +3,7 @@ use serde::Deserialize;
 
 use crate::auth::AuthenticatedUser;
 use crate::db::DbPool;
+use crate::config::Settings;
 use crate::errors::AppError;
 use crate::services::invitation_service;
 
@@ -23,11 +24,13 @@ pub struct TenantScopeQuery {
 #[post("/api/admin/invitations")]
 pub async fn create_invitation(
     pool: web::Data<DbPool>,
+    settings: web::Data<Settings>,
     body: web::Json<CreateInvitationRequest>,
     auth: AuthenticatedUser,
 ) -> Result<impl Responder, AppError> {
     let created = invitation_service::create_invitation(
         pool.get_ref(),
+        settings.get_ref(),
         &body.tenant_slug,
         auth.0.id,
         &body.email,
@@ -43,6 +46,7 @@ pub async fn create_invitation(
             "role": created.invitation.role,
             "status": created.invitation.status,
             "redemption_code": created.redemption_code,
+            "provider_id": created.invitation.provider_id,
         })))
 }
 
@@ -54,10 +58,11 @@ pub struct RedeemInvitationRequest {
 #[post("/api/me/invitations/redeem")]
 pub async fn redeem_invitation(
     pool: web::Data<DbPool>,
+    settings: web::Data<Settings>,
     body: web::Json<RedeemInvitationRequest>,
     auth: AuthenticatedUser,
 ) -> Result<impl Responder, AppError> {
-    invitation_service::redeem_invitation(pool.get_ref(), auth.0.id, &body.code).await?;
+    invitation_service::redeem_invitation(pool.get_ref(), settings.get_ref(), auth.0.id, &body.code).await?;
     Ok(HttpResponse::Ok().finish())
 }
 
@@ -74,23 +79,26 @@ pub async fn decline_invitation_code(
 #[get("/api/admin/invitations")]
 pub async fn list_invitations(
     pool: web::Data<DbPool>,
+    settings: web::Data<Settings>,
     query: web::Query<TenantScopeQuery>,
     auth: AuthenticatedUser,
 ) -> Result<impl Responder, AppError> {
     let items =
-        invitation_service::list_invitations(pool.get_ref(), &query.tenant_slug, auth.0.id).await?;
+        invitation_service::list_invitations(pool.get_ref(), settings.get_ref(), &query.tenant_slug, auth.0.id).await?;
     Ok(HttpResponse::Ok().json(items))
 }
 
 #[post("/api/admin/invitations/{invitation_id}/withdraw")]
 pub async fn withdraw_invitation(
     pool: web::Data<DbPool>,
+    settings: web::Data<Settings>,
     path: web::Path<uuid::Uuid>,
     query: web::Query<TenantScopeQuery>,
     auth: AuthenticatedUser,
 ) -> Result<impl Responder, AppError> {
     invitation_service::withdraw_invitation(
         pool.get_ref(),
+        settings.get_ref(),
         &query.tenant_slug,
         auth.0.id,
         path.into_inner(),
@@ -104,35 +112,39 @@ pub async fn withdraw_invitation(
 #[get("/api/me/invitations")]
 pub async fn list_my_invitations(
     pool: web::Data<DbPool>,
+    settings: web::Data<Settings>,
     auth: AuthenticatedUser,
 ) -> Result<impl Responder, AppError> {
-    let items = invitation_service::list_my_invitations(pool.get_ref(), auth.0.id).await?;
+    let items = invitation_service::list_my_invitations(pool.get_ref(), settings.get_ref(), auth.0.id).await?;
     Ok(HttpResponse::Ok().json(items))
 }
 
 #[post("/api/me/invitations/{invitation_id}/accept")]
 pub async fn accept_invitation(
     pool: web::Data<DbPool>,
+    settings: web::Data<Settings>,
     path: web::Path<uuid::Uuid>,
     auth: AuthenticatedUser,
 ) -> Result<impl Responder, AppError> {
-    invitation_service::accept_invitation(pool.get_ref(), auth.0.id, path.into_inner()).await?;
+    invitation_service::accept_invitation(pool.get_ref(), settings.get_ref(), auth.0.id, path.into_inner()).await?;
     Ok(HttpResponse::Ok().finish())
 }
 
 #[post("/api/me/invitations/{invitation_id}/reject")]
 pub async fn reject_invitation(
     pool: web::Data<DbPool>,
+    settings: web::Data<Settings>,
     path: web::Path<uuid::Uuid>,
     auth: AuthenticatedUser,
 ) -> Result<impl Responder, AppError> {
-    invitation_service::reject_invitation(pool.get_ref(), auth.0.id, path.into_inner()).await?;
+    invitation_service::reject_invitation(pool.get_ref(), settings.get_ref(), auth.0.id, path.into_inner()).await?;
     Ok(HttpResponse::Ok().finish())
 }
 
 #[cfg(test)]
 mod tests {
-    use actix_web::{http::StatusCode, test, web, App};
+    use actix_web::{http::StatusCode, test, web, App, HttpRequest, HttpResponse, HttpServer};
+    use std::sync::{Arc, atomic::{AtomicU8, Ordering}};
     use serde_json::json;
     use uuid::Uuid;
 
@@ -144,16 +156,6 @@ mod tests {
 
     const STAFF_EMAIL: &str = "newstaff@example.com";
     const STAFF_SUBJECT: &str = "newstaff-sub";
-
-    async fn setup() -> (crate::config::Settings, crate::db::DbPool, SeedData) {
-        let settings = test_settings();
-        let pool = db::establish_connection(&settings.database_url)
-            .await
-            .unwrap();
-        reset_db(&pool).await;
-        let seed = seed_basic_tenant(&pool).await;
-        (settings, pool, seed)
-    }
 
     macro_rules! app {
         ($pool:expr, $settings:expr) => {
@@ -167,6 +169,92 @@ mod tests {
             )
             .await
         };
+    }
+
+    #[actix_web::test]
+    async fn linked_invitation_requires_matching_provider_acceptance_and_active_membership() {
+        let _guard = lock_test_db().await;
+        let (mut settings, pool, seed) = setup().await;
+        let invite_id = Uuid::new_v4();
+        let subject = Uuid::new_v4().to_string();
+        let provider_state = Arc::new(AtomicU8::new(0));
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let state_for_server = provider_state.clone();
+        let subject_for_server = subject.clone();
+        let server = HttpServer::new(move || {
+            let state = state_for_server.clone();
+            let subject = subject_for_server.clone();
+            App::new().app_data(web::Data::new((state, subject)))
+                .default_service(web::to(move |req: HttpRequest, data: web::Data<(Arc<AtomicU8>, String)>| async move {
+                    let path = req.path();
+                    let status = data.0.load(Ordering::SeqCst);
+                    if path.ends_with("/link") {
+                        if status == 5 { return HttpResponse::ServiceUnavailable().finish(); }
+                        if status == 6 { return HttpResponse::NotFound().finish(); }
+                        return HttpResponse::Ok().json(json!({"linked":true}));
+                    }
+                    if path.ends_with("/invitations") && req.method() == actix_web::http::Method::POST {
+                        return HttpResponse::Created().json(json!({"id":invite_id,"email":STAFF_EMAIL}));
+                    }
+                    if path.ends_with(&format!("/invitations/{invite_id}")) {
+                        return HttpResponse::Ok().json(json!({"id":invite_id,"email":if status == 4 {"wrong@example.com"} else {STAFF_EMAIL},
+                            "status":if status == 0 {"pending"} else {"accepted"},
+                            "accepted_user_id":if status == 1 {"another-subject"} else {data.1.as_str()}}));
+                    }
+                    if path.contains("/subjects/") {
+                        return HttpResponse::Ok().json(json!({"subject":data.1,"status":if status == 3 {"suspended"} else {"active"}}));
+                    }
+                    HttpResponse::NotFound().finish()
+                }))
+        }).listen(listener).unwrap().run();
+        let handle = server.handle();
+        actix_web::rt::spawn(server);
+        settings.identity_bridge_url = Some(format!("http://127.0.0.1:{port}"));
+        settings.identity_bridge_token = Some("test-bridge-token-with-at-least-32-characters".into());
+        settings.identity_bridge_provider_id = Some("rooiam".into());
+        let app = app!(pool, settings);
+        let admin = bearer_for(&seed.admin_subject, "admin@example.com", "Admin", &settings.rooiam_jwt_secret);
+        let create = test::call_service(&app, test::TestRequest::post().uri("/api/admin/invitations")
+            .insert_header(("Authorization", admin)).set_json(json!({"tenant_slug":seed.tenant_slug,
+                "email":STAFF_EMAIL,"role":"moderator"})).to_request()).await;
+        assert_eq!(create.status(), StatusCode::CREATED);
+        let created = read_json(create).await;
+        assert_eq!(created["provider_id"], "rooiam");
+        assert_eq!(created["redemption_code"], "");
+        let staff = bearer_for(&subject, STAFF_EMAIL, "Staff", &settings.rooiam_jwt_secret);
+        let mine = read_json(test::call_service(&app, test::TestRequest::get()
+            .uri("/api/me/invitations").insert_header(("Authorization", staff.clone())).to_request()).await).await;
+        let local_id = mine[0]["id"].as_str().unwrap();
+        let accept = || test::TestRequest::post().uri(&format!("/api/me/invitations/{local_id}/accept"))
+            .insert_header(("Authorization", staff.clone())).to_request();
+        assert_eq!(test::call_service(&app, accept()).await.status(), StatusCode::FORBIDDEN);
+        provider_state.store(1, Ordering::SeqCst);
+        assert_eq!(test::call_service(&app, accept()).await.status(), StatusCode::FORBIDDEN);
+        provider_state.store(3, Ordering::SeqCst);
+        assert_eq!(test::call_service(&app, accept()).await.status(), StatusCode::FORBIDDEN);
+        provider_state.store(4, Ordering::SeqCst);
+        assert_eq!(test::call_service(&app, accept()).await.status(), StatusCode::SERVICE_UNAVAILABLE);
+        provider_state.store(5, Ordering::SeqCst);
+        assert_eq!(test::call_service(&app, accept()).await.status(), StatusCode::SERVICE_UNAVAILABLE);
+        provider_state.store(6, Ordering::SeqCst);
+        assert_eq!(test::call_service(&app, accept()).await.status(), StatusCode::SERVICE_UNAVAILABLE);
+        provider_state.store(2, Ordering::SeqCst);
+        assert_eq!(test::call_service(&app, accept()).await.status(), StatusCode::OK);
+        let role: String = sqlx::query_scalar("SELECT role FROM memberships WHERE tenant_id=(SELECT id FROM tenants WHERE slug=$1) AND user_id=(SELECT user_id FROM user_identities WHERE provider_id='rooiam' AND subject=$2)")
+            .bind(&seed.tenant_slug).bind(&subject).fetch_one(&pool).await.unwrap();
+        assert_eq!(role, "moderator");
+        handle.stop(true).await;
+    }
+
+    async fn setup() -> (crate::config::Settings, crate::db::DbPool, SeedData) {
+        let settings = test_settings();
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+        (settings, pool, seed)
     }
 
     #[actix_web::test]

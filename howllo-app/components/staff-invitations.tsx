@@ -107,7 +107,9 @@ export function StaffInvitations() {
         }
       }
     } catch (cause) {
-      setError(invitationError(cause));
+      setError(action === "accept" && item.provider_id && cause instanceof ApiError && (cause.status === 403 || cause.status === 404)
+        ? "Accept the invitation in your sign-in provider first, then try again here."
+        : invitationError(cause));
       setBusy(null);
     }
   };
@@ -118,7 +120,7 @@ export function StaffInvitations() {
       <h2 className="section-title">Staff invitations</h2>
       <details className="staff-invitations__help">
         <summary aria-label="About staff invitations">?</summary>
-        <p>An owner or admin invites you to help manage a workspace. Accept to join with the role shown below, or use a one-time code they shared with you.</p>
+        <p>An owner or admin invites you to help manage a workspace. If your invitation came through your sign-in provider, accept its email first. Then join here.</p>
       </details>
     </div> : null}
     {items.map((item) => <div className="manage-row" key={item.id}>
@@ -127,7 +129,7 @@ export function StaffInvitations() {
         <p className="section-subtitle">Invited as {item.role}{item.invited_by_name ? ` by ${item.invited_by_name}` : ""} · {item.email}</p>
       </div>
       <div className="manage-row__actions">
-        <button className="button button--cta" type="button" disabled={Boolean(busy)} onClick={() => void respond(item, "accept")}>{busy === item.id ? "Opening…" : "Accept"}</button>
+        <button className="button button--cta" type="button" disabled={Boolean(busy)} onClick={() => void respond(item, "accept")}>{busy === item.id ? "Opening…" : item.provider_id ? "Join workspace" : "Accept"}</button>
         <button className="ghost-button" type="button" disabled={Boolean(busy)} onClick={() => void respond(item, "reject")}>Decline</button>
       </div>
     </div>)}

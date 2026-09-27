@@ -461,13 +461,13 @@ export async function managerCreateInvitation(
   tenantSlug: string,
   input: { email: string; role: string },
   token: string,
-): Promise<{ id: string; redemption_code: string }> {
+): Promise<{ id: string; redemption_code: string; provider_id: string | null }> {
   const response = await apiFetch(buildUrl("/api/admin/invitations"), {
     method: "POST",
     headers: { Authorization: token, "Content-Type": "application/json" },
     body: JSON.stringify({ ...input, tenant_slug: tenantSlug }),
   });
-  return unwrap<{ id: string; redemption_code: string }>(response);
+  return unwrap<{ id: string; redemption_code: string; provider_id: string | null }>(response);
 }
 
 export async function managerWithdrawInvitation(id: string, tenantSlug: string, token: string): Promise<void> {
@@ -518,6 +518,16 @@ export async function managerRevokeIdentityMemberSessions(
 ): Promise<void> {
   const response = await apiFetch(
     buildUrl(`/api/admin/identity/members/${encodeURIComponent(memberId)}/sessions?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { method: "DELETE", headers: { Authorization: token } },
+  );
+  if (!response.ok) await unwrap<unknown>(response);
+}
+
+export async function managerRemoveIdentityMember(
+  tenantSlug: string, memberId: string, token: string,
+): Promise<void> {
+  const response = await apiFetch(
+    buildUrl(`/api/admin/identity/members/${encodeURIComponent(memberId)}?tenant_slug=${encodeURIComponent(tenantSlug)}`),
     { method: "DELETE", headers: { Authorization: token } },
   );
   if (!response.ok) await unwrap<unknown>(response);

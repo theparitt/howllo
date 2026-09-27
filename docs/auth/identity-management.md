@@ -45,7 +45,10 @@ workspace:
    provider request must never silently fall back to local authorization.
 
 The integration needs a one-to-one mapping from a Howllo workspace to the
-provider organization/workspace. A global login client ID is not sufficient
+provider organization/workspace. Howllo records a selected provider when a
+workspace first appears in the bridge; removing that mapping later fails closed
+instead of silently switching the workspace back to local invitations. A global
+login client ID is not sufficient
 for managing multiple Howllo workspaces. Store provider API keys as server
 secrets scoped to their mapped workspace; never send them to App or Web.
 
@@ -80,18 +83,25 @@ members or connect session management. Public-board RooIAM login is configured
 separately per workspace. Do not describe a deployment as fully RooIAM-managed
 until those management capabilities are connected and verified end to end.
 
-The first optional bridge implementation adds a staff-visible sign-in account
-directory and member-session revocation to App → Staff. It is hidden on local
-installations. The bridge lives outside the public repository. RooIAM-backed
-staff invitation acceptance and user self-session management are not connected
-yet; the local invitation flow remains authoritative until reconciliation is
-implemented and tested.
+The optional bridge is hidden on local installations and lives outside the
+public repository. For a linked workspace, Howllo sends staff invitations
+through the bridge and keeps the requested product role pending. The invitee
+accepts in the identity provider first, then joins in Howllo App. Howllo checks
+the provider invitation's accepted subject and active workspace membership
+before granting the product role. The inviter sees provider invitation status
+in App → Staff. Standalone workspaces retain Howllo's one-time-code flow.
+Removing an account through App revokes its provider membership and Howllo
+workspace access. Howllo revokes its own access first; if the provider call
+fails, retry the removal in App after the provider recovers. Removals made
+directly in the provider are not yet reconciled
+with existing Howllo sessions. User self-session management remains unfinished;
+these gaps must close before claiming full provider-managed access.
 
 | Capability | Standalone Howllo | Hosted bridge today |
 | --- | --- | --- |
 | Staff and customer sign-in | Local or configured OIDC | Existing RooIAM widget login can be selected |
-| Staff invitations and role grants | Howllo one-time code and Howllo roles | Still Howllo-owned; RooIAM SDK invitation is not wired to acceptance |
-| Sign-in account directory | Howllo staff/board member lists | Optional provider directory in App → Staff |
+| Staff invitations and role grants | Howllo one-time code and Howllo roles | RooIAM invitation; Howllo grants the requested role after verifying the accepted subject and active membership |
+| Sign-in account directory | Howllo staff/board member lists | Provider directory in App → Staff; workspace owners can remove a provider member and its Howllo workspace access |
 | Staff view of member sessions | Howllo sessions | Optional provider session list; workspace owners can revoke them and linked Howllo workspace sessions |
 | End-user self-session management | Howllo account logout | Pending server-held OIDC access-token flow |
 

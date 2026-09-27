@@ -182,6 +182,22 @@ pub async fn create_workspace_session(
     // Staff sign-in stays independent of public board sign-in settings.
     let is_staff: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM memberships WHERE tenant_id=$1 AND user_id=$2 AND role IN ('owner','admin','moderator'))")
         .bind(tenant_id).bind(user.id).fetch_one(pool.get_ref()).await.map_err(|_| AppError::InternalServerError)?;
+    if crate::external_identity::linked_workspace(pool.get_ref(), settings.get_ref(), tenant_id).await? {
+        let provider_id = crate::external_identity::provider_id(settings.get_ref())?;
+        let subject: Option<String> = sqlx::query_scalar("SELECT subject FROM user_identities WHERE user_id=$1 AND provider_id=$2")
+            .bind(user.id).bind(provider_id).fetch_optional(pool.get_ref()).await
+            .map_err(|_| AppError::InternalServerError)?;
+        if is_staff || subject.is_some() {
+            let subject = subject.ok_or(AppError::Forbidden)?;
+            let subject_segment = crate::external_identity::encoded_subject(&subject)?;
+            let member = crate::external_identity::call_bridge(settings.get_ref(), reqwest::Method::GET,
+                &format!("/v1/workspaces/{tenant_id}/subjects/{subject_segment}"), None, None).await?;
+            if member.get("subject").and_then(|value| value.as_str()) != Some(subject.as_str())
+                || member.get("status").and_then(|value| value.as_str()) != Some("active") {
+                return Err(AppError::Forbidden);
+            }
+        }
+    }
     if account_session
         .as_ref()
         .and_then(|(scope, _)| *scope)

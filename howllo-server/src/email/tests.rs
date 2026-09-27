@@ -770,6 +770,7 @@ async fn invitation_and_reset_request_limits_survive_new_handlers() {
     .unwrap();
     let blocked = crate::services::invitation_service::create_invitation(
         &pool,
+        &settings,
         &slug,
         actor,
         "new-staff@example.test",

@@ -5,6 +5,7 @@ import {
   managerIdentityMemberSessions,
   managerIdentityMembers,
   managerIdentityStatus,
+  managerRemoveIdentityMember,
   managerRevokeIdentityMemberSessions,
 } from "@/lib/api";
 import type { IdentityDirectoryMember, IdentityDirectorySession, IdentityDirectoryPage } from "@/lib/types";
@@ -17,6 +18,7 @@ export function IdentityDirectory({ tenant, canRevoke }: { tenant: string; canRe
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
+  const [refreshEpoch, setRefreshEpoch] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -34,7 +36,7 @@ export function IdentityDirectory({ tenant, canRevoke }: { tenant: string; canRe
       .then((result) => { if (active) { setItems(result); setError(""); } })
       .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "Could not load sign-in accounts."); });
     return () => { active = false; };
-  }, [enabled, tenant, page, search]);
+  }, [enabled, tenant, page, search, refreshEpoch]);
 
   if (!enabled && !error) return null;
 
@@ -47,7 +49,7 @@ export function IdentityDirectory({ tenant, canRevoke }: { tenant: string; canRe
         <button className="ghost-button" type="submit">Search</button>
       </form>
       <div className="list-stack" style={{ marginTop: "1rem" }}>
-        {items?.items.map((member) => <IdentityMemberRow key={member.id} tenant={tenant} member={member} canRevoke={canRevoke} />)}
+        {items?.items.map((member) => <IdentityMemberRow key={member.id} tenant={tenant} member={member} canRevoke={canRevoke} onRemoved={() => setRefreshEpoch((value) => value + 1)} />)}
       </div>
       {items?.items.length === 0 ? <p className="section-subtitle">No matching accounts.</p> : null}
       {items && items.total > items.page_size ? <div className="manage-row__actions" style={{ marginTop: "1rem" }}>
@@ -60,7 +62,7 @@ export function IdentityDirectory({ tenant, canRevoke }: { tenant: string; canRe
   </section>;
 }
 
-function IdentityMemberRow({ tenant, member, canRevoke }: { tenant: string; member: IdentityDirectoryMember; canRevoke: boolean }) {
+function IdentityMemberRow({ tenant, member, canRevoke, onRemoved }: { tenant: string; member: IdentityDirectoryMember; canRevoke: boolean; onRemoved: () => void }) {
   const [open, setOpen] = useState(false);
   const [sessions, setSessions] = useState<IdentityDirectorySession[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -88,10 +90,24 @@ function IdentityMemberRow({ tenant, member, canRevoke }: { tenant: string; memb
     } finally { setBusy(false); }
   };
 
+  const remove = async () => {
+    if (!window.confirm(`Remove ${member.display_name || member.email || "this account"} from this sign-in workspace and Howllo? Their sessions here will end.`)) return;
+    setBusy(true); setError("");
+    try {
+      await managerRemoveIdentityMember(tenant, member.id, readStoredBearerToken(tenant).trim());
+      onRemoved();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not remove account.");
+    } finally { setBusy(false); }
+  };
+
   return <div className="manage-row" style={{ display: "block" }}>
     <div className="manage-row__actions" style={{ justifyContent: "space-between" }}>
       <div><strong>{member.display_name || member.email || "Account"}</strong><p className="section-subtitle">{member.email || "No email"} · {member.status}</p></div>
-      <button className="ghost-button" type="button" disabled={busy} onClick={() => void showSessions()}>{open ? "Hide sessions" : "Sessions"}</button>
+      <div className="manage-row__actions">
+        <button className="ghost-button" type="button" disabled={busy} onClick={() => void showSessions()}>{open ? "Hide sessions" : "Sessions"}</button>
+        {canRevoke ? <button className="ghost-button" type="button" disabled={busy} onClick={() => void remove()}>Remove account</button> : null}
+      </div>
     </div>
     {open ? <div style={{ marginTop: "0.75rem" }}>
       {sessions?.length ? sessions.map((session) => <p className="section-subtitle" key={session.id}>{session.user_agent || "Unknown device"} · {session.ip || "Unknown IP"} · {new Date(session.last_seen_at || session.created_at).toLocaleString()}</p>) : <p className="section-subtitle">No active sessions.</p>}

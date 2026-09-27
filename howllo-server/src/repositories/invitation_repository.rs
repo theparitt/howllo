@@ -14,6 +14,8 @@ pub struct InvitationRow {
     pub user_id: Option<Uuid>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub responded_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub provider_id: Option<String>,
+    pub provider_invitation_id: Option<Uuid>,
 }
 
 /// An invitation joined with the workspace + inviter for display.
@@ -29,10 +31,12 @@ pub struct InvitationListItem {
     pub accepted_user_id: Option<Uuid>,
     pub accepted_user_name: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    pub provider_id: Option<String>,
+    pub provider_status: Option<String>,
 }
 
 const ROW_COLS: &str =
-    "id, tenant_id, email, role, status, invited_by, user_id, created_at, responded_at";
+    "id, tenant_id, email, role, status, invited_by, user_id, created_at, responded_at, provider_id, provider_invitation_id";
 
 /// Does a real account already exist for this (lowercased) email? Used to stamp
 /// user_id at invite time so the notification/feed can reach them immediately.
@@ -73,6 +77,28 @@ pub async fn create(
     .await
 }
 
+pub async fn create_provider(
+    pool: &DbPool,
+    tenant_id: Uuid,
+    email_lower: &str,
+    role: &str,
+    invited_by: Uuid,
+    provider_id: &str,
+    provider_invitation_id: Uuid,
+) -> Result<InvitationRow, sqlx::Error> {
+    expire_for_email(pool, tenant_id, email_lower).await?;
+    sqlx::query_as::<_, InvitationRow>(&format!(
+        "INSERT INTO workspace_invitations (tenant_id,email,role,invited_by,expires_at,provider_id,provider_invitation_id) VALUES ($1,$2,$3,$4,NOW()+INTERVAL '7 days',$5,$6) RETURNING {ROW_COLS}"
+    ))
+    .bind(tenant_id).bind(email_lower).bind(role).bind(invited_by).bind(provider_id).bind(provider_invitation_id)
+    .fetch_one(pool).await
+}
+
+pub async fn pending_for_user(pool: &DbPool, invitation_id: Uuid, user_id: Uuid) -> Result<Option<InvitationRow>, sqlx::Error> {
+    sqlx::query_as::<_, InvitationRow>(&format!("SELECT {ROW_COLS} FROM workspace_invitations WHERE id=$1 AND user_id=$2 AND status='pending' AND COALESCE(expires_at,created_at+INTERVAL '7 days')>NOW()"))
+        .bind(invitation_id).bind(user_id).fetch_optional(pool).await
+}
+
 pub async fn get(pool: &DbPool, id: Uuid) -> Result<Option<InvitationRow>, sqlx::Error> {
     sqlx::query_as::<_, InvitationRow>(&format!(
         "SELECT {ROW_COLS} FROM workspace_invitations WHERE id = $1"
@@ -99,7 +125,7 @@ pub async fn list_for_tenant(
                u.display_name AS invited_by_name,
                CASE WHEN i.status = 'accepted' THEN i.user_id END AS accepted_user_id,
                CASE WHEN i.status = 'accepted' THEN accepted_user.display_name END AS accepted_user_name,
-               i.created_at
+               i.created_at, i.provider_id, NULL::text AS provider_status
         FROM workspace_invitations i
         JOIN tenants t ON t.id = i.tenant_id
         LEFT JOIN users u ON u.id = i.invited_by
@@ -130,7 +156,7 @@ pub async fn list_pending_for_user(
                u.display_name AS invited_by_name,
                NULL::uuid AS accepted_user_id,
                NULL::text AS accepted_user_name,
-               i.created_at
+               i.created_at, i.provider_id, NULL::text AS provider_status
         FROM workspace_invitations i
         JOIN tenants t ON t.id = i.tenant_id
         LEFT JOIN users u ON u.id = i.invited_by

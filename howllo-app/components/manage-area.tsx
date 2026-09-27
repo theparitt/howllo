@@ -19,6 +19,7 @@ import {
   managerListBoards,
   managerGetBoardCount,
   managerListInvitations,
+  managerIdentityStatus,
   managerListMembers,
   managerRemoveMember,
   managerUpdateBoard,
@@ -252,6 +253,7 @@ export function ManageArea() {
 }
 
 function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
+  const [linkedIdentity, setLinkedIdentity] = useState(false);
   const [invites, setInvites] = useState<MyInvitation[]>([]);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [email, setEmail] = useState("");
@@ -279,9 +281,10 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
     const generation = ++reloadGeneration.current;
     setRefreshing(true);
     try {
-      const [inv, mem] = await Promise.all([
+      const [inv, mem, identity] = await Promise.all([
         managerListInvitations(tenant, t),
         managerListMembers(tenant, t),
+        managerIdentityStatus(tenant, t),
       ]);
       if (generation !== reloadGeneration.current) return;
       if (knownStatuses.current) {
@@ -292,6 +295,7 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
       knownStatuses.current = new Map(inv.map((item) => [item.id, item.status]));
       setInvites(inv);
       setMembers(mem);
+      setLinkedIdentity(identity.enabled);
       setListError("");
     } catch (cause) {
       if (generation === reloadGeneration.current) setListError(cause instanceof Error ? cause.message : "Could not refresh staff.");
@@ -324,7 +328,9 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
     setInviteCode("");
     try {
       const created = await managerCreateInvitation(tenant, { email: email.trim(), role: inviteRole }, token());
-      setNotice(`Invitation created for ${email.trim()}. Copy the one-time code now; it will not be shown again.`);
+      setNotice(created.provider_id
+        ? `Invitation sent to ${email.trim()}. They must accept it in the sign-in provider, then join this workspace in Howllo App.`
+        : `Invitation created for ${email.trim()}. Copy the one-time code now; it will not be shown again.`);
       setInviteCode(created.redemption_code);
       setEmail("");
       setInviteRole("moderator");
@@ -364,7 +370,9 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
             {busy ? "Creating…" : "Create invitation"}
           </button>
         </div>
-        <div className="section-subtitle" style={{ marginTop: "0.6rem" }}>Anyone with the one-time code can join, so share it only with your teammate. They enter it in Howllo App after signing in. If workspace email is enabled, the address above also receives the invitation. <HelpTip label="About staff roles">Admins can manage boards, settings, and staff. Moderators handle posts and comments. You can change their role after they join.</HelpTip></div>
+        <div className="section-subtitle" style={{ marginTop: "0.6rem" }}>{linkedIdentity
+          ? "They will receive an invitation from the sign-in provider. After accepting it, they can join in Howllo App."
+          : "Share the one-time code privately. If workspace email is enabled, they will also receive the invitation by email."} <HelpTip label="About staff roles">Admins can manage boards, settings, and staff. Moderators handle posts and comments. You can change their role after they join.</HelpTip></div>
         {notice ? <p className="success-text">{notice}</p> : null}
         {inviteCode ? <div className="manage-form" style={{ marginTop: "0.75rem" }}>
           <code style={{ overflowWrap: "anywhere" }}>{inviteCode}</code>
@@ -382,9 +390,9 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
               <div className="manage-row" key={inv.id}>
                 <div>
                   <strong>{inv.email}</strong>
-                  <p className="section-subtitle">{inv.role} · <span className="chip" data-tone={statusTone(inv.status)}>{inv.status}</span>{inv.status === "accepted" && inv.accepted_user_name ? <> · Joined as <strong>{inv.accepted_user_name}</strong></> : null}</p>
+                  <p className="section-subtitle">{inv.role} · <span className="chip" data-tone={statusTone(inv.status)}>{inv.provider_status === "accepted" && inv.status === "pending" ? "Accepted in sign-in provider · waiting to join Howllo" : inv.status}</span>{inv.status === "accepted" && inv.accepted_user_name ? <> · Joined as <strong>{inv.accepted_user_name}</strong></> : null}</p>
                 </div>
-                {inv.status === "pending" ? (
+                {inv.status === "pending" && inv.provider_status !== "accepted" ? (
                   <button type="button" className="ghost-button" onClick={async () => { try { await managerWithdrawInvitation(inv.id, tenant, token()); await reload(); } catch (cause) { setListError(cause instanceof Error ? cause.message : "Could not withdraw invitation."); } }}>
                     Withdraw
                   </button>

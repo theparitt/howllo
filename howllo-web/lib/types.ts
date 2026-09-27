@@ -271,6 +271,8 @@ export type MyInvitation = {
   accepted_user_id?: string | null;
   accepted_user_name?: string | null;
   created_at: string;
+  provider_id?: string | null;
+  provider_status?: string | null;
 };
 
 export type WorkspaceParticipant = {

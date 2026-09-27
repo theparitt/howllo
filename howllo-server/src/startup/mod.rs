@@ -59,6 +59,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(external_identity::list_provider_members)
         .service(external_identity::list_provider_member_sessions)
         .service(external_identity::revoke_provider_member_sessions)
+        .service(external_identity::remove_provider_member)
         .service(platform::get_platform_status)
         .service(email::availability)
         .service(email::get_platform_email)
