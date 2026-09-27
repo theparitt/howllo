@@ -232,6 +232,26 @@ pub async fn update_board(
         })?
         .ok_or(AppError::NotFound)?;
 
+    // Public screenshots have anonymous URLs. Changing a populated public
+    // board to private would leave those URLs accessible outside the board.
+    if is_private && !previous.is_private {
+        let has_public_attachments: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM posts WHERE board_id = $1 AND attachments <> '[]'::jsonb)",
+        )
+        .bind(board_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, %board_id, "could not check board attachments before privacy change");
+            AppError::InternalServerError
+        })?;
+        if has_public_attachments {
+            return Err(AppError::Validation(
+                "Remove public screenshots from this board before making it private.".into(),
+            ));
+        }
+    }
+
     let board = board_repository::update_board(
         &mut tx,
         board_id,

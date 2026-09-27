@@ -157,7 +157,7 @@ pub async fn get_board_for_update(
     board_id: Uuid,
 ) -> Result<Option<PreviousBoard>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT tenant_id, slug, name, description, board_type, intro_text, allow_votes, allow_comments, is_private, is_enabled, is_default, background_color, header_image_url, background_image_url FROM boards WHERE id = $1",
+        "SELECT tenant_id, slug, name, description, board_type, intro_text, allow_votes, allow_comments, is_private, is_enabled, is_default, background_color, header_image_url, background_image_url FROM boards WHERE id = $1 FOR UPDATE",
     )
     .bind(board_id)
     .fetch_optional(&mut **tx)

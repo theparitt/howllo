@@ -37,8 +37,10 @@ release blockers below.
    Private-board attachments need a private object path and authenticated
    download or short-lived signed URLs. Audit existing private content before
    promising that all board data is private. New private-board screenshot
-   uploads and attachment references are currently rejected; existing public
-   object URLs attached to private posts still require an audit and migration.
+   uploads and attachment references are currently rejected. A public board
+   with screenshots cannot become private until those references are removed.
+   Existing public object URLs attached to already-private posts still require
+   an audit and migration.
 3. **Finish proxy-aware rate limits.** Local auth, admin login and public
    writes now use PostgreSQL counters across replicas. The tunnel client IP
    header is accepted only from configured proxy networks (loopback by default).

@@ -487,6 +487,34 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn board_with_public_screenshots_cannot_become_private() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url).await.unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+        let board_id: uuid::Uuid = sqlx::query_scalar("SELECT board_id FROM posts WHERE id=$1")
+            .bind(seed.canonical_post_id).fetch_one(&pool).await.unwrap();
+        sqlx::query("UPDATE posts SET attachments=jsonb_build_array('https://assets.test/public.png') WHERE id=$1")
+            .bind(seed.canonical_post_id).execute(&pool).await.unwrap();
+        let app = test::init_service(App::new()
+            .app_data(web::Data::new(pool.clone()))
+            .app_data(web::Data::new(settings.clone()))
+            .configure(startup::configure)).await;
+        let token = bearer_for(&seed.admin_subject, "admin@example.com", "Admin", &settings.rooiam_jwt_secret);
+        let request = test::TestRequest::patch()
+            .uri(&format!("/api/admin/boards/{board_id}"))
+            .insert_header(("Authorization", token))
+            .set_json(json!({"name":"Features","board_type":"feature-requests","is_private":true}))
+            .to_request();
+        let response = test::call_service(&app, request).await;
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let remains_public: bool = sqlx::query_scalar("SELECT NOT is_private FROM boards WHERE id=$1")
+            .bind(board_id).fetch_one(&pool).await.unwrap();
+        assert!(remains_public);
+    }
+
+    #[actix_web::test]
     async fn moderator_cannot_create_board() {
         let settings = test_settings();
         let _guard = lock_test_db().await;

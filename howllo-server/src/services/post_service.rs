@@ -353,6 +353,34 @@ pub async fn create_post(
         .execute(&mut *tx)
         .await
         .map_err(|_| AppError::InternalServerError)?;
+    // Serialize a post with a board privacy change. The initial board lookup
+    // is outside this transaction and could otherwise become stale.
+    let current_board =
+        sqlx::query("SELECT is_private, is_enabled, board_type FROM boards WHERE id=$1 FOR SHARE")
+            .bind(board.board_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|_| AppError::InternalServerError)?
+            .ok_or(AppError::NotFound)?;
+    if !current_board.get::<bool, _>("is_enabled") {
+        return Err(AppError::NotFound);
+    }
+    if current_board.get::<bool, _>("is_private") {
+        memberships::require_private_access(pool, board.tenant_id, user_id).await?;
+        if !attachments.is_empty() {
+            return Err(AppError::Validation(
+                "Screenshots are unavailable on private boards until private storage is configured."
+                    .into(),
+            ));
+        }
+    }
+    let current_kind: String = current_board.get("board_type");
+    if matches!(
+        current_kind.as_str(),
+        "announcements" | "changelog" | "updates"
+    ) {
+        require_permission(pool, board.tenant_id, user_id, Permission::ModerateContent).await?;
+    }
     let activity = sqlx::query(
         r#"SELECT
             count(*) FILTER (WHERE created_at > now() - interval '1 hour')::bigint AS last_hour,
