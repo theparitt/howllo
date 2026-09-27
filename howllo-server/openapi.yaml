@@ -9,6 +9,19 @@ servers:
   - url: http://localhost:7700/api
     description: Local development
 paths:
+  /admin/moderation/posts:
+    get:
+      summary: Browse posts for workspace moderation
+      description: Includes approved, pending and hidden posts in the specified workspace; requires content-moderation permission.
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: tenant_slug, in: query, required: true, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string, maxLength: 120 } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        '200': { description: Paginated tenant-scoped posts with moderation state }
+        '403': { description: Caller cannot moderate this workspace }
   /admin/invitations:
     post:
       summary: Invite a workspace admin or moderator
@@ -52,6 +65,23 @@ paths:
         '200': { description: Invitation accepted and staff membership granted }
         '404': { description: Code invalid, expired, withdrawn or already used }
         '429': { description: Too many redemption attempts }
+  /me/invitations/decline:
+    post:
+      summary: Decline a staff invitation using its single-use code
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        '200': { description: Invitation declined; inviter receives a notification }
+        '404': { description: Code invalid, expired, withdrawn or already used }
+        '429': { description: Too many code attempts }
   /auth/providers:
     get:
       summary: List enabled login providers without secrets

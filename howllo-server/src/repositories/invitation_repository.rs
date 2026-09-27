@@ -26,6 +26,8 @@ pub struct InvitationListItem {
     pub tenant_slug: String,
     pub tenant_name: String,
     pub invited_by_name: Option<String>,
+    pub accepted_user_id: Option<Uuid>,
+    pub accepted_user_name: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -95,10 +97,13 @@ pub async fn list_for_tenant(
         SELECT i.id, i.email, i.role, i.status,
                t.slug AS tenant_slug, t.name AS tenant_name,
                u.display_name AS invited_by_name,
+               CASE WHEN i.status = 'accepted' THEN i.user_id END AS accepted_user_id,
+               CASE WHEN i.status = 'accepted' THEN accepted_user.display_name END AS accepted_user_name,
                i.created_at
         FROM workspace_invitations i
         JOIN tenants t ON t.id = i.tenant_id
         LEFT JOIN users u ON u.id = i.invited_by
+        LEFT JOIN users accepted_user ON accepted_user.id = i.user_id
         WHERE i.tenant_id = $1
         ORDER BY i.created_at DESC
         "#,
@@ -123,6 +128,8 @@ pub async fn list_pending_for_user(
         SELECT i.id, i.email, i.role, i.status,
                t.slug AS tenant_slug, t.name AS tenant_name,
                u.display_name AS invited_by_name,
+               NULL::uuid AS accepted_user_id,
+               NULL::text AS accepted_user_name,
                i.created_at
         FROM workspace_invitations i
         JOIN tenants t ON t.id = i.tenant_id
@@ -201,6 +208,20 @@ pub async fn respond_in_tx(
     .bind(id)
     .bind(user_id)
     .bind(new_status)
+    .fetch_optional(&mut **tx)
+    .await
+}
+
+pub async fn reject_code_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    code_hash: &str,
+    user_id: Uuid,
+) -> Result<Option<InvitationRow>, sqlx::Error> {
+    sqlx::query_as::<_, InvitationRow>(&format!(
+        "UPDATE workspace_invitations SET status='rejected', responded_at=NOW(), user_id=$2 WHERE redemption_code_hash=$1 AND status='pending' AND COALESCE(expires_at, created_at + INTERVAL '7 days') > NOW() RETURNING {ROW_COLS}"
+    ))
+    .bind(code_hash)
+    .bind(user_id)
     .fetch_optional(&mut **tx)
     .await
 }

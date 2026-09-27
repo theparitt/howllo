@@ -48,6 +48,16 @@ export function SecurityTab({ tenant }: { tenant: string }) {
   }
 
   if (!view || !form) return <section className="panel">{error || "Loading settings…"}</section>;
+  const postsPerHour = form.posts_per_hour ?? view.defaults.posts_per_hour;
+  const postsPerDay = form.posts_per_day ?? view.defaults.posts_per_day;
+  const commentsPerHour = form.comments_per_hour ?? view.defaults.comments_per_hour;
+  const commentsPerDay = form.comments_per_day ?? view.defaults.comments_per_day;
+  const postsLimitError = postsPerDay < postsPerHour
+    ? `Daily posts must be at least the hourly limit (${postsPerHour}). Empty uses the default of ${view.defaults.posts_per_day}.`
+    : "";
+  const commentsLimitError = commentsPerDay < commentsPerHour
+    ? `Daily comments must be at least the hourly limit (${commentsPerHour}). Empty uses the default of ${view.defaults.comments_per_day}.`
+    : "";
   return <section className="panel">
     <h2 className="section-title">Security and limits</h2>
     <p className="section-subtitle">Leave a limit empty to use the platform default. Activity spikes pause new posts or comments for a few minutes.</p>
@@ -58,6 +68,8 @@ export function SecurityTab({ tenant }: { tenant: string }) {
           placeholder={`Default: ${view.defaults[key]}`}
           value={form[key] ?? ""}
           onChange={(event) => setForm({ ...form, [key]: event.target.value === "" ? null : Number(event.target.value) })} />
+        {key === "posts_per_day" && postsLimitError ? <span className="error-text" role="alert">{postsLimitError}</span> : null}
+        {key === "comments_per_day" && commentsLimitError ? <span className="error-text" role="alert">{commentsLimitError}</span> : null}
       </label>)}
       <p className="section-subtitle">Storage used: {(view.storage_used_bytes / 1024 / 1024).toFixed(1)} MB of {view.effective.storage_mb} MB.</p>
       <h3 className="section-title">Posting access</h3>
@@ -70,7 +82,7 @@ export function SecurityTab({ tenant }: { tenant: string }) {
         <textarea className="manage-input" rows={3} value={form[key].join("\n")}
           onChange={(event) => setForm({ ...form, [key]: event.target.value.split(/\r?\n|,/).map((s) => s.trim()).filter(Boolean) })} />
       </label>)}
-      <button className="button button--cta" type="submit" disabled={busy}>{busy ? "Saving…" : "Save settings"}</button>
+      <button className="button button--cta" type="submit" disabled={busy || Boolean(postsLimitError || commentsLimitError)}>{busy ? "Saving…" : "Save settings"}</button>
     </form>
     {notice ? <p className="success-text" role="status">{notice}</p> : null}
     {error ? <p className="error-text" role="alert">{error}</p> : null}

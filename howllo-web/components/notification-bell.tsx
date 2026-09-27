@@ -38,6 +38,7 @@ function timeAgo(iso: string): string {
 export function NotificationBell() {
   const router = useRouter();
   const [tenant, setTenant] = useState<string | null>(null);
+  const [authToken, setAuthToken] = useState("");
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
@@ -73,6 +74,7 @@ export function NotificationBell() {
         getNotifications(token),
         getUnreadCount(token),
       ]);
+      if (readStoredBearerToken(tenantSlug).trim() !== token) return;
       // New, unread items that we haven't seen become toasts (but never on the
       // very first load, or we'd toast the whole backlog).
       if (primed.current) {
@@ -92,7 +94,11 @@ export function NotificationBell() {
 
   // Resolve tenant + token on mount and whenever auth changes.
   useEffect(() => {
-    const resolve = () => setTenant(getCurrentWorkspaceSlug());
+    const resolve = () => {
+      const slug = getCurrentWorkspaceSlug();
+      setTenant(slug);
+      setAuthToken(slug ? readStoredBearerToken(slug).trim() : "");
+    };
     resolve();
     const unsub = subscribeToBearerTokenChange(resolve);
     return unsub;
@@ -100,9 +106,12 @@ export function NotificationBell() {
 
   // Load + realtime + poll, scoped to the active workspace.
   useEffect(() => {
-    if (!tenant) return;
-    const token = readStoredBearerToken(tenant).trim();
-    if (!token) return;
+    if (!tenant || !authToken) {
+      setNotifications([]);
+      setUnread(0);
+      setToasts([]);
+      return;
+    }
 
     primed.current = false;
     knownIds.current = new Set();
@@ -136,7 +145,7 @@ export function NotificationBell() {
         socket.close();
       }
     };
-  }, [tenant, load]);
+  }, [tenant, authToken, load]);
 
   // Auto-dismiss toasts.
   useEffect(() => {
@@ -161,9 +170,9 @@ export function NotificationBell() {
   }, [open]);
 
   const hrefFor = (n: Notification) => {
-    const q = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
-    if (n.post_id) return `/posts/${n.post_id}${q}`;
-    return tenant ? `/${encodeURIComponent(tenant)}` : "/";
+    if (!tenant) return "/";
+    const workspacePath = `/${encodeURIComponent(tenant)}`;
+    return n.post_id ? `${workspacePath}/posts/${encodeURIComponent(n.post_id)}` : workspacePath;
   };
 
   const openNotification = async (n: Notification) => {
@@ -193,9 +202,7 @@ export function NotificationBell() {
     }
   };
 
-  if (!tenant) return null;
-  const hasToken = readStoredBearerToken(tenant).trim().length > 0;
-  if (!hasToken) return null;
+  if (!tenant || !authToken) return null;
 
   return (
     <div className="notif" ref={rootRef}>

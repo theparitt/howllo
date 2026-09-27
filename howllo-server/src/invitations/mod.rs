@@ -61,6 +61,16 @@ pub async fn redeem_invitation(
     Ok(HttpResponse::Ok().finish())
 }
 
+#[post("/api/me/invitations/decline")]
+pub async fn decline_invitation_code(
+    pool: web::Data<DbPool>,
+    body: web::Json<RedeemInvitationRequest>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    invitation_service::decline_invitation_code(pool.get_ref(), auth.0.id, &body.code).await?;
+    Ok(HttpResponse::Ok().finish())
+}
+
 #[get("/api/admin/invitations")]
 pub async fn list_invitations(
     pool: web::Data<DbPool>,
@@ -347,7 +357,7 @@ mod tests {
                     "/api/admin/invitations/{withdrawn_id}/withdraw?tenant_slug={}",
                     seed.tenant_slug
                 ))
-                .insert_header(("Authorization", owner_token))
+                .insert_header(("Authorization", owner_token.clone()))
                 .to_request(),
         )
         .await;
@@ -356,12 +366,42 @@ mod tests {
             &app,
             test::TestRequest::post()
                 .uri("/api/me/invitations/redeem")
-                .insert_header(("Authorization", stranger_token))
+                .insert_header(("Authorization", stranger_token.clone()))
                 .set_json(json!({"code":withdrawn["redemption_code"]}))
                 .to_request(),
         )
         .await;
         assert_eq!(withdrawn_response.status(), StatusCode::NOT_FOUND);
+
+        let declined = read_json(test::call_service(&app, test::TestRequest::post()
+            .uri("/api/admin/invitations")
+            .insert_header(("Authorization", owner_token.clone()))
+            .set_json(json!({"tenant_slug":seed.tenant_slug,"email":"declined@example.com","role":"moderator"}))
+            .to_request()).await).await;
+        let declined_id = Uuid::parse_str(declined["id"].as_str().unwrap()).unwrap();
+        let decline_response = test::call_service(&app, test::TestRequest::post()
+            .uri("/api/me/invitations/decline")
+            .insert_header(("Authorization", stranger_token.clone()))
+            .set_json(json!({"code":declined["redemption_code"]}))
+            .to_request()).await;
+        assert_eq!(decline_response.status(), StatusCode::OK);
+        let status: String = sqlx::query_scalar("SELECT status FROM workspace_invitations WHERE id=$1")
+            .bind(declined_id).fetch_one(&pool).await.unwrap();
+        assert_eq!(status, "rejected");
+        let stranger_memberships: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM memberships WHERE tenant_id=$1 AND user_id=$2")
+            .bind(tenant_id).bind(stranger_id).fetch_one(&pool).await.unwrap();
+        assert_eq!(stranger_memberships, 0);
+        let owner_id: Uuid = sqlx::query_scalar("SELECT invited_by FROM workspace_invitations WHERE id=$1")
+            .bind(declined_id).fetch_one(&pool).await.unwrap();
+        let notification_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM notifications WHERE tenant_id=$1 AND user_id=$2 AND event_type='invitation_rejected'")
+            .bind(tenant_id).bind(owner_id).fetch_one(&pool).await.unwrap();
+        assert!(notification_count > 0);
+        let replay_decline = test::call_service(&app, test::TestRequest::post()
+            .uri("/api/me/invitations/redeem")
+            .insert_header(("Authorization", stranger_token))
+            .set_json(json!({"code":declined["redemption_code"]}))
+            .to_request()).await;
+        assert_eq!(replay_decline.status(), StatusCode::NOT_FOUND);
     }
 
     #[actix_web::test]

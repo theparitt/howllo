@@ -45,8 +45,12 @@ pub async fn create_member(
         })?
         .ok_or(AppError::NotFound)?;
 
-    require_permission(pool, tenant_id, actor_user_id, Permission::ManageMembers).await?;
+    let actor =
+        require_permission(pool, tenant_id, actor_user_id, Permission::ManageMembers).await?;
     let role = Role::parse(body.role.trim())?;
+    if role == Role::Owner && actor.role != Role::Owner {
+        return Err(AppError::Forbidden);
+    }
 
     if body.email.trim().is_empty() {
         return Err(AppError::Validation("email is required".to_string()));
@@ -63,6 +67,14 @@ pub async fn create_member(
         tracing::error!(error = %error, tenant_id = %tenant_id, "error starting create member transaction");
         AppError::InternalServerError
     })?;
+    sqlx::query("SELECT id FROM tenants WHERE id=$1 FOR UPDATE")
+        .bind(tenant_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "error locking workspace for member creation");
+            AppError::InternalServerError
+        })?;
 
     let invited_subject = format!("invited:{}", body.email.trim().to_lowercase());
     let email_lower = body.email.trim().to_lowercase();
@@ -86,12 +98,20 @@ pub async fn create_member(
             AppError::InternalServerError
         })?;
 
-    let previous = membership_repository::get_membership_role(pool, tenant_id, user.id)
+    let previous = membership_repository::get_membership(&mut *tx, tenant_id, user.id)
         .await
         .map_err(|error| {
             tracing::error!(error = %error, tenant_id = %tenant_id, user_id = %user.id, "error fetching previous membership");
             AppError::InternalServerError
         })?;
+    if previous.as_ref().is_some_and(|item| item.role == "owner") {
+        if actor.role != Role::Owner {
+            return Err(AppError::Forbidden);
+        }
+        if role != Role::Owner {
+            require_another_owner(&mut tx, tenant_id).await?;
+        }
+    }
 
     membership_repository::upsert_membership(&mut tx, tenant_id, user.id, role.as_db_str())
         .await
@@ -143,13 +163,25 @@ pub async fn update_member_role(
         })?
         .ok_or(AppError::NotFound)?;
 
-    require_permission(pool, tenant_id, actor_user_id, Permission::ManageMembers).await?;
+    let actor =
+        require_permission(pool, tenant_id, actor_user_id, Permission::ManageMembers).await?;
     let role = Role::parse(body.role.trim())?;
 
     let mut tx = pool.begin().await.map_err(|error| {
         tracing::error!(error = %error, tenant_id = %tenant_id, user_id = %user_id, "error starting update member role transaction");
         AppError::InternalServerError
     })?;
+
+    // Serialize owner-role changes for this workspace. UI checks alone cannot
+    // protect the last owner from direct or concurrent API requests.
+    sqlx::query("SELECT id FROM tenants WHERE id=$1 FOR UPDATE")
+        .bind(tenant_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "error locking workspace for role change");
+            AppError::InternalServerError
+        })?;
 
     let previous = membership_repository::get_membership(&mut *tx, tenant_id, user_id)
         .await
@@ -158,6 +190,13 @@ pub async fn update_member_role(
             AppError::InternalServerError
         })?
         .ok_or(AppError::NotFound)?;
+
+    if (previous.role == "owner" || role == Role::Owner) && actor.role != Role::Owner {
+        return Err(AppError::Forbidden);
+    }
+    if previous.role == "owner" && role != Role::Owner {
+        require_another_owner(&mut tx, tenant_id).await?;
+    }
 
     membership_repository::update_membership_role(&mut tx, tenant_id, user_id, role.as_db_str())
         .await
@@ -208,12 +247,22 @@ pub async fn remove_member(
         })?
         .ok_or(AppError::NotFound)?;
 
-    require_permission(pool, tenant_id, actor_user_id, Permission::ManageMembers).await?;
+    let actor =
+        require_permission(pool, tenant_id, actor_user_id, Permission::ManageMembers).await?;
 
     let mut tx = pool.begin().await.map_err(|error| {
         tracing::error!(error = %error, tenant_id = %tenant_id, user_id = %user_id, "error starting remove member transaction");
         AppError::InternalServerError
     })?;
+
+    sqlx::query("SELECT id FROM tenants WHERE id=$1 FOR UPDATE")
+        .bind(tenant_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "error locking workspace for member removal");
+            AppError::InternalServerError
+        })?;
 
     let previous = membership_repository::get_membership(&mut *tx, tenant_id, user_id)
         .await
@@ -222,6 +271,13 @@ pub async fn remove_member(
             AppError::InternalServerError
         })?
         .ok_or(AppError::NotFound)?;
+
+    if previous.role == "owner" {
+        if actor.role != Role::Owner {
+            return Err(AppError::Forbidden);
+        }
+        require_another_owner(&mut tx, tenant_id).await?;
+    }
 
     membership_repository::delete_membership(&mut tx, tenant_id, user_id)
         .await
@@ -254,5 +310,26 @@ pub async fn remove_member(
         AppError::InternalServerError
     })?;
 
+    Ok(())
+}
+
+async fn require_another_owner(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: Uuid,
+) -> Result<(), AppError> {
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM memberships WHERE tenant_id=$1 AND role='owner'")
+            .bind(tenant_id)
+            .fetch_one(&mut **tx)
+            .await
+            .map_err(|error| {
+                tracing::error!(%error, tenant_id = %tenant_id, "error counting workspace owners");
+                AppError::InternalServerError
+            })?;
+    if count <= 1 {
+        return Err(AppError::Validation(
+            "A workspace must keep at least one owner.".into(),
+        ));
+    }
     Ok(())
 }

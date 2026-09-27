@@ -111,6 +111,7 @@ export type PostDetail = {
   body: string;
   status: string;
   vote_count: number;
+  has_voted?: boolean;
   is_pinned: boolean;
   is_locked: boolean;
   duplicate_of_post_id: string | null;
@@ -120,6 +121,7 @@ export type PostDetail = {
   category_color: string | null;
   attachments?: string[];
   tags?: Tag[];
+  follow_state?: { is_following: boolean } | null;
 };
 
 export type Comment = {
@@ -241,6 +243,8 @@ export type MyInvitation = {
   tenant_slug: string;
   tenant_name: string;
   invited_by_name: string | null;
+  accepted_user_id?: string | null;
+  accepted_user_name?: string | null;
   created_at: string;
 };
 
@@ -261,9 +265,13 @@ export type ModerationQueueItem = {
   board_slug: string;
   status: string;
   is_hidden: boolean;
+  is_locked: boolean;
+  is_pinned: boolean;
   review_state: "approved" | "pending" | "rejected";
   review_reason: string | null;
   author_display_name: string;
+  vote_count: number;
+  comment_count: number;
   created_at: string;
 };
 

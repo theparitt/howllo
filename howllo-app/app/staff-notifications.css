@@ -1,0 +1,15 @@
+.staff-notifications { position: relative; }
+.staff-notifications__trigger { position: relative; display: grid; place-items: center; width: 2.45rem; height: 2.45rem; border: 1px solid var(--border); border-radius: 50%; background: var(--panel-strong); color: var(--text); cursor: pointer; }
+.staff-notifications__trigger:hover { border-color: var(--primary); }
+.staff-notifications__count { position: absolute; top: -0.3rem; right: -0.35rem; min-width: 1.15rem; padding: 0.1rem 0.25rem; border-radius: 99px; background: var(--primary); color: white; font-size: 0.68rem; font-weight: 800; }
+.staff-notifications__panel { position: absolute; z-index: 80; right: 0; top: calc(100% + 0.55rem); width: min(22rem, calc(100vw - 1.5rem)); max-height: min(26rem, 70vh); overflow-y: auto; border: 1px solid var(--border); border-radius: 0.9rem; background: var(--panel-strong); box-shadow: 0 16px 35px rgba(27, 71, 79, 0.16); }
+.staff-notifications__head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.85rem 1rem; border-bottom: 1px solid var(--border); }
+.staff-notifications__head button { border: 0; background: transparent; color: var(--primary); font: inherit; font-size: 0.78rem; cursor: pointer; }
+.staff-notifications__list { display: grid; }
+.staff-notifications__item { display: grid; gap: 0.2rem; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); }
+.staff-notifications__item:last-child { border-bottom: 0; }
+.staff-notifications__item--unread { background: rgba(23, 111, 139, 0.07); }
+.staff-notifications__item strong { font-size: 0.88rem; }
+.staff-notifications__item span { font-size: 0.82rem; color: var(--text-soft); }
+.staff-notifications__item small { font-size: 0.72rem; color: var(--muted); }
+.staff-notifications__empty { margin: 0; padding: 1rem; color: var(--text-soft); }

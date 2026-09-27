@@ -57,7 +57,7 @@ export function BoardExtras({ tenant, boardId }: { tenant: string; boardId: stri
   }
 
   return <details className="board-extras">
-    <summary>Board appearance and plugins</summary>
+    <summary>Extra content and plugins</summary>
     {loading ? <p className="section-subtitle">Loading board appearance…</p> : null}
     <div className="manage-fields" style={{ marginTop: "1rem" }}>
       <p className="section-subtitle">Optional text appears only on this board. Plain text keeps it safe and easy to read.</p>

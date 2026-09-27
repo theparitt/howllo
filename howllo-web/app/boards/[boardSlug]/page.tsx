@@ -73,7 +73,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
     const boardPath = `/boards/${board.slug}`;
     const filteredPath = (changes: Record<string, string | undefined>) => {
       const params = new URLSearchParams();
-      for (const [key, value] of Object.entries({ q: query.q, category: query.category, tag: query.tag, sort, ...changes })) {
+      for (const [key, value] of Object.entries({ q: query.q, category: query.category, tag: query.tag, status, sort, ...changes })) {
         if (value) params.set(key, value);
       }
       return buildTenantPath(boardPath, tenant, defaultTenantSlug, params);
@@ -107,18 +107,19 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
           <label className="experience__search"><span className="sr-only">Search topics</span><input name="q" type="search" defaultValue={query.q ?? ""} maxLength={100} placeholder="Search topics in this board" /></label>
           {categories.length ? <label><span className="sr-only">Category</span><select name="category" defaultValue={query.category ?? ""}><option value="">All categories</option>{categories.map((category) => <option value={category.slug} key={category.id}>{category.name}</option>)}</select></label> : null}
           {tags.length ? <label><span className="sr-only">Tag</span><select name="tag" defaultValue={query.tag ?? ""}><option value="">All tags</option>{tags.map((tag) => <option value={tag.slug} key={tag.id}>{tag.name}</option>)}</select></label> : null}
+          {(kind === "feature-requests" || kind === "bug-reports") ? <label><span className="sr-only">Status</span><select name="status" defaultValue={status ?? ""}><option value="">All statuses</option><option value="under_review">New</option><option value="planned">Planned</option><option value="in_progress">In progress</option><option value="done">Done</option><option value="declined">Declined</option></select></label> : null}
           {sort !== "newest" ? <input type="hidden" name="sort" value={sort} /> : null}
           <button className="button" type="submit">Search</button>
-          {query.q || query.category || query.tag ? <Link className="experience__clear" href={buildTenantPath(boardPath, tenant, defaultTenantSlug)}>Clear</Link> : null}
+          {query.q || query.category || query.tag || status ? <Link className="experience__clear" href={buildTenantPath(boardPath, tenant, defaultTenantSlug)}>Clear filters</Link> : null}
         </form>
 
         <nav className="experience__sort" aria-label="Sort topics">
           <Link className={sort === "newest" ? "experience__sort-active" : ""} href={filteredPath({ sort: "newest", page: undefined })}>Latest</Link>
-          <Link className={sort === "hot" ? "experience__sort-active" : ""} href={filteredPath({ sort: "hot", page: undefined })}>Hot</Link>
-          {board.allow_votes ? <Link className={sort === "top" ? "experience__sort-active" : ""} href={filteredPath({ sort: "top", page: undefined })}>Top</Link> : null}
+          <Link className={sort === "hot" ? "experience__sort-active" : ""} href={filteredPath({ sort: "hot", page: undefined })} title="Recent topics with the most votes and discussion">Hot</Link>
+          {board.allow_votes ? <Link className={sort === "top" ? "experience__sort-active" : ""} href={filteredPath({ sort: "top", page: undefined })} title="Topics with the most votes">Top</Link> : null}
         </nav>
 
-        <div className={`experience__forum${presentation.sidebar_text || categories.length ? " experience__forum--with-sidebar" : ""}`}>
+        <div className={`experience__forum${presentation.sidebar_text ? " experience__forum--with-sidebar" : ""}`}>
         <div className="experience__forum-main">
 
         {posts.length > 0 ? (
@@ -153,8 +154,8 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
           </section>
         ) : (
           <section className="panel empty-state">
-            <h2 className="empty-state__title">{query.q || query.category || query.tag ? "No matching topics" : empty}</h2>
-            <p className="empty-state__copy">{query.q || query.category || query.tag ? "Try another search or clear the filters." : kind === "announcements" ? "Updates from the team will appear here." : `Be the first to ${kind === "bug-reports" ? "report a problem" : kind === "discussions" ? "start a conversation" : "share an idea"}.`}</p>
+            <h2 className="empty-state__title">{query.q || query.category || query.tag || status ? "No matching topics" : empty}</h2>
+            <p className="empty-state__copy">{query.q || query.category || query.tag || status ? "Try another search or clear the filters." : kind === "announcements" ? "Updates from the team will appear here." : `Be the first to ${kind === "bug-reports" ? "report a problem" : kind === "discussions" ? "start a conversation" : "share an idea"}.`}</p>
           </section>
         )}
         {page > 1 || postsPage.has_next ? <nav className="experience__pagination" aria-label="Topic pages">
@@ -163,9 +164,8 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
           {postsPage.has_next ? <Link href={filteredPath({ page: String(page + 1) })}>Next →</Link> : <span />}
         </nav> : null}
         </div>
-        {presentation.sidebar_text || categories.length ? <aside className="experience__sidebar" aria-label="Board information">
-          {presentation.sidebar_text ? <section><h2>About this board</h2><p>{presentation.sidebar_text}</p></section> : null}
-          {categories.length ? <section><h2>Categories</h2><nav aria-label="Categories"><Link href={filteredPath({ category: undefined, page: undefined })}>All topics</Link>{categories.map((category) => <Link href={filteredPath({ category: category.slug, page: undefined })} key={category.id}>{category.name}</Link>)}</nav></section> : null}
+        {presentation.sidebar_text ? <aside className="experience__sidebar" aria-label="Board information">
+          <section><h2>About this board</h2><p>{presentation.sidebar_text}</p></section>
         </aside> : null}
         </div>
         {presentation.footer_text ? <footer className="experience__footer">{presentation.footer_text}</footer> : null}

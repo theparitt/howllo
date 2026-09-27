@@ -267,14 +267,64 @@ pub async fn accept_invitation(
 }
 
 pub async fn redeem_invitation(pool: &DbPool, user_id: Uuid, code: &str) -> Result<(), AppError> {
+    let code_hash = validate_invitation_code(pool, user_id, code).await?;
+    accept_bound_invitation(pool, user_id, Uuid::nil(), Some(&code_hash)).await
+}
+
+async fn validate_invitation_code(pool: &DbPool, user_id: Uuid, code: &str) -> Result<String, AppError> {
     let code = code.trim();
     if code.len() != 54 || !code.starts_with("howllo_inv_") {
         return Err(AppError::NotFound);
     }
     crate::auth::local_user::limit_attempt(pool, "invitation:redeem", &user_id.to_string(), 10)
         .await?;
-    let code_hash = hex::encode(Sha256::digest(code.as_bytes()));
-    accept_bound_invitation(pool, user_id, Uuid::nil(), Some(&code_hash)).await
+    Ok(hex::encode(Sha256::digest(code.as_bytes())))
+}
+
+pub async fn decline_invitation_code(
+    pool: &DbPool,
+    user_id: Uuid,
+    code: &str,
+) -> Result<(), AppError> {
+    let code_hash = validate_invitation_code(pool, user_id, code).await?;
+    let mut tx = pool.begin().await.map_err(|error| {
+        tracing::error!(%error, "error starting invitation decline");
+        AppError::InternalServerError
+    })?;
+    let invitation = invitation_repository::reject_code_in_tx(&mut tx, &code_hash, user_id)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "error declining invitation by code");
+            AppError::InternalServerError
+        })?
+        .ok_or(AppError::NotFound)?;
+    audit::record_in_tx(&mut tx, AuditEntry {
+        tenant_id: invitation.tenant_id,
+        actor_user_id: user_id,
+        entity_type: "invitation",
+        entity_id: invitation.id,
+        action: audit::INVITATION_REJECTED,
+        old_value: None,
+        new_value: None,
+        reason: None,
+    }).await?;
+    tx.commit().await.map_err(|error| {
+        tracing::error!(%error, "error committing invitation decline");
+        AppError::InternalServerError
+    })?;
+    cancel_invitation_email(pool, invitation.id).await;
+    if let Some(inviter) = invitation.invited_by {
+        let _ = notification_repository::create_notification(
+            pool,
+            invitation.tenant_id,
+            inviter,
+            "invitation_rejected",
+            "Invitation declined",
+            &format!("{} declined your invitation.", invitation.email),
+            None,
+        ).await;
+    }
+    Ok(())
 }
 
 async fn accept_bound_invitation(

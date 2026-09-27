@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AuthControl } from "@/components/auth-control";
+import { StaffNotifications } from "./staff-notifications";
 
 const publicWebUrl = (process.env.NEXT_PUBLIC_HOWLLO_PUBLIC_WEB_URL || "http://localhost:7703").replace(/\/$/, "");
 
@@ -17,7 +18,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
       <nav className="nav" aria-label="App navigation">
         {tenantSlug ? <a className="nav__link" href={`${publicWebUrl}/${encodeURIComponent(tenantSlug)}`}>View public boards ↗</a> : null}
-        <AuthControl />
+        {tenantSlug ? <StaffNotifications tenantSlug={tenantSlug} /> : null}
+        <AuthControl staffMode hideSignedOutTrigger={!tenantSlug} />
       </nav>
     </div></header>
     <main className="app-main">{children}</main>

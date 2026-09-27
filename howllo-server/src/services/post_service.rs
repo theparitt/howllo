@@ -208,7 +208,8 @@ pub async fn get_post_detail(
             AppError::InternalServerError
         })?;
 
-    let follow_state = match maybe_authenticated_user(req).await? {
+    let viewer = maybe_authenticated_user(req).await?;
+    let follow_state = match viewer.as_ref() {
         Some(user) => post_repository::get_follow_state(pool, post_id, user.id)
             .await
             .map_err(|e| {
@@ -221,6 +222,15 @@ pub async fn get_post_detail(
                 notify_on_official_response: false,
             })),
         None => None,
+    };
+    let has_voted = match viewer {
+        Some(user) => post_repository::has_voted(pool, post_id, user.id)
+            .await
+            .map_err(|error| {
+                tracing::error!(%error, post_id = %post_id, user_id = %user.id, "error fetching vote state for post detail");
+                AppError::InternalServerError
+            })?,
+        None => false,
     };
 
     Ok(PostDetailDto {
@@ -240,6 +250,7 @@ pub async fn get_post_detail(
         tags,
         title: detail.title,
         vote_count: detail.vote_count,
+        has_voted,
         is_pinned: detail.is_pinned,
         attachments: detail.attachments,
     })

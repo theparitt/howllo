@@ -91,7 +91,7 @@ function ParticipantRow({ item, tenant, onChanged }: { item: WorkspaceParticipan
       </select> : null}
       <input className="manage-input" aria-label="Restriction reason" placeholder="Reason (required)" maxLength={500} value={reason} disabled={busy} onChange={(event) => setReason(event.target.value)} />
       <div className="manage-row__actions">
-        <button className="button button--cta" type="button" disabled={busy || !reason.trim()} onClick={() => void apply()}>{busy ? "Saving…" : "Apply"}</button>
+        <button className="button button--cta" type="button" disabled={busy || !reason.trim()} onClick={() => void apply()}>{busy ? "Saving…" : mode === "banned" ? "Ban user" : `Suspend ${days} ${days === 1 ? "day" : "days"}`}</button>
         {restriction ? <button className="ghost-button" type="button" disabled={busy} onClick={() => void lift()}>Lift restriction</button> : null}
       </div>
     </div>

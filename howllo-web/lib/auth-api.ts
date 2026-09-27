@@ -16,7 +16,7 @@ async function localAuthRequest(path: string, body: object): Promise<LocalAuthRe
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(response.status === 401 ? "Credentials or recovery code are incorrect." :
+    throw new Error(response.status === 401 ? (path === "login" ? "Username or password is incorrect." : "Recovery code is invalid or expired.") :
       response.status === 429 ? "Too many attempts. Please try again shortly." :
       response.status === 422 ? "Check the username and password requirements." :
       "Could not complete this request.");

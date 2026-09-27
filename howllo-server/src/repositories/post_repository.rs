@@ -353,6 +353,14 @@ pub async fn get_follow_state(
     }))
 }
 
+pub async fn has_voted(pool: &DbPool, post_id: Uuid, user_id: Uuid) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM post_votes WHERE post_id=$1 AND user_id=$2)")
+        .bind(post_id)
+        .bind(user_id)
+        .fetch_one(pool)
+        .await
+}
+
 pub async fn get_official_response(
     pool: &DbPool,
     post_id: Uuid,
@@ -716,7 +724,7 @@ pub async fn list_moderation_queue(
 ) -> Result<Vec<crate::dto::ModerationQueueItemDto>, sqlx::Error> {
     let mut builder = QueryBuilder::<sqlx::Postgres>::new(
         r#"
-        SELECT p.id, p.title, p.body, b.slug AS board_slug, p.status, p.is_hidden, p.review_state, p.review_reason, p.deleted_at,
+        SELECT p.id, p.title, p.body, b.slug AS board_slug, p.status, p.is_hidden, p.is_locked, (p.pinned_at IS NOT NULL) AS is_pinned, p.review_state, p.review_reason, p.deleted_at,
                p.vote_count,
                (SELECT count(*) FROM comments c WHERE c.post_id = p.id AND c.is_hidden = false) AS comment_count,
                p.duplicate_of_post_id, p.created_at, u.display_name AS author_display_name
@@ -743,6 +751,61 @@ pub async fn list_moderation_queue(
         .build_query_as::<crate::dto::ModerationQueueItemDto>()
         .fetch_all(pool)
         .await
+}
+
+pub async fn count_moderation_posts(
+    pool: &DbPool,
+    tenant_id: Uuid,
+    search: Option<&str>,
+) -> Result<i64, sqlx::Error> {
+    let mut builder = QueryBuilder::<sqlx::Postgres>::new(
+        "SELECT COUNT(*)::bigint FROM posts p WHERE p.tenant_id = ",
+    );
+    builder.push_bind(tenant_id);
+    builder.push(" AND p.deleted_at IS NULL");
+    if let Some(search) = search.filter(|value| !value.trim().is_empty()) {
+        builder.push(" AND (p.title ILIKE ");
+        builder.push_bind(format!("%{}%", search.trim()));
+        builder.push(" OR p.body ILIKE ");
+        builder.push_bind(format!("%{}%", search.trim()));
+        builder.push(")");
+    }
+    let row: (i64,) = builder.build_query_as().fetch_one(pool).await?;
+    Ok(row.0)
+}
+
+pub async fn list_moderation_posts(
+    pool: &DbPool,
+    tenant_id: Uuid,
+    search: Option<&str>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<crate::dto::ModerationQueueItemDto>, sqlx::Error> {
+    let mut builder = QueryBuilder::<sqlx::Postgres>::new(
+        r#"SELECT p.id, p.title, p.body, b.slug AS board_slug, p.status, p.is_hidden,
+               p.is_locked, (p.pinned_at IS NOT NULL) AS is_pinned, p.review_state,
+               p.review_reason, p.deleted_at, p.vote_count,
+               (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.is_hidden = FALSE) AS comment_count,
+               p.duplicate_of_post_id, p.created_at, u.display_name AS author_display_name
+           FROM posts p
+           JOIN boards b ON b.id = p.board_id
+           JOIN users u ON u.id = p.user_id
+           WHERE p.tenant_id = "#,
+    );
+    builder.push_bind(tenant_id);
+    builder.push(" AND p.deleted_at IS NULL");
+    if let Some(search) = search.filter(|value| !value.trim().is_empty()) {
+        builder.push(" AND (p.title ILIKE ");
+        builder.push_bind(format!("%{}%", search.trim()));
+        builder.push(" OR p.body ILIKE ");
+        builder.push_bind(format!("%{}%", search.trim()));
+        builder.push(")");
+    }
+    builder.push(" ORDER BY p.created_at DESC, p.id DESC LIMIT ");
+    builder.push_bind(limit);
+    builder.push(" OFFSET ");
+    builder.push_bind(offset);
+    builder.build_query_as().fetch_all(pool).await
 }
 
 pub async fn get_post_follower_count(pool: &DbPool, post_id: Uuid) -> Result<i64, sqlx::Error> {

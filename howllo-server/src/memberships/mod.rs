@@ -238,4 +238,137 @@ mod tests {
         let delete_response = test::call_service(&app, delete_request).await;
         assert_eq!(delete_response.status(), StatusCode::NO_CONTENT);
     }
+
+    #[actix_web::test]
+    async fn owner_role_cannot_be_taken_by_admin_or_removed_when_last() {
+        let _guard = lock_test_db().await;
+        let settings = test_settings();
+        let pool = db::establish_connection(&settings.database_url)
+            .await
+            .unwrap();
+        reset_db(&pool).await;
+        let seed = seed_basic_tenant(&pool).await;
+        let tenant_id: uuid::Uuid = sqlx::query_scalar("SELECT id FROM tenants WHERE slug=$1")
+            .bind(&seed.tenant_slug)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE memberships SET role='owner' WHERE tenant_id=$1 AND user_id=$2")
+            .bind(tenant_id)
+            .bind(seed.admin_user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE memberships SET role='admin' WHERE tenant_id=$1 AND user_id=$2")
+            .bind(tenant_id)
+            .bind(seed.moderator_user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
+        let owner = bearer_for(
+            &seed.admin_subject,
+            "admin@example.com",
+            "Owner",
+            &settings.rooiam_jwt_secret,
+        );
+        let admin = bearer_for(
+            &seed.moderator_subject,
+            "moderator@example.com",
+            "Admin",
+            &settings.rooiam_jwt_secret,
+        );
+        let owner_role_url = format!(
+            "/api/admin/members/{}/role?tenant_slug={}",
+            seed.admin_user_id, seed.tenant_slug
+        );
+        let owner_remove_url = format!(
+            "/api/admin/members/{}?tenant_slug={}",
+            seed.admin_user_id, seed.tenant_slug
+        );
+        let promote_url = format!(
+            "/api/admin/members/{}/role?tenant_slug={}",
+            seed.member_user_id, seed.tenant_slug
+        );
+
+        for (token, url, status) in [
+            (&admin, &owner_role_url, StatusCode::FORBIDDEN),
+            (&owner, &owner_role_url, StatusCode::UNPROCESSABLE_ENTITY),
+        ] {
+            let response = test::call_service(
+                &app,
+                test::TestRequest::patch()
+                    .uri(url)
+                    .insert_header(("Authorization", token.clone()))
+                    .set_json(json!({"role":"admin"}))
+                    .to_request(),
+            )
+            .await;
+            assert_eq!(response.status(), status);
+        }
+        for (token, status) in [
+            (&admin, StatusCode::FORBIDDEN),
+            (&owner, StatusCode::UNPROCESSABLE_ENTITY),
+        ] {
+            let response = test::call_service(
+                &app,
+                test::TestRequest::delete()
+                    .uri(&owner_remove_url)
+                    .insert_header(("Authorization", token.clone()))
+                    .to_request(),
+            )
+            .await;
+            assert_eq!(response.status(), status);
+        }
+        let admin_promote = test::call_service(
+            &app,
+            test::TestRequest::patch()
+                .uri(&promote_url)
+                .insert_header(("Authorization", admin.clone()))
+                .set_json(json!({"role":"owner"}))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(admin_promote.status(), StatusCode::FORBIDDEN);
+        let admin_create_owner = test::call_service(&app, test::TestRequest::post()
+            .uri("/api/admin/members").insert_header(("Authorization", admin))
+            .set_json(json!({"tenant_slug":seed.tenant_slug,"email":"fake-owner@example.com","role":"owner"})).to_request()).await;
+        assert_eq!(admin_create_owner.status(), StatusCode::FORBIDDEN);
+
+        let owner_promote = test::call_service(
+            &app,
+            test::TestRequest::patch()
+                .uri(&promote_url)
+                .insert_header(("Authorization", owner.clone()))
+                .set_json(json!({"role":"owner"}))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(owner_promote.status(), StatusCode::OK);
+        let owner_demote = test::call_service(
+            &app,
+            test::TestRequest::patch()
+                .uri(&owner_role_url)
+                .insert_header(("Authorization", owner))
+                .set_json(json!({"role":"admin"}))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(owner_demote.status(), StatusCode::OK);
+        let remaining: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM memberships WHERE tenant_id=$1 AND role='owner'",
+        )
+        .bind(tenant_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(remaining, 1);
+    }
 }

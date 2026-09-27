@@ -136,6 +136,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(invitations::withdraw_invitation)
         .service(invitations::list_my_invitations)
         .service(invitations::redeem_invitation)
+        .service(invitations::decline_invitation_code)
         .service(invitations::accept_invitation)
         .service(invitations::reject_invitation)
         .service(me::get_me)
@@ -205,7 +206,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(moderation::api::update_post_lock)
         .service(moderation::api::update_comment_official)
         .service(moderation::api::update_comment_visibility)
-        .service(moderation::api::get_moderation_queue);
+        .service(moderation::api::get_moderation_queue)
+        .service(moderation::api::get_moderation_posts);
 }
 
 #[cfg(test)]

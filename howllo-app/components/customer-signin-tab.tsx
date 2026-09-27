@@ -12,6 +12,7 @@ type Settings = {
   rooiam_client_id: string | null;
   providers: Provider[];
   callback_urls: Record<string, string>;
+  callback_url_configured: boolean;
 };
 type Choice = "google" | "microsoft" | "oidc";
 const choices: { key: Choice; label: string; issuer: string; hint: string }[] = [
@@ -118,6 +119,7 @@ export function CustomerSignInTab({ tenant }: { tenant: string }) {
     <section className="panel stack">
       <h2>Social and OpenID Connect</h2>
       <p className="section-subtitle">Use your own app credentials for each provider. Client secrets are stored encrypted and are never shown again.</p>
+      {!settings.callback_url_configured ? <p className="notice" role="status">Social sign-in needs a public API URL. Ask the platform administrator to configure it before adding a provider.</p> : null}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{choices.map((item) => <button key={item.key} type="button" className={choice === item.key ? "button button--cta" : "button"} onClick={() => select(item.key)}>{item.label}{settings.providers.some((provider) => provider.key === item.key && provider.enabled) ? " · On" : ""}</button>)}</div>
       <p className="section-subtitle">{choices.find((item) => item.key === choice)?.hint}</p>
       <label>Button label<input className="field" value={displayName} maxLength={60} onChange={(event) => setDisplayName(event.target.value)} /></label>
@@ -126,9 +128,9 @@ export function CustomerSignInTab({ tenant }: { tenant: string }) {
       <label>Client secret<input className="field" type="password" value={clientSecret} autoComplete="new-password" placeholder={existing ? "Leave blank to keep current secret" : "Required"} onChange={(event) => setClientSecret(event.target.value)} /></label>
       {choice === "oidc" ? <label>Token endpoint authentication<select className="field" value={authMethod} onChange={(event) => setAuthMethod(event.target.value)}><option value="client_secret_post">Client secret in form</option><option value="client_secret_basic">Client secret in HTTP Basic</option></select></label> : null}
       <label><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Show this sign-in option to customers</label>
-      <label>Redirect URI<input className="field" readOnly value={callbackUrl} onFocus={(event) => event.currentTarget.select()} /></label>
-      <p className="section-subtitle">Add this exact redirect URI to the provider’s app settings before enabling sign-in.</p>
-      <div style={{ display: "flex", gap: 8 }}><button className="button button--cta" type="button" disabled={busy} onClick={() => void saveProvider()}>Save provider</button>{existing ? <button className="button" type="button" disabled={busy} onClick={() => void removeProvider()}>Remove</button> : null}</div>
+      <label>Redirect URI<input className="field" readOnly value={callbackUrl} placeholder={settings.callback_url_configured ? undefined : "Available after platform setup"} onFocus={(event) => event.currentTarget.select()} /></label>
+      {settings.callback_url_configured ? <p className="section-subtitle">Add this exact redirect URI to the provider’s app settings before enabling sign-in.</p> : null}
+      <div style={{ display: "flex", gap: 8 }}><button className="button button--cta" type="button" disabled={busy || !settings.callback_url_configured} onClick={() => void saveProvider()}>Save provider</button>{existing ? <button className="button" type="button" disabled={busy} onClick={() => void removeProvider()}>Remove</button> : null}</div>
     </section>
     {notice ? <p role="status" className="notice">{notice}</p> : null}
     {error ? <p role="alert" className="notice notice--error">{error}</p> : null}

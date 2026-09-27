@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createPost, uploadImage } from "@/lib/api";
 import { readStoredBearerToken } from "@/components/dev-auth-panel";
 import { buildTenantPath } from "@/lib/default-tenant";
+import { requestLogin } from "@/components/auth-login";
 import type { BoardKind } from "@/lib/board-experience";
 import type { BoardCategory, Tag } from "@/lib/types";
 
@@ -30,6 +31,8 @@ function submissionMessage(error: unknown): string {
 export function CreatePostForm({ tenantSlug, boardSlug, boardKind, isPrivate, categories, tags }: CreatePostFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const draftKey = `howllo.post-draft.${tenantSlug}.${boardSlug}`;
+  const [loadedDraftKey, setLoadedDraftKey] = useState("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [steps, setSteps] = useState("");
@@ -44,6 +47,33 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind, isPrivate, ca
   const [pending, setPending] = useState(false);
   const [submittedForReview, setSubmittedForReview] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.sessionStorage.getItem(draftKey) || "null") as Partial<{
+        title: string; body: string; steps: string; expected: string; actual: string;
+        environment: string; categoryId: string; tagIds: string[];
+      }> | null;
+      if (saved) {
+        setTitle(saved.title ?? "");
+        setBody(saved.body ?? "");
+        setSteps(saved.steps ?? "");
+        setExpected(saved.expected ?? "");
+        setActual(saved.actual ?? "");
+        setEnvironment(saved.environment ?? "");
+        setCategoryId(saved.categoryId ?? "");
+        setTagIds(saved.tagIds ?? []);
+      }
+    } catch { /* A corrupt draft should not block posting. */ }
+    setLoadedDraftKey(draftKey);
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (loadedDraftKey !== draftKey) return;
+    window.sessionStorage.setItem(draftKey, JSON.stringify({
+      title, body, steps, expected, actual, environment, categoryId, tagIds,
+    }));
+  }, [draftKey, loadedDraftKey, title, body, steps, expected, actual, environment, categoryId, tagIds]);
 
   async function onPickFiles(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
@@ -77,7 +107,8 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind, isPrivate, ca
     const token = readStoredBearerToken(tenantSlug);
 
     if (!token) {
-      setError("Sign in to this workspace before creating a post.");
+      setError("Sign in to publish your post. Your draft will stay here.");
+      requestLogin();
       return;
     }
 
@@ -99,6 +130,7 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind, isPrivate, ca
         tagIds,
         token,
       });
+      window.sessionStorage.removeItem(draftKey);
       if (created.review_state === "pending") {
         setSubmittedForReview(true);
         return;
@@ -121,10 +153,10 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind, isPrivate, ca
 
   return (
     <form className="panel field-grid" onSubmit={onSubmit}>
-      <div>
-        <div className="muted" style={{ marginBottom: "0.45rem", fontSize: "0.86rem" }}>
+      <label>
+        <span className="muted" style={{ display: "block", marginBottom: "0.45rem", fontSize: "0.86rem" }}>
           {boardKind === "bug-reports" ? "Short summary" : boardKind === "discussions" ? "Topic or question" : "Feature idea"}
-        </div>
+        </span>
         <input
           className="field"
           value={title}
@@ -132,16 +164,16 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind, isPrivate, ca
           placeholder={boardKind === "bug-reports" ? "What is broken?" : boardKind === "discussions" ? "What would you like to discuss?" : "What would you like to see?"}
           required
         />
-      </div>
+      </label>
       {boardKind === "bug-reports" ? <div className="field-grid">
         <label className="manage-label">Steps to reproduce<textarea className="textarea" value={steps} onChange={(event) => setSteps(event.target.value)} placeholder="1. Open…\n2. Click…" required /></label>
         <label className="manage-label">Expected result<textarea className="textarea" value={expected} onChange={(event) => setExpected(event.target.value)} placeholder="What should have happened?" required /></label>
         <label className="manage-label">Actual result<textarea className="textarea" value={actual} onChange={(event) => setActual(event.target.value)} placeholder="What happened instead?" required /></label>
         <label className="manage-label">Device or browser (optional)<input className="field" value={environment} onChange={(event) => setEnvironment(event.target.value)} placeholder="e.g. Chrome on Windows" /></label>
-      </div> : <div>
-        <div className="muted" style={{ marginBottom: "0.45rem", fontSize: "0.86rem" }}>
+      </div> : <label>
+        <span className="muted" style={{ display: "block", marginBottom: "0.45rem", fontSize: "0.86rem" }}>
           {boardKind === "discussions" ? "Your message" : "Why would this help?"}
-        </div>
+        </span>
         <textarea
           className="textarea"
           value={body}
@@ -149,7 +181,7 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind, isPrivate, ca
           placeholder={boardKind === "discussions" ? "Share context so others can join the conversation." : "Describe the problem and the outcome you want."}
           required
         />
-      </div>}
+      </label>}
       {categories.length ? <label className="manage-label">Category<select className="field" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}><option value="">Choose a category (optional)</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label> : null}
       {tags.length ? <fieldset className="experience__tag-picker"><legend>Tags (up to 3, optional)</legend><div>{tags.map((tag) => <label key={tag.id}><input type="checkbox" checked={tagIds.includes(tag.id)} disabled={!tagIds.includes(tag.id) && tagIds.length >= 3} onChange={(event) => setTagIds((current) => event.target.checked ? [...current, tag.id] : current.filter((id) => id !== tag.id))} /><span>#{tag.name}</span></label>)}</div></fieldset> : null}
       <div>

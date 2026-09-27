@@ -24,6 +24,9 @@ import {
 type AuthLoginProps = {
   /** Href for the signed-in "My account" menu item. */
   myHref?: string;
+  /** Staff App uses a single sign-in action in its main content. */
+  staffMode?: boolean;
+  hideSignedOutTrigger?: boolean;
 };
 
 const OPEN_LOGIN_EVENT = "howllo:open-login";
@@ -51,7 +54,7 @@ function initialOf(name: string) {
   return trimmed ? trimmed[0]!.toUpperCase() : "?";
 }
 
-export function AuthLogin({ myHref }: AuthLoginProps) {
+export function AuthLogin({ myHref, staffMode = false, hideSignedOutTrigger = false }: AuthLoginProps) {
   const pathname = usePathname();
   const [loginOpen, setLoginOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -73,6 +76,7 @@ export function AuthLogin({ myHref }: AuthLoginProps) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [recoveryInput, setRecoveryInput] = useState("");
   const [recoveryCode, setRecoveryCode] = useState("");
+  const [codeCopied, setCodeCopied] = useState(false);
   const [emailEnabled, setEmailEnabled] = useState(false);
   const [emailResetMode, setEmailResetMode] = useState(false);
   const [emailResetSent, setEmailResetSent] = useState(false);
@@ -314,6 +318,7 @@ export function AuthLogin({ myHref }: AuthLoginProps) {
       if (result.recovery_code) {
         setPendingToken(result.access_token);
         setRecoveryCode(result.recovery_code);
+        setCodeCopied(false);
       } else {
         await completeLocalSignIn(result.access_token);
       }
@@ -343,6 +348,15 @@ export function AuthLogin({ myHref }: AuthLoginProps) {
       setProviderError(error instanceof Error ? error.message : "Could not finish sign-in.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function copyRecoveryCode(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCodeCopied(true);
+    } catch {
+      setProviderError("Could not copy automatically. Select the code and copy it manually.");
     }
   }
 
@@ -401,9 +415,9 @@ export function AuthLogin({ myHref }: AuthLoginProps) {
   // Signed-out: sign-in button + login widget.
   return (
     <>
-      <button className="button" type="button" onClick={openLogin}>
-        {loginOpen ? "Hide login" : "Sign in"}
-      </button>
+      {!hideSignedOutTrigger && !loginOpen ? <button className="button" type="button" onClick={openLogin}>
+        Sign in
+      </button> : null}
 
       {loginOpen && typeof document !== "undefined" ? createPortal(
         <div
@@ -423,7 +437,7 @@ export function AuthLogin({ myHref }: AuthLoginProps) {
           </button>
 
           <div style={{ padding: "1.6rem", display: "grid", gap: "0.75rem", width: "min(420px, calc(100vw - 2rem))" }}>
-            <h2 style={{ margin: 0 }}>Sign in to Howllo</h2>
+            <h2 style={{ margin: 0 }}>{staffMode ? registerMode ? "Create a staff account" : resetMode || emailResetMode ? "Reset your password" : "Staff sign in" : "Sign in to Howllo"}</h2>
             {!recoveryCode && !localOpen && !legacyOpen && !emailResetMode && providers.map((provider) => provider.kind === "oidc" ? (
               <button key={provider.id} className="button" type="button" onClick={() => {
                 const url = new URL(`${API_BASE_URL}${provider.login_url}`);
@@ -443,11 +457,11 @@ export function AuthLogin({ myHref }: AuthLoginProps) {
                 <h3 style={{ margin: 0 }}>Save your recovery code</h3>
                 <p>This code is shown only once. Store it somewhere safe. You will need it if you forget your password.</p>
                 <code style={{ overflowWrap: "anywhere", userSelect: "all" }}>{recoveryCode}</code>
-                <button className="button" type="button" onClick={() => void navigator.clipboard.writeText(recoveryCode)}>Copy code</button>
+                <button className="button" type="button" onClick={() => void copyRecoveryCode(recoveryCode)}>{codeCopied ? "Copied" : "Copy code"}</button>
                 <button className="button button--cta" type="button" disabled={busy} onClick={() => void continueAfterRecoveryCode()}>I saved the code — continue</button>
               </div>
             ) : null}
-            {emailResetMode ? emailResetRecovery ? <div className="stack" role="status"><h3>Save your new recovery code</h3><p>Your password was changed and all sessions were signed out. Save this code now; it will not be shown again.</p><code style={{ overflowWrap: "anywhere", userSelect: "all" }}>{emailResetRecovery}</code><button className="button" type="button" onClick={() => void navigator.clipboard.writeText(emailResetRecovery)}>Copy code</button><button className="button button--cta" type="button" onClick={() => { setEmailResetMode(false); setEmailResetRecovery(""); setEmailResetSent(false); setLocalOpen(true); }}>Sign in</button></div> : <form className="field-grid" onSubmit={async (event) => { event.preventDefault(); setBusy(true); setProviderError(""); try { if (!emailResetSent) { await requestEmailReset(emailResetAddress); setEmailResetSent(true); } else { if (password !== confirmPassword) throw new Error("Passwords do not match."); setEmailResetRecovery(await confirmEmailReset(emailResetToken, password)); setPassword(""); setConfirmPassword(""); } } catch (cause) { setProviderError(cause instanceof Error ? cause.message : "Could not reset password."); } finally { setBusy(false); } }}>
+            {emailResetMode ? emailResetRecovery ? <div className="stack" role="status"><h3>Save your new recovery code</h3><p>Your password was changed and all sessions were signed out. Save this code now; it will not be shown again.</p><code style={{ overflowWrap: "anywhere", userSelect: "all" }}>{emailResetRecovery}</code><button className="button" type="button" onClick={() => void copyRecoveryCode(emailResetRecovery)}>{codeCopied ? "Copied" : "Copy code"}</button><button className="button button--cta" type="button" onClick={() => { setEmailResetMode(false); setEmailResetRecovery(""); setEmailResetSent(false); setLocalOpen(true); }}>Sign in</button></div> : <form className="field-grid" onSubmit={async (event) => { event.preventDefault(); setBusy(true); setProviderError(""); try { if (!emailResetSent) { await requestEmailReset(emailResetAddress); setEmailResetSent(true); } else { if (password !== confirmPassword) throw new Error("Passwords do not match."); setEmailResetRecovery(await confirmEmailReset(emailResetToken, password)); setCodeCopied(false); setPassword(""); setConfirmPassword(""); } } catch (cause) { setProviderError(cause instanceof Error ? cause.message : "Could not reset password."); } finally { setBusy(false); } }}>
               <p>{emailResetSent ? "Enter the one-time code from your email." : "If this verified address belongs to a local account, we will send a reset code."}</p>
               {!emailResetSent ? <label>Email address<input className="field" type="email" required value={emailResetAddress} onChange={(e) => setEmailResetAddress(e.target.value)} /></label> : <><label>Reset code<input className="field" required autoComplete="one-time-code" value={emailResetToken} onChange={(e) => setEmailResetToken(e.target.value)} /></label><label>New password<input className="field" type="password" minLength={12} required value={password} onChange={(e) => setPassword(e.target.value)} /></label><label>Confirm new password<input className="field" type="password" minLength={12} required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} /></label></>}
               <button className="button button--cta" disabled={busy}>{emailResetSent ? "Reset password" : "Send reset code"}</button>
@@ -455,18 +469,22 @@ export function AuthLogin({ myHref }: AuthLoginProps) {
             </form> : null}
             {localOpen && !recoveryCode && !emailResetMode ? (
               <form onSubmit={(event) => void submitLocal(event)} style={{ display: "grid", gap: "0.6rem" }}>
+                {staffMode && registerMode ? <p className="section-subtitle" style={{ margin: 0 }}>Create an account to accept a staff invitation or manage your own workspace.</p> : null}
                 <label htmlFor="howllo-username">Username</label>
-                <input id="howllo-username" className="field" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required />
+                <input id="howllo-username" className="field" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required minLength={3} maxLength={32} pattern="[A-Za-z0-9_]+" aria-describedby={registerMode ? "howllo-username-help" : undefined} />
+                {registerMode ? <span id="howllo-username-help" className="section-subtitle">3–32 letters, numbers, or underscores.</span> : null}
                 {resetMode ? <><label htmlFor="howllo-recovery">Recovery code</label>
                   <input id="howllo-recovery" className="field" autoComplete="off" value={recoveryInput} onChange={(event) => setRecoveryInput(event.target.value)} required /></> : null}
                 <label htmlFor="howllo-password">{resetMode ? "New password" : "Password"}</label>
-                <input id="howllo-password" className="field" type="password" autoComplete={registerMode || resetMode ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={registerMode || resetMode ? 12 : undefined} />
+                <input id="howllo-password" className="field" type="password" autoComplete={registerMode || resetMode ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={registerMode || resetMode ? 12 : undefined} maxLength={registerMode || resetMode ? 128 : undefined} />
+                {registerMode || resetMode ? <span className="section-subtitle">Use 12–128 characters.</span> : null}
                 {registerMode || resetMode ? <><label htmlFor="howllo-confirm-password">Confirm password</label>
-                  <input id="howllo-confirm-password" className="field" type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required minLength={12} /></> : null}
+                  <input id="howllo-confirm-password" className="field" type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required minLength={12} maxLength={128} /></> : null}
                 <button className="button button--cta" disabled={busy} type="submit">{resetMode ? "Reset password" : registerMode ? "Create account" : "Sign in"}</button>
-                <button className="button" type="button" onClick={() => { const creating = !registerMode && !resetMode; setResetMode(false); setRegisterMode(creating); setPassword(""); }}>{registerMode || resetMode ? "Back to sign in" : "Create a local account"}</button>
+                <button className="button" type="button" onClick={() => { const creating = !registerMode && !resetMode; setResetMode(false); setRegisterMode(creating); setPassword(""); setConfirmPassword(""); setProviderError(""); }}>{registerMode || resetMode ? "Back to sign in" : staffMode ? "Create a staff account" : "Create account"}</button>
                 {!registerMode ? <button className="button" type="button" onClick={() => { setResetMode((value) => !value); setPassword(""); }}>{resetMode ? "Use password instead" : "Forgot password? Use recovery code"}</button> : null}
                 {!registerMode && emailEnabled ? <button className="button" type="button" onClick={() => { setEmailResetMode(true); setLocalOpen(false); setResetMode(false); setPassword(""); }}>Reset by verified email</button> : null}
+                {(providers.length > 1 || configured) ? <button className="button" type="button" onClick={() => { setLocalOpen(false); setRegisterMode(false); setResetMode(false); setProviderError(""); }}>Other sign-in methods</button> : null}
               </form>
             ) : null}
             {providerError ? <p role="alert" className="notice notice--error">{providerError}</p> : null}

@@ -257,6 +257,17 @@ pub async fn create_admin_tenant(
     let row_created_at: DateTime<Utc> = row.get("created_at");
     let row_updated_at: DateTime<Utc> = row.get("updated_at");
 
+    // A new workspace starts with only the board directory. The owner enables
+    // Feed and Roadmap deliberately after configuring those public surfaces.
+    sqlx::query("INSERT INTO tenant_branding (tenant_id, show_feed, show_roadmap) VALUES ($1, FALSE, FALSE)")
+        .bind(row_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, tenant_id = %row_id, "error setting new workspace visibility defaults");
+            AppError::InternalServerError
+        })?;
+
     membership_repository::upsert_membership(&mut tx, row_id, auth.0.id, "owner")
         .await
         .map_err(|error| {
@@ -888,6 +899,15 @@ mod tests {
         let second_slug = second.get("slug").and_then(|v| v.as_str()).unwrap();
         assert_eq!(first["board_count"], 0);
         assert_eq!(first["is_published"], false);
+
+        let (show_feed, show_roadmap): (bool, bool) = sqlx::query_as(
+            "SELECT show_feed, show_roadmap FROM tenant_branding WHERE tenant_id=$1",
+        )
+        .bind(uuid::Uuid::parse_str(first["id"].as_str().unwrap()).unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert!(!show_feed && !show_roadmap);
 
         let admin_list = test::TestRequest::get()
             .uri(&format!("/api/admin/boards?tenant_slug={first_slug}"))

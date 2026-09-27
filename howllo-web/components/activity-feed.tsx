@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   getMyInvitations,
@@ -35,6 +35,7 @@ function timeAgo(iso: string): string {
 export function ActivityFeed() {
   const router = useRouter();
   const [tenant, setTenant] = useState<string | null>(null);
+  const [authToken, setAuthToken] = useState("");
   const [signedIn, setSignedIn] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [invites, setInvites] = useState<MyInvitation[]>([]);
@@ -43,7 +44,11 @@ export function ActivityFeed() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    const resolve = () => setTenant(getCurrentWorkspaceSlug());
+    const resolve = () => {
+      const slug = getCurrentWorkspaceSlug();
+      setTenant(slug);
+      setAuthToken(slug ? readStoredBearerToken(slug).trim() : "");
+    };
     resolve();
     return subscribeToBearerTokenChange(resolve);
   }, []);
@@ -61,6 +66,7 @@ export function ActivityFeed() {
         getNotifications(token),
         getMyInvitations(token).catch(() => [] as MyInvitation[]),
       ]);
+      if (readStoredBearerToken(tenantSlug).trim() !== token) return;
       setNotifications(items);
       setInvites(inv);
     } catch {
@@ -70,12 +76,16 @@ export function ActivityFeed() {
     }
   }, []);
 
-  const tokenRef = useRef<string>("");
   useEffect(() => {
-    if (!tenant) return;
-    tokenRef.current = readStoredBearerToken(tenant).trim();
+    if (!tenant || !authToken) {
+      setSignedIn(false);
+      setNotifications([]);
+      setInvites([]);
+      setLoaded(true);
+      return;
+    }
+    setLoaded(false);
     void load(tenant);
-    if (!tokenRef.current) return;
 
     let socket: WebSocket | null = null;
     let reconnect: number | null = null;
@@ -92,20 +102,27 @@ export function ActivityFeed() {
       socket.onerror = () => socket?.close();
     };
     connect();
+    const poll = window.setInterval(() => void load(tenant), 30_000);
     return () => {
       destroyed = true;
+      window.clearInterval(poll);
       if (reconnect !== null) window.clearTimeout(reconnect);
       if (socket) {
         socket.onclose = null;
         socket.close();
       }
     };
-  }, [tenant, load]);
+  }, [tenant, authToken, load]);
 
   const unreadCount = useMemo(
     () => notifications.filter((n) => !n.is_read).length,
     [notifications],
   );
+  const hasInvitationActivity = invites.length > 0 || notifications.some((n) => n.event_type.startsWith("invitation"));
+
+  useEffect(() => {
+    if (!hasInvitationActivity && filter === "invitations") setFilter("all");
+  }, [hasInvitationActivity, filter]);
 
   const visible = useMemo(() => {
     if (filter === "unread") return notifications.filter((n) => !n.is_read);
@@ -115,8 +132,9 @@ export function ActivityFeed() {
   }, [filter, notifications]);
 
   const hrefFor = (n: Notification) => {
-    const q = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
-    return n.post_id ? `/posts/${n.post_id}${q}` : tenant ? `/${encodeURIComponent(tenant)}` : "/";
+    if (!tenant) return "/";
+    const workspacePath = `/${encodeURIComponent(tenant)}`;
+    return n.post_id ? `${workspacePath}/posts/${encodeURIComponent(n.post_id)}` : workspacePath;
   };
 
   const openNotification = async (n: Notification) => {
@@ -177,7 +195,7 @@ export function ActivityFeed() {
       </section>
 
       <div className="feed-filters">
-        {(["all", "unread", "invitations"] as Filter[]).map((f) => (
+        {(["all", "unread", ...(hasInvitationActivity ? ["invitations"] : [])] as Filter[]).map((f) => (
           <button
             type="button"
             key={f}

@@ -514,6 +514,32 @@ export async function managerModerationQueue(tenantSlug: string, token: string):
   return page.items;
 }
 
+export async function managerModerationQueuePage(
+  tenantSlug: string,
+  token: string,
+  page: number,
+): Promise<PaginatedResponse<import("./types").ModerationQueueItem>> {
+  const query = new URLSearchParams({ tenant_slug: tenantSlug, page: String(page), per_page: "20" });
+  return unwrap<PaginatedResponse<import("./types").ModerationQueueItem>>(await apiFetch(
+    buildUrl(`/api/admin/moderation/queue?${query.toString()}`),
+    { cache: "no-store", headers: { Authorization: token } },
+  ));
+}
+
+export async function managerModerationPosts(
+  tenantSlug: string,
+  token: string,
+  page: number,
+  search: string,
+): Promise<PaginatedResponse<import("./types").ModerationQueueItem>> {
+  const query = new URLSearchParams({ tenant_slug: tenantSlug, page: String(page), per_page: "20" });
+  if (search.trim()) query.set("q", search.trim());
+  return unwrap<PaginatedResponse<import("./types").ModerationQueueItem>>(await apiFetch(
+    buildUrl(`/api/admin/moderation/posts?${query.toString()}`),
+    { cache: "no-store", headers: { Authorization: token } },
+  ));
+}
+
 export async function managerUpdateMemberRole(
   userId: string,
   role: string,
@@ -692,6 +718,15 @@ export async function redeemInvitation(code: string, token: string): Promise<voi
   if (!response.ok) throw new ApiError(response.status, (await response.text()) || "Could not redeem invitation");
 }
 
+export async function declineInvitationCode(code: string, token: string): Promise<void> {
+  const response = await apiFetch(buildUrl("/api/me/invitations/decline"), {
+    method: "POST",
+    headers: { Authorization: token, "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  if (!response.ok) throw new ApiError(response.status, (await response.text()) || "Could not decline invitation");
+}
+
 export async function respondToInvitation(
   invitationId: string,
   action: "accept" | "reject",
@@ -831,6 +866,14 @@ export async function votePost(postId: string, token: string) {
   }
 }
 
+export async function unvotePost(postId: string, token: string) {
+  const response = await apiFetch(buildUrl(`/api/posts/${postId}/vote`), {
+    method: "DELETE",
+    headers: { Authorization: token },
+  });
+  if (!response.ok) throw new Error(await response.text());
+}
+
 export async function followPost(postId: string, token: string) {
   const response = await apiFetch(buildUrl(`/api/posts/${postId}/follow`), {
     method: "POST",
@@ -841,4 +884,20 @@ export async function followPost(postId: string, token: string) {
   if (!response.ok) {
     throw new Error(await response.text());
   }
+}
+
+export async function unfollowPost(postId: string, token: string) {
+  const response = await apiFetch(buildUrl(`/api/posts/${postId}/follow`), {
+    method: "DELETE",
+    headers: { Authorization: token },
+  });
+  if (!response.ok) throw new Error(await response.text());
+}
+
+export async function getPostFollowState(postId: string, token: string): Promise<{ is_following: boolean }> {
+  const response = await apiFetch(buildUrl(`/api/posts/${postId}/follow`), {
+    headers: { Authorization: token },
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json() as Promise<{ is_following: boolean }>;
 }

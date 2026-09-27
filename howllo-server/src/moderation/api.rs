@@ -23,6 +23,43 @@ pub struct ModerationQueueQuery {
     pub per_page: Option<i64>,
 }
 
+#[derive(Deserialize)]
+pub struct ModerationPostsQuery {
+    pub tenant_slug: String,
+    pub q: Option<String>,
+    pub page: Option<i64>,
+    pub per_page: Option<i64>,
+}
+
+#[get("/api/admin/moderation/posts")]
+pub async fn get_moderation_posts(
+    pool: web::Data<DbPool>,
+    query: web::Query<ModerationPostsQuery>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    let page = query.page.unwrap_or(1).clamp(1, 100_000);
+    let per_page = query.per_page.unwrap_or(20).clamp(1, 100);
+    if query.q.as_deref().is_some_and(|value| value.chars().count() > 120) {
+        return Err(AppError::Validation("Search is too long".into()));
+    }
+    let (items, total) = moderation_service::get_moderation_posts(
+        pool.get_ref(),
+        &query.tenant_slug,
+        query.q.as_deref(),
+        page,
+        per_page,
+        auth.0.id,
+    )
+    .await?;
+    Ok(HttpResponse::Ok().json(crate::dto::PaginatedResponse {
+        has_next: page * per_page < total,
+        items,
+        page,
+        per_page,
+        total,
+    }))
+}
+
 #[get("/api/admin/moderation/queue")]
 pub async fn get_moderation_queue(
     pool: web::Data<DbPool>,
@@ -648,6 +685,47 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = read_json(response).await;
         assert!(body.get("total").and_then(|v| v.as_i64()).unwrap_or(0) >= 1);
+    }
+
+    #[actix_web::test]
+    async fn moderation_post_browser_is_searchable_and_tenant_scoped() {
+        let settings = test_settings();
+        let _guard = lock_test_db().await;
+        let pool = db::establish_connection(&settings.database_url).await.unwrap();
+        reset_db(&pool).await;
+        let first = seed_basic_tenant(&pool).await;
+        let second = seed_basic_tenant(&pool).await;
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        ).await;
+        let moderator = bearer_for(
+            &first.moderator_subject, "moderator@example.com", "Moderator",
+            &settings.rooiam_jwt_secret,
+        );
+        let list = test::call_service(&app, test::TestRequest::get()
+            .uri(&format!("/api/admin/moderation/posts?tenant_slug={}&per_page=1", first.tenant_slug))
+            .insert_header(("Authorization", moderator.clone()))
+            .to_request()).await;
+        assert_eq!(list.status(), StatusCode::OK);
+        let body = read_json(list).await;
+        assert!(body["total"].as_i64().unwrap() >= 2);
+        assert_eq!(body["items"].as_array().unwrap().len(), 1);
+        assert!(body["items"][0].get("is_locked").is_some());
+        assert!(body["items"][0].get("is_pinned").is_some());
+        let searched = test::call_service(&app, test::TestRequest::get()
+            .uri(&format!("/api/admin/moderation/posts?tenant_slug={}&q=no-such-title", first.tenant_slug))
+            .insert_header(("Authorization", moderator.clone()))
+            .to_request()).await;
+        assert_eq!(read_json(searched).await["total"], 0);
+        let foreign = test::call_service(&app, test::TestRequest::get()
+            .uri(&format!("/api/admin/moderation/posts?tenant_slug={}", second.tenant_slug))
+            .insert_header(("Authorization", moderator))
+            .to_request()).await;
+        assert_eq!(foreign.status(), StatusCode::FORBIDDEN);
     }
 
     #[actix_web::test]

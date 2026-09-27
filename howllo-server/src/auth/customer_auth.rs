@@ -29,6 +29,7 @@ pub struct CustomerAuthSettings {
     rooiam_widget_base_url: Option<String>,
     providers: Vec<CustomerOidcSetting>,
     callback_urls: std::collections::HashMap<String, String>,
+    callback_url_configured: bool,
 }
 
 #[derive(Serialize)]
@@ -326,6 +327,11 @@ pub async fn public_providers(
 }
 
 async fn settings(pool: &DbPool, tenant_id: Uuid) -> Result<CustomerAuthSettings, AppError> {
+    // Password-only workspaces must remain configurable before the operator
+    // sets the public API origin needed for external OAuth redirects.
+    let callback_url_configured = std::env::var("HOWLLO_PUBLIC_API_URL")
+        .ok()
+        .is_some_and(|value| !value.trim().is_empty());
     let row: Option<(bool, bool, Option<String>, Option<String>)> = sqlx::query_as(
         "SELECT local_enabled, rooiam_enabled, rooiam_workspace_id, rooiam_client_id FROM workspace_customer_auth WHERE tenant_id = $1"
     ).bind(tenant_id).fetch_optional(pool).await.map_err(db_error)?;
@@ -337,7 +343,11 @@ async fn settings(pool: &DbPool, tenant_id: Uuid) -> Result<CustomerAuthSettings
     let mut providers = Vec::new();
     for (key, display_name, issuer, client_id, token_endpoint_auth_method, enabled) in rows {
         providers.push(CustomerOidcSetting {
-            callback_url: callback_url(&scoped_provider_id(tenant_id, &key))?,
+            callback_url: if callback_url_configured {
+                callback_url(&scoped_provider_id(tenant_id, &key))?
+            } else {
+                String::new()
+            },
             key,
             display_name,
             issuer,
@@ -360,15 +370,20 @@ async fn settings(pool: &DbPool, tenant_id: Uuid) -> Result<CustomerAuthSettings
             None
         },
         providers,
-        callback_urls: ["google", "microsoft", "oidc"]
-            .into_iter()
-            .map(|key| {
-                Ok((
-                    key.to_string(),
-                    callback_url(&scoped_provider_id(tenant_id, key))?,
-                ))
-            })
-            .collect::<Result<_, AppError>>()?,
+        callback_urls: if callback_url_configured {
+            ["google", "microsoft", "oidc"]
+                .into_iter()
+                .map(|key| {
+                    Ok((
+                        key.to_string(),
+                        callback_url(&scoped_provider_id(tenant_id, key))?,
+                    ))
+                })
+                .collect::<Result<_, AppError>>()?
+        } else {
+            std::collections::HashMap::new()
+        },
+        callback_url_configured,
     })
 }
 
@@ -464,6 +479,9 @@ pub async fn save_provider(
         return Err(AppError::Validation(
             "Invalid provider settings or issuer is not allowed by the server".into(),
         ));
+    }
+    if body.enabled && std::env::var("HOWLLO_PUBLIC_API_URL").ok().is_none_or(|value| value.trim().is_empty()) {
+        return Err(AppError::Validation("Set HOWLLO_PUBLIC_API_URL on the server before enabling an external sign-in provider".into()));
     }
     let ciphertext = if let Some(secret) = body
         .client_secret
@@ -609,6 +627,9 @@ mod tests {
         assert!(!serde_json::to_string(&public).unwrap().contains(secret));
         std::env::remove_var("HOWLLO_OIDC_CONFIG_KEY");
         std::env::remove_var("HOWLLO_PUBLIC_API_URL");
+        let without_origin = settings(&pool, tenant_id).await.unwrap();
+        assert!(!without_origin.callback_url_configured);
+        assert!(without_origin.callback_urls.is_empty());
     }
 
     #[actix_web::test]

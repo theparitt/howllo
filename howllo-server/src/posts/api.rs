@@ -965,6 +965,14 @@ mod tests {
         .await
         .unwrap();
         sqlx::query!(
+            "INSERT INTO post_votes (post_id, user_id) VALUES ($1, $2)",
+            seed.canonical_post_id,
+            seed.member_user_id
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query!(
             r#"
             INSERT INTO comments (id, post_id, user_id, body, is_official_response, comment_type)
             VALUES ($1, $2, $3, $4, TRUE, 'official')
@@ -1023,6 +1031,7 @@ mod tests {
                 .and_then(|v| v.as_bool()),
             Some(true)
         );
+        assert_eq!(body.get("has_voted").and_then(|v| v.as_bool()), Some(true));
         assert_eq!(
             body.get("official_response")
                 .and_then(|v| v.get("body"))

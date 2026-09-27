@@ -122,9 +122,9 @@ export function WorkspaceHome({ publicWebOrigin, staffSignIn = false }: { public
       <div className="page-stack" style={{ maxWidth: "42rem", margin: "0 auto" }}>
         <section className="panel empty-state">
           <span className="kicker">Welcome to Howllo</span>
-          <h1 className="empty-state__title">Sign in to get started</h1>
+          <h1 className="empty-state__title">{staffSignIn ? "Staff sign in" : "Sign in to get started"}</h1>
           <p className="empty-state__copy">
-            Sign in to create your feedback board and invite your team.
+            {staffSignIn ? "Sign in to manage a workspace or accept an invitation." : "Sign in to create your feedback board and invite your team."}
           </p>
           <div className="hero__actions" style={{ marginTop: "1rem", justifyContent: "center" }}>
             <button className="button button--cta" type="button" onClick={requestLogin}>
@@ -174,7 +174,7 @@ export function WorkspaceHome({ publicWebOrigin, staffSignIn = false }: { public
 
       {loaded && (creating || workspaces.length === 0) ? <section className="workspace-home__create" id="workspace-create">
         <h2>{workspaces.length === 0 ? "Create your first workspace" : "New workspace"}</h2>
-        <p>A workspace keeps one product&rsquo;s boards and team together.</p>
+        <p>{staffSignIn ? "Have an invitation? Accept it above. Or create a workspace for your own product." : "A workspace keeps one product’s boards and team together."}</p>
         <form className="workspace-home__form" onSubmit={(event) => { event.preventDefault(); void create(); }}>
           <label htmlFor="workspace-name">Workspace name</label>
           <input

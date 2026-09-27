@@ -116,7 +116,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
                 ))}
               </div>
             ) : null}
-            <PostActions tenantSlug={tenant} postId={post.id} allowVotes={board.allow_votes} voteLabel={boardVoteLabel(board.board_type)} />
+            <PostActions tenantSlug={tenant} postId={post.id} allowVotes={board.allow_votes} voteLabel={boardVoteLabel(board.board_type)} initiallyVoted={post.has_voted ?? false} initiallyFollowing={post.follow_state?.is_following ?? false} />
           </section>
 
           {board.allow_comments ? <section className="panel post-thread__comments" id="comments">

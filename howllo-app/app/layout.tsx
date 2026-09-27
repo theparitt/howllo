@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AppShell } from "../components/app-shell";
 import "../../howllo-web/app/globals.css";
 import "./app.css";
+import "./staff-notifications.css";
 
 export const metadata: Metadata = {
   title: "Howllo App",

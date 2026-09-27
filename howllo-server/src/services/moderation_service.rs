@@ -51,6 +51,38 @@ pub async fn get_moderation_queue(
     Ok((items, total))
 }
 
+pub async fn get_moderation_posts(
+    pool: &DbPool,
+    tenant_slug: &str,
+    search: Option<&str>,
+    page: i64,
+    per_page: i64,
+    user_id: Uuid,
+) -> Result<(Vec<ModerationQueueItemDto>, i64), AppError> {
+    let tenant_id =
+        crate::repositories::membership_repository::resolve_tenant_id(pool, tenant_slug).await?;
+    require_permission(pool, tenant_id, user_id, Permission::ModerateContent).await?;
+    let total = post_repository::count_moderation_posts(pool, tenant_id, search)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, tenant_id = %tenant_id, "error counting moderation posts");
+            AppError::InternalServerError
+        })?;
+    let items = post_repository::list_moderation_posts(
+        pool,
+        tenant_id,
+        search,
+        per_page,
+        (page - 1) * per_page,
+    )
+    .await
+    .map_err(|error| {
+        tracing::error!(%error, tenant_id = %tenant_id, "error listing moderation posts");
+        AppError::InternalServerError
+    })?;
+    Ok((items, total))
+}
+
 pub async fn update_post_status(
     pool: &DbPool,
     hub: &Hub,

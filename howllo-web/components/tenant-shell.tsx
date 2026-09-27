@@ -55,6 +55,7 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
   const [branding, setBranding] = useState<TenantBranding>(DEFAULT_BRANDING);
   const [canManage, setCanManage] = useState(false);
   const [hasSession, setHasSession] = useState(false);
+  const [hasWorkspaceSession, setHasWorkspaceSession] = useState(false);
   const [plugins, setPlugins] = useState<PublicPlugin[]>([]);
 
   useEffect(() => {
@@ -62,6 +63,12 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
     sync();
     return subscribeToBearerTokenChange(sync);
   }, []);
+
+  useEffect(() => {
+    const sync = () => setHasWorkspaceSession(Boolean(branding.tenant_slug && readStoredBearerToken(branding.tenant_slug).trim()));
+    sync();
+    return subscribeToBearerTokenChange(sync);
+  }, [branding.tenant_slug]);
 
   // Show the Manage link only to workspace owners/admins.
   useEffect(() => {
@@ -213,7 +220,7 @@ export function TenantShell({ children }: { children: React.ReactNode }) {
             <Link href={homeHref} className="nav__link">View public boards ↗</Link>
             <AuthControl myHref={myHref} />
           </nav> : !loginHome ? <nav className="nav">
-            {branding.show_feed ? <Link href={feedHref} className="nav__link">Feed</Link> : null}
+            {branding.show_feed && hasWorkspaceSession ? <Link href={feedHref} className="nav__link">Feed</Link> : null}
             {branding.show_roadmap ? <Link href={roadmapHref} className="nav__link">Roadmap</Link> : null}
             {canManage ? <a href={externalAppHref} className="nav__link">Howllo App ↗</a> : null}
             <NotificationBell />

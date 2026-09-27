@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RooiamInlineLogin } from "@/components/rooiam-inline-login";
 import { ENABLED_AUTH_PROVIDERS } from "@/lib/auth-provider";
 import {
@@ -88,6 +88,13 @@ function statusTone(status: string): string {
   if (status === "accepted") return "green";
   if (status === "pending") return "blue";
   return "warm";
+}
+
+function HelpTip({ label, children }: { label: string; children: React.ReactNode }) {
+  return <details style={{ display: "inline-block", marginLeft: "0.4rem", verticalAlign: "middle" }}>
+    <summary aria-label={label} title={label} style={{ display: "inline-grid", placeItems: "center", width: "1.25rem", height: "1.25rem", border: "1px solid currentColor", borderRadius: "50%", cursor: "pointer", fontSize: "0.75rem", listStyle: "none" }}>?</summary>
+    <span role="note" style={{ display: "block", maxWidth: "22rem", marginTop: "0.3rem", fontSize: "0.82rem", fontWeight: 400, lineHeight: 1.5 }}>{children}</span>
+  </details>;
 }
 
 export function ManageArea() {
@@ -179,11 +186,11 @@ export function ManageArea() {
     }
     return (
       <section className="panel empty-state">
-        <h1 className="empty-state__title">Manager access only</h1>
+        <h1 className="empty-state__title">Staff access required</h1>
         <p className="empty-state__copy">
           {tenant && readStoredBearerToken(tenant).trim()
-            ? "You need an owner or admin role in this workspace to manage it."
-            : "Sign into this workspace to manage its boards and team."}
+            ? "Ask a workspace owner to invite you as staff."
+            : "Sign in with a staff account for this workspace."}
         </p>
       </section>
     );
@@ -257,27 +264,56 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
   const [memberPage, setMemberPage] = useState(1);
   const [inviteQuery, setInviteQuery] = useState("");
   const [invitePage, setInvitePage] = useState(1);
+  const [refreshing, setRefreshing] = useState(false);
+  const [listError, setListError] = useState("");
+  const [inviteActivity, setInviteActivity] = useState("");
+  const knownStatuses = useRef<Map<string, string> | null>(null);
+  const reloadGeneration = useRef(0);
 
   const token = () => readStoredBearerToken(tenant).trim();
 
   const reload = useCallback(async () => {
     const t = token();
     if (!t) return;
+    const generation = ++reloadGeneration.current;
+    setRefreshing(true);
     try {
       const [inv, mem] = await Promise.all([
         managerListInvitations(tenant, t),
         managerListMembers(tenant, t),
       ]);
+      if (generation !== reloadGeneration.current) return;
+      if (knownStatuses.current) {
+        const response = inv.find((item) =>
+          knownStatuses.current?.get(item.id) === "pending" && (item.status === "accepted" || item.status === "rejected"));
+        if (response) setInviteActivity(`${response.email} ${response.status === "accepted" ? "accepted your invitation and now appears below" : "declined your invitation"}.`);
+      }
+      knownStatuses.current = new Map(inv.map((item) => [item.id, item.status]));
       setInvites(inv);
       setMembers(mem);
-    } catch {
-      /* ignore */
+      setListError("");
+    } catch (cause) {
+      if (generation === reloadGeneration.current) setListError(cause instanceof Error ? cause.message : "Could not refresh staff.");
+    } finally {
+      if (generation === reloadGeneration.current) setRefreshing(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant]);
 
   useEffect(() => {
     void reload();
+  }, [reload]);
+
+  useEffect(() => {
+    const refreshVisible = () => { if (document.visibilityState === "visible") void reload(); };
+    const interval = window.setInterval(refreshVisible, 20000);
+    document.addEventListener("visibilitychange", refreshVisible);
+    window.addEventListener("focus", refreshVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshVisible);
+      window.removeEventListener("focus", refreshVisible);
+    };
   }, [reload]);
 
   const invite = async () => {
@@ -287,13 +323,13 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
     setInviteCode("");
     try {
       const created = await managerCreateInvitation(tenant, { email: email.trim(), role: inviteRole }, token());
-      setNotice(`Invitation created for ${email.trim()}. Share the code privately; it will not be shown again.`);
+      setNotice(`Invitation created for ${email.trim()}. Copy the one-time code now; it will not be shown again.`);
       setInviteCode(created.redemption_code);
       setEmail("");
       setInviteRole("moderator");
       await reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to send invitation");
+      setError(e instanceof Error ? e.message : "Could not create invitation.");
     } finally {
       setBusy(false);
     }
@@ -310,22 +346,28 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
 
   return (
     <>
+      <div className="manage-board-links" style={{ justifyContent: "flex-end" }}>
+        <button type="button" className="ghost-button" disabled={refreshing} onClick={() => void reload()}>{refreshing ? "Refreshing…" : "Refresh staff"}</button>
+      </div>
+      {inviteActivity ? <p className="success-text" role="status">{inviteActivity}</p> : null}
+      {listError ? <p className="error-text" role="alert">{listError}</p> : null}
       <section className="panel">
         <h2 className="section-title">Invite a teammate</h2>
+        <p className="section-subtitle">Invite someone to help manage this workspace.</p>
         <div className="manage-form" style={{ marginTop: "1rem" }}>
-          <input className="manage-input" placeholder="person@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <select className="manage-input" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
+          <input className="manage-input" type="email" aria-label="Teammate email" placeholder="person@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <select className="manage-input" aria-label="Invitation role" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
             {INVITE_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
           <button type="button" className="button button--cta" disabled={busy || !email.trim()} onClick={invite}>
-            {busy ? "Sending…" : "Send invite"}
+            {busy ? "Creating…" : "Create invitation"}
           </button>
         </div>
-        <p className="section-subtitle" style={{ marginTop: "0.6rem" }}>Share the one-time code with your teammate privately. They can redeem it in Howllo App after signing in. Invitation email is sent when platform email is enabled.</p>
+        <div className="section-subtitle" style={{ marginTop: "0.6rem" }}>Anyone with the one-time code can join, so share it only with your teammate. They enter it in Howllo App after signing in. If workspace email is enabled, the address above also receives the invitation. <HelpTip label="About staff roles">Admins can manage boards, settings, and staff. Moderators handle posts and comments. You can change their role after they join.</HelpTip></div>
         {notice ? <p className="success-text">{notice}</p> : null}
         {inviteCode ? <div className="manage-form" style={{ marginTop: "0.75rem" }}>
           <code style={{ overflowWrap: "anywhere" }}>{inviteCode}</code>
-          <button type="button" className="ghost-button" onClick={() => void navigator.clipboard.writeText(inviteCode)}>Copy code</button>
+          <button type="button" className="ghost-button" onClick={() => void navigator.clipboard.writeText(inviteCode).then(() => setNotice("Invitation code copied. Share it privately with your teammate.")).catch(() => setError("Could not copy the code. Select and copy it manually."))}>Copy invitation code</button>
         </div> : null}
         {error ? <p className="error-text">{error}</p> : null}
       </section>
@@ -339,10 +381,10 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
               <div className="manage-row" key={inv.id}>
                 <div>
                   <strong>{inv.email}</strong>
-                  <p className="section-subtitle">{inv.role} · <span className="chip" data-tone={statusTone(inv.status)}>{inv.status}</span></p>
+                  <p className="section-subtitle">{inv.role} · <span className="chip" data-tone={statusTone(inv.status)}>{inv.status}</span>{inv.status === "accepted" && inv.accepted_user_name ? <> · Joined as <strong>{inv.accepted_user_name}</strong></> : null}</p>
                 </div>
                 {inv.status === "pending" ? (
-                  <button type="button" className="ghost-button" onClick={async () => { await managerWithdrawInvitation(inv.id, tenant, token()).catch(() => {}); reload(); }}>
+                  <button type="button" className="ghost-button" onClick={async () => { try { await managerWithdrawInvitation(inv.id, tenant, token()); await reload(); } catch (cause) { setListError(cause instanceof Error ? cause.message : "Could not withdraw invitation."); } }}>
                     Withdraw
                   </button>
                 ) : null}
@@ -355,7 +397,7 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
       ) : null}
 
       <section className="panel">
-        <h2 className="section-title">Members</h2>
+        <div style={{ display: "flex", alignItems: "center" }}><h2 className="section-title">People with workspace access</h2><HelpTip label="About workspace access">Owners and admins manage the workspace, moderators review posts, and members can access private boards. Public board visitors are managed under Board members. Role changes save immediately.</HelpTip></div>
         <ListSearch value={memberQuery} onChange={(value) => { setMemberQuery(value); setMemberPage(1); }} placeholder="Search staff by name or email"><select className="manage-input" aria-label="Filter staff by role" value={memberRole} onChange={(event) => { setMemberRole(event.target.value); setMemberPage(1); }}><option value="all">All roles</option>{MEMBER_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}</select></ListSearch>
         <div className="list-stack" style={{ marginTop: "1rem" }}>
           {visibleMembers.slice((safeMemberPage - 1) * LIST_PAGE_SIZE, safeMemberPage * LIST_PAGE_SIZE).map((m) => (
@@ -378,6 +420,8 @@ function MemberRow({
   const [error, setError] = useState<string | null>(null);
   const token = () => readStoredBearerToken(tenant).trim();
   const canEditOwners = myRole === "owner";
+  const canManageMember = canEditOwners || member.role !== "owner";
+  const isLastOwner = member.role === "owner" && ownerCount === 1;
   const roleOptions = canEditOwners ? MEMBER_ROLES : MEMBER_ROLES.filter((r) => r !== "owner");
 
   const changeRole = async (role: string) => {
@@ -419,10 +463,11 @@ function MemberRow({
         {error ? <p className="error-text">{error}</p> : null}
       </div>
       <div className="manage-row__actions">
-        <select className="manage-input" value={member.role} disabled={busy} onChange={(e) => changeRole(e.target.value)}>
+        <select className="manage-input" aria-label={`Role for ${member.display_name}`} title={isLastOwner ? "Keep at least one owner in this workspace" : !canManageMember ? "Only an owner can change another owner's role" : "Role changes save immediately"} value={member.role} disabled={busy || !canManageMember || isLastOwner} onChange={(e) => changeRole(e.target.value)}>
+          {!canManageMember ? <option value="owner">owner</option> : null}
           {roleOptions.map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
-        <button type="button" className="ghost-button" disabled={busy} onClick={remove}>Remove</button>
+        {canManageMember && !isLastOwner ? <button type="button" className="ghost-button" disabled={busy} onClick={remove}>Remove access</button> : null}
       </div>
     </div>
   );
@@ -525,13 +570,13 @@ function BoardsTab({ tenant, initialBoards, onBoardsChange }: { tenant: string; 
         {error ? <p className="error-text" role="alert">{error}</p> : null}
       </section>
       {boards.length > 0 ? <section className="dashboard-grid">
-        <section className="panel">
+        <section className="panel" style={{ alignSelf: "start" }}>
           <h2 className="section-title">Boards</h2>
           <div className="list-stack" style={{ marginTop: "1rem" }}>
             {boards.map((b) => (
               <button type="button" key={b.id} className={`manage-board-tab${b.id === selected ? " manage-board-tab--active" : ""}`} onClick={() => setSelected(b.id)}>
                 <strong>{b.name}</strong>
-                <span className="section-subtitle">{b.board_type}{b.is_private ? " · private" : ""} · {b.is_enabled ? workspacePublished ? "Active" : "Ready" : b.first_enabled_at ? "Paused" : "Draft"}</span>
+                <span className="section-subtitle">{boardPreset(b.board_type).label}{b.is_private ? " · private" : ""} · {b.is_enabled ? workspacePublished ? "Active" : "Ready" : b.first_enabled_at ? "Paused" : "Draft"}</span>
               </button>
             ))}
           </div>
@@ -632,7 +677,7 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
 
   return (
     <section className="panel">
-      <div className="manage-board-heading"><h2 className="section-title">{board.name}</h2><strong>{board.is_enabled ? workspacePublished ? "Active" : "Ready" : board.first_enabled_at ? "Paused" : "Draft"}</strong></div>
+      <div className="manage-board-heading"><h2 className="section-title">{board.name}</h2><span><strong>{board.is_enabled ? workspacePublished ? "Active" : "Ready" : board.first_enabled_at ? "Paused" : "Draft"}</strong><HelpTip label="About board visibility">A board is visible to visitors only after it is enabled and the workspace is published under Board site. Paused and draft boards are hidden.</HelpTip></span></div>
       <div className="manage-board-links">
         {board.is_enabled && workspacePublished ? <a className="button" href={publicBoardUrl(tenant, board.slug)}>Open board ↗</a> : null}
         {!board.is_private && board.is_enabled && workspacePublished ? <button className="button" type="button" onClick={() => {
@@ -647,6 +692,7 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
         <label className="manage-label">Board introduction<textarea className="manage-input" rows={2} maxLength={240} value={introText} onChange={(e) => setIntroText(e.target.value)} placeholder="Optional guidance shown above posts" /></label>
         <label className="manage-check"><input type="checkbox" checked={allowVotes} onChange={(e) => setAllowVotes(e.target.checked)} /> {boardKind(boardType) === "bug-reports" ? "Let visitors mark a bug as affecting them" : boardKind(boardType) === "discussions" ? "Let visitors like discussions" : boardKind(boardType) === "announcements" ? "Let visitors mark updates helpful" : "Let visitors vote on ideas"}</label>
         <label className="manage-check"><input type="checkbox" checked={allowComments} onChange={(e) => setAllowComments(e.target.checked)} /> {boardKind(boardType) === "discussions" ? "Let visitors reply" : boardKind(boardType) === "announcements" ? "Let visitors respond" : "Let visitors comment"}</label>
+        <details className="board-extras"><summary>Images and colors</summary><div className="manage-fields" style={{ marginTop: "1rem" }}>
         <label className="manage-label">Background color
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
             <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(bg) ? bg : "#fff1ea"} onChange={(e) => setBg(e.target.value)} />
@@ -693,6 +739,7 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
           <span className="section-subtitle">PNG, JPG or WebP · up to 5 MB. Resized to fit 512 × 512.</span>
           {iconUrl ? <button type="button" className="ghost-button" disabled={busy} onClick={() => setIconUrl(null)}>Remove icon</button> : null}
         </div>
+        </div></details>
         <label className="manage-check"><input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} /> Private board (members only)</label>
       </div>
       <BoardTaxonomyEditor boardId={board.id} tenant={tenant} />
@@ -700,7 +747,7 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
       {board.is_enabled && workspacePublished ? <BoardTopics boardSlug={board.slug} tenant={tenant} /> : null}
       <div className="manage-board-links">
         <button type="button" className="button button--cta" disabled={busy || !name.trim()} onClick={save}>{busy ? "Saving…" : "Save changes"}</button>
-        <button type="button" className="ghost-button" disabled={busy} onClick={() => void setPublication(!board.is_enabled)}>{board.is_enabled ? "Pause board" : board.first_enabled_at ? "Resume board" : "Publish board"}</button>
+        <button type="button" className="ghost-button" disabled={busy} onClick={() => void setPublication(!board.is_enabled)}>{board.is_enabled ? "Pause board" : board.first_enabled_at ? "Resume board" : workspacePublished ? "Publish board" : "Enable board"}</button>
         {notice ? <span className="success-text">{notice}</span> : null}
       </div>
       {boardKind(board.board_type) === "announcements" ? <AnnouncementComposer tenant={tenant} board={board} available={board.is_enabled && workspacePublished} /> : null}
