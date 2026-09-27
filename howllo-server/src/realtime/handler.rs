@@ -44,7 +44,7 @@ pub async fn ws_connect(
     .await?;
 
     let user_id = if is_workspace_session_token(&query.ticket) {
-        let session = resolve_workspace_session_from_token(pool.get_ref(), &query.ticket)
+        let session = resolve_workspace_session_from_token(pool.get_ref(), settings.get_ref(), &query.ticket)
             .await?
             .ok_or(AppError::Unauthorized)?;
         if session.tenant_id != tenant_id {
@@ -53,6 +53,17 @@ pub async fn ws_connect(
         session.user.id
     } else {
         let identity = resolve_rooiam_access_token(settings.get_ref(), &query.ticket).await?;
+        if crate::external_identity::linked_workspace(pool.get_ref(), settings.get_ref(), tenant_id).await? {
+            let subject_segment = crate::external_identity::encoded_subject(&identity.sub)?;
+            let member = crate::external_identity::call_bridge(
+                settings.get_ref(), reqwest::Method::GET,
+                &format!("/v1/workspaces/{tenant_id}/subjects/{subject_segment}"), None, None,
+            ).await?;
+            if member.get("subject").and_then(|v| v.as_str()) != Some(identity.sub.as_str())
+                || member.get("status").and_then(|v| v.as_str()) != Some("active") {
+                return Err(AppError::Forbidden);
+            }
+        }
         let user = resolve_user(
             pool.get_ref(),
             &ExternalIdentity {

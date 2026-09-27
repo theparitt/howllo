@@ -67,6 +67,7 @@ async fn upsert_rooiam_user(
 
 pub async fn resolve_workspace_session_from_token(
     pool: &DbPool,
+    settings: &Settings,
     token: &str,
 ) -> Result<Option<WorkspaceSessionAuth>, AppError> {
     if !is_workspace_session_token(token) {
@@ -128,6 +129,44 @@ pub async fn resolve_workspace_session_from_token(
         return Ok(None);
     };
 
+    if let Some(provider_id) = settings.identity_bridge_provider_id.as_deref() {
+        let identity: Option<(Option<chrono::DateTime<Utc>>, String)> = sqlx::query_as(
+            "SELECT s.provider_verified_at, i.subject FROM workspace_sessions s JOIN user_identities i ON i.user_id=s.user_id AND i.provider_id=$2 WHERE s.token_hash=$1",
+        )
+        .bind(&token_hash)
+        .bind(provider_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
+        if let Some((verified_at, subject)) = identity {
+            if verified_at.is_none_or(|time| time < Utc::now() - Duration::minutes(2))
+                && crate::external_identity::linked_workspace(pool, settings, tenant_id).await?
+            {
+                let subject_segment = crate::external_identity::encoded_subject(&subject)?;
+                let member = crate::external_identity::call_bridge(
+                    settings, reqwest::Method::GET,
+                    &format!("/v1/workspaces/{tenant_id}/subjects/{subject_segment}"), None, None,
+                ).await;
+                let active = matches!(&member, Ok(value) if value.get("subject").and_then(|v| v.as_str()) == Some(subject.as_str())
+                    && value.get("status").and_then(|v| v.as_str()) == Some("active"));
+                if !active {
+                    if let Err(error) = member {
+                        if !matches!(error, AppError::NotFound | AppError::Forbidden | AppError::Unauthorized) {
+                            return Err(error);
+                        }
+                    }
+                    let _ = sqlx::query("UPDATE workspace_sessions SET revoked_at=NOW() WHERE token_hash=$1")
+                        .bind(&token_hash).execute(pool).await;
+                    return Ok(None);
+                }
+                let updated = sqlx::query("UPDATE workspace_sessions SET provider_verified_at=NOW() WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at > NOW()")
+                    .bind(&token_hash).execute(pool).await
+                    .map_err(|_| AppError::InternalServerError)?;
+                if updated.rows_affected() == 0 { return Ok(None); }
+            }
+        }
+    }
+
     let _ = sqlx::query("UPDATE workspace_sessions SET last_used_at = NOW() WHERE token_hash = $1")
         .bind(&token_hash)
         .execute(pool)
@@ -147,7 +186,11 @@ pub async fn resolve_workspace_session_from_request(
         .app_data::<web::Data<DbPool>>()
         .ok_or(AppError::InternalServerError)?;
 
-    resolve_workspace_session_from_token(pool.get_ref(), token).await
+    let settings = req
+        .app_data::<web::Data<Settings>>()
+        .ok_or(AppError::InternalServerError)?;
+
+    resolve_workspace_session_from_token(pool.get_ref(), settings.get_ref(), token).await
 }
 
 #[post("/api/auth/workspace-session")]
@@ -178,6 +221,20 @@ pub async fn create_workspace_session(
     let tenant_id =
         crate::repositories::membership_repository::resolve_tenant_id(pool.get_ref(), tenant_slug)
             .await?;
+
+    // Reject a banned participant before any external self-enrollment can
+    // create a provider membership for this workspace.
+    let restricted: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM workspace_restrictions WHERE tenant_id = $1 AND user_id = $2 AND (expires_at IS NULL OR expires_at > NOW()))",
+    )
+    .bind(tenant_id)
+    .bind(user.id)
+    .fetch_one(pool.get_ref())
+    .await
+    .map_err(|error| { tracing::error!(%error, "error checking workspace restriction"); AppError::InternalServerError })?;
+    if restricted {
+        return Err(AppError::Forbidden);
+    }
 
     // Staff sign-in stays independent of public board sign-in settings.
     let is_staff: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM memberships WHERE tenant_id=$1 AND user_id=$2 AND role IN ('owner','admin','moderator'))")
@@ -269,18 +326,6 @@ pub async fn create_workspace_session(
                 return Err(AppError::Forbidden);
             }
         }
-    }
-
-    let restricted: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM workspace_restrictions WHERE tenant_id = $1 AND user_id = $2 AND (expires_at IS NULL OR expires_at > NOW()))",
-    )
-    .bind(tenant_id)
-    .bind(user.id)
-    .fetch_one(pool.get_ref())
-    .await
-    .map_err(|error| { tracing::error!(%error, "error checking workspace restriction"); AppError::InternalServerError })?;
-    if restricted {
-        return Err(AppError::Forbidden);
     }
 
     // Signing into a workspace makes the user a `member` of that tenant so they
