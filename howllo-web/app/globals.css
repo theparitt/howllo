@@ -574,6 +574,30 @@ select {
   transform-origin: center;
 }
 
+.widget-shell--rooiam {
+  width: min(100%, 420px);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.widget-shell__content {
+  display: grid;
+  gap: 0.75rem;
+  width: min(420px, calc(100vw - 2rem));
+  padding: 1.6rem;
+}
+
+.widget-shell--rooiam .widget-shell__content {
+  display: none;
+}
+
+.widget-shell--rooiam .widget-shell__frame {
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+}
+
 @keyframes pop-in {
   from {
     opacity: 0;

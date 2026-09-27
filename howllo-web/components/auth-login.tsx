@@ -426,7 +426,7 @@ export function AuthLogin({ myHref, staffMode = false, hideSignedOutTrigger = fa
             if (event.target === event.currentTarget) setLoginOpen(false);
           }}
         >
-          <div className="widget-shell" role="dialog" aria-modal="true" aria-label="Sign in">
+          <div className={`widget-shell${legacyOpen && configured && providers.length === 0 ? " widget-shell--rooiam" : ""}`} role="dialog" aria-modal="true" aria-label="Sign in">
           <button
             className="widget-shell__close"
             type="button"
@@ -436,7 +436,7 @@ export function AuthLogin({ myHref, staffMode = false, hideSignedOutTrigger = fa
             ×
           </button>
 
-          <div style={{ padding: "1.6rem", display: "grid", gap: "0.75rem", width: "min(420px, calc(100vw - 2rem))" }}>
+          <div className="widget-shell__content">
             <h2 style={{ margin: 0 }}>{staffMode ? registerMode ? "Create a staff account" : resetMode || emailResetMode ? "Reset your password" : "Staff sign in" : "Sign in to Howllo"}</h2>
             {!recoveryCode && !localOpen && !legacyOpen && !emailResetMode && providers.map((provider) => provider.kind === "oidc" ? (
               <button key={provider.id} className="button" type="button" onClick={() => {
