@@ -181,6 +181,7 @@ fn has_permission(role: Role, permission: Permission) -> bool {
         Role::Moderator => matches!(
             permission,
             ModerateContent
+                | ChangeStatus
                 | HidePost
                 | HideComment
                 | LockPost

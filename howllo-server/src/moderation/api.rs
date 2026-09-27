@@ -292,7 +292,7 @@ mod tests {
     }
 
     #[actix_web::test]
-    async fn moderator_can_mark_post_as_duplicate_but_not_change_status() {
+    async fn moderator_can_mark_post_as_duplicate_and_change_status() {
         let settings = test_settings();
         let _guard = lock_test_db().await;
         let pool = db::establish_connection(&settings.database_url)
@@ -334,10 +334,10 @@ mod tests {
                 seed.canonical_post_id
             ))
             .insert_header(("Authorization", moderator_token))
-            .set_json(json!({ "status": "done", "reason": "moderators cannot do this" }))
+            .set_json(json!({ "status": "in_progress" }))
             .to_request();
         let status_response = test::call_service(&app, status_request).await;
-        assert_eq!(status_response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(status_response.status(), StatusCode::OK);
     }
 
     #[actix_web::test]

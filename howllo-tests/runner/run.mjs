@@ -345,8 +345,9 @@ async function scenario(manifest) {
   check("RBAC-MEMBER-STATUS-DENIED", author.id, A, deniedStatus.status === 403,
     "member cannot change post status directly", deniedStatus, "P1");
   const moderatorStatus = await moderator.request("PATCH", `/api/admin/posts/${postId}/status`, { status: "planned" }, A);
+  let moderatorChangedStatus = false;
   if (manifest.role_policy.grants.moderator?.includes("ChangeStatus")) {
-    check("STATUS-MODERATOR-POLICY", moderator.id, A, moderatorStatus.status === 200,
+    moderatorChangedStatus = check("STATUS-MODERATOR-POLICY", moderator.id, A, moderatorStatus.status === 200,
       "moderator has configured status permission", moderatorStatus, "P1");
   } else {
     check("STATUS-MODERATOR-DENIED", moderator.id, A, moderatorStatus.status === 403,
@@ -358,6 +359,11 @@ async function scenario(manifest) {
   check("STATUS-INVALID-TRANSITION", admin.id, A, invalidTransition.status === 422,
     "admin cannot skip from under_review to done", invalidTransition, "P1");
   for (const [from, to] of [["under_review", "planned"], ["planned", "in_progress"], ["in_progress", "done"]]) {
+    if (from === "under_review" && moderatorChangedStatus) {
+      check(`STATUS-${from}-${to}`, moderator.id, A, moderatorStatus.status === 200,
+        `allowed transition ${from} to ${to}`, moderatorStatus);
+      continue;
+    }
     const changed = await admin.request("PATCH", `/api/admin/posts/${postId}/status`, { status: to }, A);
     requireCheck(`STATUS-${from}-${to}`, admin.id, A, changed.status === 200,
       `allowed transition ${from} to ${to}`, changed);
