@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="art/howllo-logo-wordmark-horizontal.png" width="430" alt="Howllo" />
+  <img src="art/howllo-logo-wordmark-horizontal.png" width="380" alt="Howllo" />
 </h1>
 
 <p align="center">
@@ -8,17 +8,20 @@
 </p>
 
 <p align="center">
-  <img src="art/howllo-cartoon.jpg" width="180" alt="Howllo wolf mascot pointing to the board" />
+  <img src="art/howllo-cartoon.jpg" width="150" alt="Howllo wolf mascot" />
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-blue.svg" alt="Apache-2.0 license" /></a>
-  <a href="https://github.com/theparitt/howllo"><img src="https://img.shields.io/badge/GitHub-theparitt%2Fhowllo-181717?logo=github" alt="Howllo on GitHub" /></a>
+  <a href="docs/roadmap.md"><img src="https://img.shields.io/badge/Release-preview-F2A65A?style=flat-square" alt="Preview release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-3178A8?style=flat-square" alt="Apache-2.0 license" /></a>
+  <a href="https://github.com/theparitt/howllo/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/theparitt/howllo/ci.yml?branch=main&label=CI&style=flat-square" alt="CI status" /></a>
 </p>
 
-## Run Howllo
+---
 
-On macOS or Linux, install Docker, Git, curl, and OpenSSL. Then copy and run:
+## Quickstart
+
+**You need:** Docker, Git, curl, and OpenSSL on macOS or Linux.
 
 ```bash
 git clone https://github.com/theparitt/howllo.git
@@ -26,175 +29,59 @@ cd howllo
 ./scripts/quickstart.sh
 ```
 
-Open **[localhost:7703](http://localhost:7703)** to see the sample board. **[localhost:7702](http://localhost:7702)** is the staff app; the API is at **[localhost:7700/api/health](http://localhost:7700/api/health)**. The script pulls ready-to-run images, starts PostgreSQL and all three services, and prints the URLs when the board is ready. It creates a local-only sample board; workspaces you create in the staff app start empty and unpublished.
+| Open | URL | What you get |
+| --- | --- | --- |
+| 🟠 **Board** | [localhost:7703](http://localhost:7703) | A live sample discussion board |
+| 🔵 **Staff app** | [localhost:7702](http://localhost:7702) | Create and manage your workspaces |
+| 🟢 **API** | [localhost:7700/api/health](http://localhost:7700/api/health) | Server health |
+
+The script starts PostgreSQL, the API, and both web apps. It uses local sign-in and local file storage. Ports bind to `127.0.0.1` for a laptop demo.
+
+### Make your own board
+
+1. Open **Staff app** and create a local account.
+2. Create a workspace, then add a board.
+3. Publish the board and workspace to show them on **Board**.
+
+New workspaces start empty and unpublished. The sample board is created only by the Quickstart.
+
+### Stop or inspect
 
 ```bash
-# Check the server and web
+# See the API and web logs
 docker compose --env-file .env.quickstart -f compose.quickstart.yml logs -f server web
 
-# Stop (your data stays in Docker volumes)
+# Stop; your data stays in Docker volumes
 docker compose --env-file .env.quickstart -f compose.quickstart.yml down
 ```
 
-The quickstart uses local sign-in and local file storage. It binds ports to `127.0.0.1` for a laptop demo. For a public install, configure your own domain, HTTPS, mail, and storage; see the [self-host guide](https://docs.howllo.dev/self-host.html).
+---
 
-Howllo is open source under the [Apache License 2.0](LICENSE). Contributions are welcome on [GitHub](https://github.com/theparitt/howllo).
+## What is a Howllo board?
 
-**Release status:** preview. The hosted demo is live, but the self-hosted
-production release has open security and operations gates. See the
-[release roadmap](docs/roadmap.md) before using private boards or sensitive
-customer data.
+Each workspace can have several boards, with a layout suited to its purpose.
 
-Optional plugins are written and shipped by the Howllo maintainer. The
-platform admin approves them; each workspace or board chooses which approved
-plugins to enable. Howllo does not load third-party plugin code or tenant
-plugin uploads. See [plugin guide](docs/plugins.md).
+| Board type | For |
+| --- | --- |
+| **Discussions** | Topics, questions, and replies |
+| **Feature requests** | Ideas, votes, and progress |
+| **Bug reports** | Issues and reproduction details |
+| **Announcements** | Updates from the team |
 
-Howllo starts with local accounts and recovery codes. Google and Microsoft sign-in are optional OpenID Connect choices that an operator or workspace owner can configure. Provider isolation and a clean standalone install remain 1.0 gates; see the [release gates](docs/RELEASE_GATES.md), [visual setup guide](https://docs.howllo.dev/self-host.html), and [public roadmap](https://docs.howllo.dev/roadmap.html).
+The **roadmap** is a separate workspace page that shows progress across posts. See [board types and controls](docs/board-types.md).
 
-## Monorepo layout
+---
 
-```text
-howllo/
-  howllo-server/      # Rust + Actix + SQLx + PostgreSQL + MinIO   :7700
-  howllo-admin/       # Vite + React + TypeScript (platform operator console) :7701
-  howllo-app/         # Next.js (tenant management, local or configured SSO)   :7702
-  howllo-web/         # Next.js (public boards, local accounts)                 :7703
-  howllo-landing/     # Marketing site                             :5114
-  howllo-docs/        # Product guides and user tutorials           :5116
-  shared/             # code shared across the frontends (npm @howllo/* packages)
-    api-client/       # Typed client over the server REST API
-    types/            # Shared TS types mirroring server DTOs
-    ui/               # Shared React components (StatusBadge, Tag, …)
-    config/           # Canonical ports, env, route builders
-    eslint-config/    # Shared ESLint base
-    tsconfig/         # Shared tsconfig bases
-  docs/               # architecture / api / permissions / roadmap
-```
+## Guides
 
-## Board identity
+| I want to… | Read |
+| --- | --- |
+| Run a public installation | [Deployment guide](docs/deployment.md) · [Visual self-host tutorial](https://docs.howllo.dev/self-host.html) |
+| Change the code | [Development setup](docs/development.md) · [Architecture](docs/architecture.md) |
+| Configure sign-in or email | [OIDC](docs/auth/oidc.md) · [Email](docs/email.md) |
+| Understand plugins and upcoming work | [Plugins](docs/plugins.md) · [Roadmap](docs/roadmap.md) |
 
-Board identity is hierarchical and unique by `tenant.slug + board.slug`:
+> [!IMPORTANT]
+> Howllo is a preview release. Review the [release gates](docs/RELEASE_GATES.md) before using private boards or sensitive customer data.
 
-- A **tenant** (company/workspace) has a unique `slug` — typically the company
-  name plus a short random suffix (5–6 chars) to keep it globally unique.
-- A **board** has a human `name` (display) and a `slug` (URL). Boards are unique
-  per tenant: `UNIQUE(tenant_id, slug)`.
-- Both tenants and boards also carry an internal UUID `id`. Slugs are for
-  display/URLs; system references use the `id`.
-
-One admin can control multiple boards across multiple tenants.
-
-Tenant management is **Howllo App** at port 7702 `/app/{workspace}`. Customers use **Howllo Web** at port 7703 `/{workspace}`. They share the server's workspace and board records but have separate login experiences; `howllo-admin` remains the platform operator console. See [product surfaces](docs/product-surfaces.md).
-
-## Ports (canonical — `shared/config/src/ports.ts`)
-
-| Port | Service          |
-| ---- | ---------------- |
-| 7700 | howllo-server    |
-| 7701 | howllo-admin     |
-| 7702 | howllo-app       |
-| 7703 | howllo-web       |
-| 7700/ws | board websocket  |
-| 5114 | howllo-landing   |
-| 5115 | howllo-widget (reserved, later) |
-| 5116 | howllo-docs      |
-
-## Local development
-
-Use the [Docker quickstart](#run-howllo) to run Howllo without a Rust or Node.js toolchain. The commands below are for editing the source.
-
-```bash
-# Optional local backing services (skip when using PostgreSQL and MinIO on 192.168.0.147)
-docker compose up -d
-
-# Backend (port 7700), from the repository root
-cp howllo-server/.env.example howllo-server/.env
-cd howllo-server
-sqlx migrate run --source db/migrations
-cargo run
-
-# In a second terminal, from the repository root
-npm install
-npm run dev:app      # :7702
-npm run dev:web      # :7703
-npm run dev:admin    # :7701
-npm run dev:landing  # :5114
-npm run dev:docs     # :5116
-```
-
-For external backing services, set `HOWLLO_DATABASE_URL` and the
-`HOWLLO_MINIO_*` variables in `howllo-server/.env`. Set
-`HOWLLO_STORAGE_PUBLIC_BASE_URL` to the browser-accessible bucket URL, for
-example `http://192.168.0.147:9000/howllo`. Saved storage settings in
-PostgreSQL override `.env` values. Keep `DATABASE_URL` in sync when running the
-`sqlx` CLI.
-
-Copy `howllo-app/.env.example` to `howllo-app/.env.local`,
-`howllo-web/.env.example` to `howllo-web/.env.local`, and
-`howllo-admin/.env.example` to `howllo-admin/.env.local` before changing the
-public API URL. The API URL in those files must be reachable from users'
-browsers. The backend CORS list must include both frontend origins.
-
-Howllo Web reads workspace login options from the API. Keep
-`HOWLLO_AUTH_LOCAL_ENABLED=true` on the server for a local-account install.
-Email is optional and disabled on a new installation. Platform admins configure
-SMTP, send a test message, and enable delivery; workspaces then choose their
-email features. See the [email setup and MailHog test guide](docs/email.md).
-Howllo App defaults to local sign-in on a fresh installation. Staff invitations
-show a single-use code to the inviter; share it privately with the teammate,
-who signs in and redeems it in App. To add Google or Microsoft for staff,
-set `HOWLLO_PUBLIC_API_URL`, `HOWLLO_WEB_ORIGIN` and
-`HOWLLO_OIDC_PROVIDERS` as described in [docs/auth/oidc.md](docs/auth/oidc.md).
-Workspace owners configure customer Google or Microsoft credentials in
-**App → Customer sign-in**; Howllo stores the client secret encrypted with
-`HOWLLO_OIDC_CONFIG_KEY`.
-
-## Production routing
-
-```text
-api.howllo.dev       -> howllo-server through Cloudflare Tunnel
-app.howllo.dev       -> howllo-app (tenant management)
-feedback.howllo.dev  -> howllo-web (public boards)
-admin.howllo.dev     -> howllo-admin (platform operators)
-howllo.dev           -> howllo-landing
-www.howllo.dev       -> howllo-landing
-docs.howllo.dev      -> howllo-docs
-```
-
-## Deploy frontends to Cloudflare Workers
-
-Install dependencies with `npm ci`, copy `.env.production.example` to
-`.env.production`, and fill in the public HTTPS API, App, and Web origins plus
-the public frontend origins. The root deployment script reads
-`.env.production`; shell environment variables take precedence. The file is
-gitignored. Keep the API URL reachable from both browsers and Cloudflare
-Workers; `192.168.x.x` and `localhost` are not public origins.
-
-Run `npm run deploy:check` to build all frontends and perform Wrangler
-dry runs. Run `npm run deploy` to publish separate Workers for `howllo-app`,
-`howllo-web`, `howllo-admin`, `howllo-landing`, and `howllo-docs`. Authenticate Wrangler with
-`npx wrangler login` (or a Cloudflare API token in CI). Wrangler binds the
-production domains above as Worker custom domains. Register
-the exact callback URLs shown in the sign-in settings with your configured
-OAuth provider, and configure the backend's public origin/CORS for App, Web, and Admin. The
-`api.howllo.dev` DNS record is a proxied CNAME to the `howllo-api` Cloudflare
-Tunnel, whose connector runs on the API host. On the current host,
-`howllo-server.service` and `howllo-api-tunnel.service` keep the API and tunnel
-running. The tunnel forwards `/howllo/*` to the private MinIO bucket and all
-other `api.howllo.dev` paths to the Rust API. The backend `howllo-server`,
-PostgreSQL, and MinIO remain on your own infrastructure; this command does not
-deploy them.
-
-Platform administrators set workspace rate defaults and ceilings in **Admin → Platform settings → Limits**. They can also set a hard storage cap for each workspace. Workspace owners and admins use **App → Security** to set their own limits; empty fields inherit the platform default. Defaults allow 6 posts and 60 comments per member per hour, with daily limits of 30 and 300. Board bursts pause new writes for five minutes. The default workspace storage quota is 500 MB. Uploads belong to a workspace; existing referenced logos, board icons, and post attachments are measured when its policy is first viewed or an upload is attempted. IP and country rules apply to posts, comments, and uploads. Country rules require Cloudflare's `CF-IPCountry` header.
-
-The two Next.js Workers use OpenNext. Their `NEXT_PUBLIC_*` values are baked
-into browser bundles at build time, so rebuild after changing domains. The
-Admin, Landing, and Guides Workers serve static assets. Read the product
-tutorials at [docs.howllo.dev](https://docs.howllo.dev), or run `npm run
-dev:docs` while developing locally.
-
-See [docs/architecture.md](docs/architecture.md) for the full architecture,
-[the production roadmap](docs/roadmap.md) for release gates, and
-[docs/internal/](docs/internal/) for deeper design notes. The
-[MVP verification record](docs/MVP_READINESS.md) is a historical snapshot.
+Licensed under [Apache 2.0](LICENSE). Contributions are welcome.
