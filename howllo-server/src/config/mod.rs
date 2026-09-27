@@ -1,3 +1,4 @@
+use ipnet::IpNet;
 use std::env;
 
 #[derive(Debug, Clone)]
@@ -18,6 +19,8 @@ pub struct Settings {
     /// HOWLLO_ADMIN_BOOTSTRAP_KEY. If unset, local admin setup is disabled.
     pub admin_bootstrap_key: Option<String>,
     pub allowed_origins: Vec<String>,
+    pub trusted_proxy_cidrs: Vec<IpNet>,
+    pub client_ip_header: String,
     pub rate_limit_enabled: bool,
     pub public_write_rate_limit: u32,
     pub max_post_body_chars: usize,
@@ -88,6 +91,39 @@ impl Settings {
                 .filter(|value| !value.is_empty())
                 .map(ToString::to_string)
                 .collect(),
+            trusted_proxy_cidrs: env::var("HOWLLO_TRUSTED_PROXY_CIDRS")
+                .unwrap_or_else(|_| "127.0.0.0/8,::1/128".to_string())
+                .split(',')
+                .filter_map(|value| {
+                    let value = value.trim();
+                    if value.is_empty() {
+                        return None;
+                    }
+                    match value.parse::<IpNet>() {
+                        Ok(network) => Some(network),
+                        Err(_) => {
+                            tracing::warn!(cidr = value, "ignoring invalid trusted proxy CIDR");
+                            None
+                        }
+                    }
+                })
+                .collect(),
+            client_ip_header: match env::var("HOWLLO_CLIENT_IP_HEADER")
+                .unwrap_or_else(|_| "cf-connecting-ip".into())
+                .trim()
+                .to_ascii_lowercase()
+                .as_str()
+            {
+                "x-real-ip" => "x-real-ip".into(),
+                "cf-connecting-ip" => "cf-connecting-ip".into(),
+                other => {
+                    tracing::warn!(
+                        header = other,
+                        "unsupported client IP header; using CF-Connecting-IP"
+                    );
+                    "cf-connecting-ip".into()
+                }
+            },
             rate_limit_enabled: bool_flag("HOWLLO_RATE_LIMIT_ENABLED", true),
             public_write_rate_limit: env::var("HOWLLO_PUBLIC_WRITE_RATE_LIMIT")
                 .ok()

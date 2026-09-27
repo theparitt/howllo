@@ -1,34 +1,46 @@
-use std::collections::VecDeque;
 use std::future::{ready, Ready};
 use std::net::IpAddr;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::rc::Rc;
 use std::task::{Context, Poll};
-use std::time::{Duration, Instant};
 
 use actix_web::body::MessageBody;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::http::header::{HeaderName, HeaderValue};
 use actix_web::Error;
-use dashmap::DashMap;
 use futures::Future;
+use sha2::{Digest, Sha256};
 use tracing::info;
 use uuid::Uuid;
 
 use crate::config::Settings;
+use crate::db::DbPool;
 use crate::errors::AppError;
 
 pub const REQUEST_ID_HEADER: &str = "x-request-id";
 
-/// Use Cloudflare's client IP only when the immediate peer is our local
-/// tunnel/reverse proxy. Direct clients cannot choose their own IP by adding
-/// a forwarding header.
+/// Accept a single-IP forwarding header only from an explicitly trusted peer.
+/// Direct clients cannot choose their IP by adding a forwarding header.
 pub fn client_ip(req: &actix_web::HttpRequest) -> Option<IpAddr> {
     let peer = req.peer_addr()?.ip();
-    if peer.is_loopback() {
+    let settings = req
+        .app_data::<actix_web::web::Data<Settings>>()
+        .map(|value| value.get_ref());
+    let trusted = settings
+        .map(|value| {
+            value
+                .trusted_proxy_cidrs
+                .iter()
+                .any(|cidr| cidr.contains(&peer))
+        })
+        .unwrap_or_else(|| peer.is_loopback());
+    if trusted {
+        let header = settings
+            .map(|value| value.client_ip_header.as_str())
+            .unwrap_or("cf-connecting-ip");
         if let Some(ip) = req
             .headers()
-            .get("cf-connecting-ip")
+            .get(header)
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.parse::<IpAddr>().ok())
         {
@@ -65,19 +77,16 @@ where
 }
 
 #[derive(Default)]
-pub struct PublicWriteRateLimit {
-    buckets: Arc<DashMap<String, VecDeque<Instant>>>,
-}
+pub struct PublicWriteRateLimit;
 
 impl PublicWriteRateLimit {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 }
 
 pub struct PublicWriteRateLimitMiddleware<S> {
-    service: S,
-    buckets: Arc<DashMap<String, VecDeque<Instant>>>,
+    service: Rc<S>,
 }
 
 impl<S, B> Transform<S, ServiceRequest> for PublicWriteRateLimit
@@ -93,8 +102,7 @@ where
 
     fn new_transform(&self, service: S) -> Self::Future {
         ready(Ok(PublicWriteRateLimitMiddleware {
-            service,
-            buckets: Arc::clone(&self.buckets),
+            service: Rc::new(service),
         }))
     }
 }
@@ -113,8 +121,12 @@ where
     }
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
+        let service = Rc::clone(&self.service);
         let settings = req
             .app_data::<actix_web::web::Data<Settings>>()
+            .map(|data| data.get_ref().clone());
+        let pool = req
+            .app_data::<actix_web::web::Data<DbPool>>()
             .map(|data| data.get_ref().clone());
         let method = req.method().clone();
         let path = req.path().to_string();
@@ -126,44 +138,74 @@ where
         let should_limit = matches!(method.as_str(), "POST" | "PATCH" | "DELETE")
             && (is_public_write_path(&path) || local_auth);
 
-        if should_limit {
-            if let Some(settings) = settings.as_ref() {
-                if settings.rate_limit_enabled || local_auth {
-                    let limit = if local_auth {
-                        10
-                    } else {
-                        settings.public_write_rate_limit.max(1) as usize
-                    };
-                    let now = Instant::now();
-                    let window = Duration::from_secs(60);
-                    let key = format!("{peer}:{path}:{method}");
-                    let mut bucket = self.buckets.entry(key).or_default();
-
-                    while let Some(front) = bucket.front() {
-                        if now.duration_since(*front) >= window {
-                            bucket.pop_front();
+        Box::pin(async move {
+            if should_limit {
+                if let Some(settings) = settings.as_ref() {
+                    if settings.rate_limit_enabled || local_auth {
+                        let pool = pool.ok_or(AppError::InternalServerError)?;
+                        let limit = if local_auth {
+                            10
                         } else {
-                            break;
-                        }
+                            settings.public_write_rate_limit.max(1)
+                        };
+                        // Group dynamic post IDs and board slugs so changing the
+                        // URL cannot reset the IP's one-minute allowance.
+                        let scope = if local_auth {
+                            format!("local-auth:{method}")
+                        } else if path.starts_with("/api/boards/") {
+                            format!("board-writes:{method}")
+                        } else {
+                            format!("post-writes:{method}")
+                        };
+                        take_public_write_slot(&pool, &scope, &peer, limit).await?;
                     }
-
-                    if bucket.len() >= limit {
-                        return Box::pin(async {
-                            Err(AppError::TooManyRequests(
-                                "public write rate limit exceeded".to_string(),
-                            )
-                            .into())
-                        });
-                    }
-
-                    bucket.push_back(now);
                 }
             }
-        }
-
-        let fut = self.service.call(req);
-        Box::pin(fut)
+            service.call(req).await
+        })
     }
+}
+
+async fn take_public_write_slot(
+    pool: &DbPool,
+    scope: &str,
+    ip: &str,
+    limit: u32,
+) -> Result<(), AppError> {
+    let identity_hash = hex::encode(Sha256::digest(ip.as_bytes()));
+    let attempts: i32 = sqlx::query_scalar(
+        "INSERT INTO public_write_rate_limits (scope,identity_hash,window_start,attempts)
+         VALUES ($1,$2,clock_timestamp(),1)
+         ON CONFLICT (scope,identity_hash) DO UPDATE SET
+           attempts=CASE WHEN public_write_rate_limits.window_start < clock_timestamp()-INTERVAL '1 minute'
+                         THEN 1 ELSE LEAST(public_write_rate_limits.attempts+1,$3) END,
+           window_start=CASE WHEN public_write_rate_limits.window_start < clock_timestamp()-INTERVAL '1 minute'
+                             THEN clock_timestamp() ELSE public_write_rate_limits.window_start END
+         RETURNING attempts"
+    )
+    .bind(scope)
+    .bind(identity_hash)
+    .bind(i32::try_from(limit).unwrap_or(i32::MAX).saturating_add(1))
+    .fetch_one(pool)
+    .await
+    .map_err(|error| {
+        tracing::error!(%error, "public write rate limit database error");
+        AppError::InternalServerError
+    })?;
+    if attempts > i32::try_from(limit).unwrap_or(i32::MAX) {
+        return Err(AppError::TooManyRequests(
+            "Too many requests. Try again in a minute.".into(),
+        ));
+    }
+    // Keep the table bounded without adding a cleanup write to every request.
+    if Uuid::new_v4().as_u128() % 1024 == 0 {
+        let _ = sqlx::query(
+            "DELETE FROM public_write_rate_limits WHERE window_start < clock_timestamp()-INTERVAL '1 day'",
+        )
+        .execute(pool)
+        .await;
+    }
+    Ok(())
 }
 
 fn is_public_write_path(path: &str) -> bool {
@@ -242,6 +284,30 @@ mod tests {
         assert_eq!(
             super::client_ip(&local_proxy).unwrap().to_string(),
             "198.51.100.7"
+        );
+
+        let mut settings = super::test_support::test_settings();
+        settings.trusted_proxy_cidrs = vec!["172.18.0.0/16".parse().unwrap()];
+        settings.client_ip_header = "x-real-ip".into();
+        let trusted_docker_proxy = test::TestRequest::default()
+            .peer_addr("172.18.0.3:443".parse().unwrap())
+            .insert_header(("x-real-ip", "198.51.100.8"))
+            .app_data(actix_web::web::Data::new(settings.clone()))
+            .to_http_request();
+        assert_eq!(
+            super::client_ip(&trusted_docker_proxy).unwrap().to_string(),
+            "198.51.100.8"
+        );
+        let untrusted_docker_peer = test::TestRequest::default()
+            .peer_addr("172.19.0.3:443".parse().unwrap())
+            .insert_header(("x-real-ip", "198.51.100.8"))
+            .app_data(actix_web::web::Data::new(settings))
+            .to_http_request();
+        assert_eq!(
+            super::client_ip(&untrusted_docker_peer)
+                .unwrap()
+                .to_string(),
+            "172.19.0.3"
         );
     }
 
@@ -474,6 +540,7 @@ pub mod test_support {
         pool.execute(
             r#"
             TRUNCATE TABLE
+                public_write_rate_limits,
                 admin_auth_rate_limit,
                 local_auth_rate_limits,
                 audit_logs,
@@ -654,6 +721,8 @@ pub mod test_support {
             workspace_auth_provider: "local".to_string(),
             admin_bootstrap_key: Some("test-bootstrap-key".to_string()),
             allowed_origins: vec!["http://localhost:3000".to_string()],
+            trusted_proxy_cidrs: vec!["127.0.0.0/8".parse().unwrap(), "::1/128".parse().unwrap()],
+            client_ip_header: "cf-connecting-ip".into(),
             rate_limit_enabled: false,
             public_write_rate_limit: 60,
             max_post_body_chars: 10_000,

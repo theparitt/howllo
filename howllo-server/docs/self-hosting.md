@@ -10,8 +10,8 @@
 ## Setup
 
 ```bash
-git clone https://github.com/howllo/howllo-server
-cd howllo-server
+git clone https://github.com/theparitt/howllo
+cd howllo/howllo-server
 cp .env.example .env
 # Edit .env with your settings
 ```
@@ -46,13 +46,15 @@ curl http://localhost:5110/api/health
 # {"status":"ok"}
 
 curl http://localhost:5110/api/ready
-# {"status":"ready","database":"connected"}
+# {"status":"ready"}
 ```
 
 ## Production Considerations
 
 - Run behind a reverse proxy (nginx, Caddy)
 - Set `HOWLLO_ALLOWED_ORIGINS` to your frontend domain
-- Enable rate limiting: `HOWLLO_RATE_LIMIT_ENABLED=true`
-- Use a strong `ROOIAM_JWT_SECRET`
+- Keep rate limiting enabled: `HOWLLO_RATE_LIMIT_ENABLED=true`
+- Set `HOWLLO_TRUSTED_PROXY_CIDRS` to the address range of your reverse proxy;
+  see [configuration.md](configuration.md) for the required client IP header.
+- Use strong authentication secrets for the providers you enable.
 - Configure `HOWLLO_WEBHOOK_TIMEOUT_MS` for webhook delivery

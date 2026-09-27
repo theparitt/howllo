@@ -6,17 +6,25 @@ All configuration is via environment variables. Create a `.env` file from `.env.
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgres://postgres:password@localhost:5432/howllo` |
-| `BIND_ADDRESS` | Server listen address | `0.0.0.0:5110` |
-| `ROOIAM_JWT_SECRET` | JWT signing secret for user auth | `your-secret-here` |
+| `HOWLLO_DATABASE_URL` (or `DATABASE_URL`) | PostgreSQL connection string | `postgres://postgres:password@localhost:5432/howllo` |
+| `HOWLLO_BIND_ADDRESS` | Server listen address | `127.0.0.1:7700` |
+| `HOWLLO_JWT_SECRET` | Legacy RooIAM JWT secret, only when enabled | Use a generated secret |
 
 ## Security
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `HOWLLO_ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | `http://localhost:3000` |
-| `HOWLLO_RATE_LIMIT_ENABLED` | Enable rate limiting | `false` |
-| `HOWLLO_PUBLIC_WRITE_RATE_LIMIT` | Max public writes per window | `60` |
+| `HOWLLO_RATE_LIMIT_ENABLED` | Enable PostgreSQL-backed public write rate limiting | `true` |
+| `HOWLLO_PUBLIC_WRITE_RATE_LIMIT` | Maximum writes per client IP per minute for each write group | `60` |
+| `HOWLLO_TRUSTED_PROXY_CIDRS` | Comma-separated proxy IP ranges allowed to supply the client IP | `127.0.0.0/8,::1/128` |
+| `HOWLLO_CLIENT_IP_HEADER` | Header supplied by the trusted proxy: `cf-connecting-ip` or `x-real-ip` | `cf-connecting-ip` |
+
+If using Nginx, configure it to **overwrite** `X-Real-IP` with the real client
+address, set `HOWLLO_CLIENT_IP_HEADER=x-real-ip`, and list only the proxy's
+network in `HOWLLO_TRUSTED_PROXY_CIDRS`. Never trust a public client subnet.
+Direct client headers are ignored. If the proxy is not trusted, the peer IP is
+used instead; this may rate-limit all customers behind one proxy.
 
 ## Input Limits
 

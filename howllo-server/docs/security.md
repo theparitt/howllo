@@ -23,9 +23,9 @@ Every query is tenant-scoped. Cross-tenant access returns `404 Not Found`. No da
 
 ## Rate Limiting
 
-- In-memory rate limiter for public write endpoints
-- Configurable via `RATE_LIMIT_ENABLED`, `PUBLIC_WRITE_RATE_LIMIT`
-- For multi-instance deployment, use Redis-backed rate limiting
+- PostgreSQL-backed per-IP limit for public write endpoints, shared across API instances
+- Configurable via `HOWLLO_RATE_LIMIT_ENABLED` and `HOWLLO_PUBLIC_WRITE_RATE_LIMIT`
+- Client IP headers are accepted only from networks in `HOWLLO_TRUSTED_PROXY_CIDRS`
 
 ## CORS
 

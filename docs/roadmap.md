@@ -22,7 +22,8 @@ The first-party plugin registry now rejects unknown catalog rows, and local
 operator setup requires a 12-character password. Operator setup and login
 share a PostgreSQL-based attempt limit. Local login/signup/recovery now have
 shared account/IP attempt limits, and client IP headers are trusted only from
-the local tunnel. These changes do not close the other
+the local tunnel. Public-write IP limits now use PostgreSQL across API replicas.
+These changes do not close the other
 release blockers below.
 
 ## Phase 0 — release blockers: identity, privacy and abuse
@@ -38,13 +39,10 @@ release blockers below.
    promising that all board data is private. New private-board screenshot
    uploads and attachment references are currently rejected; existing public
    object URLs attached to private posts still require an audit and migration.
-3. **Finish shared write rate limits.** Local auth and admin login now use
-   PostgreSQL counters, and the public-write limiter defaults to enabled. The
-   latter remains in memory; replicas and restarts do not share its IP count,
-   though workspace account/board limits still apply. The tunnel client IP
-   header is accepted only from a loopback peer. Add an explicit trusted-proxy
-   configuration for non-loopback self-hosting and share write limits across
-   replicas.
+3. **Finish proxy-aware rate limits.** Local auth, admin login and public
+   writes now use PostgreSQL counters across replicas. The tunnel client IP
+   header is accepted only from configured proxy networks (loopback by default).
+   Test limits under multiple server processes and proxy topologies.
 4. **Harden privileged login.** Increase the eight-character local operator
    password minimum, add MFA/passkeys or require administrator OIDC with MFA,
    and require fresh authentication for sensitive settings. Provide local or

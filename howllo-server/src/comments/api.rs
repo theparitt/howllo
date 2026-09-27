@@ -167,12 +167,23 @@ mod tests {
         let response_a = test::call_service(&app, request_a).await;
         assert_eq!(response_a.status(), StatusCode::CREATED);
 
+        // A second app has its own middleware instance, as another API
+        // process would. The limit must still be shared through PostgreSQL.
+        let second_app = test::init_service(
+            App::new()
+                .wrap(crate::http::PublicWriteRateLimit::new())
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(settings.clone()))
+                .app_data(web::Data::new(crate::realtime::Hub::new()))
+                .configure(startup::configure),
+        )
+        .await;
         let request_b = test::TestRequest::post()
             .uri(&format!("/api/posts/{}/comments", seed.canonical_post_id))
             .insert_header(("Authorization", token))
             .set_json(json!({ "body": "second comment" }))
             .to_request();
-        let response_b = test::try_call_service(&app, request_b).await;
+        let response_b = test::try_call_service(&second_app, request_b).await;
         assert!(response_b.is_err());
     }
 
