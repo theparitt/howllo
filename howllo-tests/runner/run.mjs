@@ -449,7 +449,11 @@ async function scenario(manifest) {
 async function main() {
   const reportPath = resolve(root, "howllo-tests/reports", `${runId}.json`);
   const manifest = discover();
-  for (const [name, capability] of Object.entries(manifest.capabilities)) {
+  const discoveredCapabilities = [
+    ...Object.entries(manifest.capabilities),
+    ...Object.entries(manifest.persona_capabilities).map(([name, value]) => [`persona.${name}`, value]),
+  ];
+  for (const [name, capability] of discoveredCapabilities) {
     if (capability.status === "MISSING_CAPABILITY") {
       records.push({ id: `CAP-${name}`, actor: "SYS-01", workspace: null, status: "MISSING_CAPABILITY",
         expected: "required route or schema capability exists", observed: capability });
@@ -486,7 +490,7 @@ async function main() {
     if (server && server.exitCode === null) { server.kill("SIGTERM"); await new Promise(resolve => server.once("exit", resolve)); }
     mkdirSync(dirname(reportPath), { recursive: true });
     const missing = [...new Set([
-      ...Object.entries(manifest.capabilities).filter(([, value]) => value.status === "MISSING_CAPABILITY").map(([name]) => name),
+      ...discoveredCapabilities.filter(([, value]) => value.status === "MISSING_CAPABILITY").map(([name]) => name),
       ...records.filter(row => row.status === "MISSING_CAPABILITY" && !row.id.startsWith("CAP-")).map(row => row.id),
     ])];
     const failed = records.filter(row => row.status === "FAIL");
