@@ -1,7 +1,11 @@
+const publicApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:7700";
+
+// Next.js also fetches API data while rendering on the server. In Docker that
+// request uses the service name; browser requests still use the public URL.
 export const API_BASE_URL =
-  process.env.HOWLLO_API_BASE_URL ??
-  process.env.NEXT_PUBLIC_API_BASE_URL ??
-  "http://127.0.0.1:7700";
+  typeof window === "undefined"
+    ? process.env.HOWLLO_API_BASE_URL ?? publicApiBaseUrl
+    : publicApiBaseUrl;
 
 function deriveWebSocketBaseUrl(httpUrl: string) {
   if (httpUrl.startsWith("https://")) {

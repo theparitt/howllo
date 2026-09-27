@@ -6,8 +6,8 @@
 **/.env
 **/.env.local
 **/.env.production
+**/.env.quickstart
 **/.env.development
 **/tsconfig.tsbuildinfo
 data
 art
-

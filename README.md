@@ -16,6 +16,28 @@
   <a href="https://github.com/theparitt/howllo"><img src="https://img.shields.io/badge/GitHub-theparitt%2Fhowllo-181717?logo=github" alt="Howllo on GitHub" /></a>
 </p>
 
+## Run Howllo
+
+On macOS or Linux, install Docker, Git, curl, and OpenSSL. Then copy and run:
+
+```bash
+git clone https://github.com/theparitt/howllo.git
+cd howllo
+./scripts/quickstart.sh
+```
+
+Open **[localhost:7703](http://localhost:7703)** to see the sample board. **[localhost:7702](http://localhost:7702)** is the staff app; the API is at **[localhost:7700/api/health](http://localhost:7700/api/health)**. The script pulls ready-to-run images, starts PostgreSQL and all three services, and prints the URLs when the board is ready. It creates a local-only sample board; workspaces you create in the staff app start empty and unpublished.
+
+```bash
+# Check the server and web
+docker compose --env-file .env.quickstart -f compose.quickstart.yml logs -f server web
+
+# Stop (your data stays in Docker volumes)
+docker compose --env-file .env.quickstart -f compose.quickstart.yml down
+```
+
+The quickstart uses local sign-in and local file storage. It binds ports to `127.0.0.1` for a laptop demo. For a public install, configure your own domain, HTTPS, mail, and storage; see the [self-host guide](https://docs.howllo.dev/self-host.html).
+
 Howllo is open source under the [Apache License 2.0](LICENSE). Contributions are welcome on [GitHub](https://github.com/theparitt/howllo).
 
 **Release status:** preview. The hosted demo is live, but the self-hosted
@@ -79,6 +101,8 @@ Tenant management is **Howllo App** at port 7702 `/app/{workspace}`. Customers u
 | 5116 | howllo-docs      |
 
 ## Local development
+
+Use the [Docker quickstart](#run-howllo) to run Howllo without a Rust or Node.js toolchain. The commands below are for editing the source.
 
 ```bash
 # Optional local backing services (skip when using PostgreSQL and MinIO on 192.168.0.147)

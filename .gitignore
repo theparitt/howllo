@@ -17,6 +17,7 @@
 /howllo-admin/.tmp
 /howllo-server/.env
 /.env.production
+/.env.quickstart
 /howllo-app/.open-next
 /howllo-web/.open-next
 /howllo-landing/dist

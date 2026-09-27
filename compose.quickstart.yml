@@ -1,0 +1,91 @@
+name: howllo-quickstart
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: howllo
+      POSTGRES_USER: howllo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ./scripts/quickstart.sh first}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U howllo -d howllo"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  server:
+    image: ghcr.io/theparitt/howllo-server:${HOWLLO_IMAGE_TAG:-latest}
+    environment:
+      HOWLLO_DATABASE_URL: postgres://howllo:${POSTGRES_PASSWORD}@postgres:5432/howllo
+      HOWLLO_BIND_ADDRESS: 0.0.0.0:7700
+      HOWLLO_JWT_SECRET: ${HOWLLO_JWT_SECRET}
+      HOWLLO_ADMIN_JWT_SECRET: ${HOWLLO_ADMIN_JWT_SECRET}
+      HOWLLO_ADMIN_BOOTSTRAP_KEY: ${HOWLLO_ADMIN_BOOTSTRAP_KEY}
+      HOWLLO_OIDC_CONFIG_KEY: ${HOWLLO_OIDC_CONFIG_KEY}
+      HOWLLO_EMAIL_CONFIG_KEY: ${HOWLLO_EMAIL_CONFIG_KEY}
+      HOWLLO_AUTH_LOCAL_ENABLED: "true"
+      HOWLLO_WORKSPACE_AUTH_PROVIDER: local
+      HOWLLO_OIDC_PROVIDERS: "[]"
+      HOWLLO_STORAGE_ROOT: /app/data/uploads
+      HOWLLO_STORAGE_PUBLIC_BASE_URL: http://localhost:7700/uploads
+      HOWLLO_PUBLIC_API_URL: http://localhost:7700
+      HOWLLO_CUSTOMER_WEB_ORIGIN: http://localhost:7703
+      HOWLLO_WEB_ORIGIN: http://localhost:7703
+      HOWLLO_STAFF_APP_URL: http://localhost:7702
+      HOWLLO_ALLOWED_ORIGINS: http://localhost:7702,http://127.0.0.1:7702,http://localhost:7703,http://127.0.0.1:7703
+    volumes:
+      - upload-data:/app/data/uploads
+    ports:
+      - "127.0.0.1:7700:7700"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7700/api/ready"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  demo-board:
+    image: postgres:16-alpine
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./scripts/quickstart-demo.sql:/demo.sql:ro
+    command: ["psql", "-h", "postgres", "-U", "howllo", "-d", "howllo", "-v", "ON_ERROR_STOP=1", "-f", "/demo.sql"]
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    image: ghcr.io/theparitt/howllo-app:${HOWLLO_IMAGE_TAG:-latest}
+    environment:
+      PORT: "7702"
+      HOWLLO_API_BASE_URL: http://server:7700
+    ports:
+      - "127.0.0.1:7702:7702"
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    image: ghcr.io/theparitt/howllo-web:${HOWLLO_IMAGE_TAG:-latest}
+    environment:
+      PORT: "7703"
+      HOWLLO_API_BASE_URL: http://server:7700
+    ports:
+      - "127.0.0.1:7703:7703"
+    depends_on:
+      demo-board:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  upload-data:

@@ -17,7 +17,7 @@ RUN cargo build --release --locked
 
 FROM debian:bookworm-slim
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates libssl3 \
+    && apt-get install -y --no-install-recommends ca-certificates curl libssl3 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --home /app --shell /usr/sbin/nologin howllo \
     && mkdir -p /app/data/uploads \
