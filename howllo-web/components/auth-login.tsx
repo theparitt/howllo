@@ -30,6 +30,7 @@ type AuthLoginProps = {
 };
 
 const OPEN_LOGIN_EVENT = "howllo:open-login";
+const rooiamOnly = ENABLED_AUTH_PROVIDERS.length === 1 && ENABLED_AUTH_PROVIDERS[0] === "rooiam";
 
 export function requestLogin() {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(OPEN_LOGIN_EVENT));
@@ -98,7 +99,11 @@ export function AuthLogin({ myHref, staffMode = false, hideSignedOutTrigger = fa
     setLocalOpen(false);
     setLegacyOpen(false);
     getLoginProviders(getCurrentWorkspaceSlug())
-      .then((value) => { if (active) setProviders(value); })
+      .then((value) => {
+        // The account-level private app uses RooIAM exclusively. Public boards
+        // follow their own workspace settings until a RooIAM client is linked.
+        if (active) setProviders(rooiamOnly && !getCurrentWorkspaceSlug() ? [] : value);
+      })
       .catch(() => { if (active) setProviderError("Could not load sign-in options. Please try again later."); });
     return () => { active = false; };
   }, [pathname]);
@@ -488,7 +493,7 @@ export function AuthLogin({ myHref, staffMode = false, hideSignedOutTrigger = fa
               </form>
             ) : null}
             {providerError ? <p role="alert" className="notice notice--error">{providerError}</p> : null}
-            {!providers.length && !configured && !providerError ? <p>No sign-in provider is configured. Contact your administrator.</p> : null}
+            {!providers.length && !configured && !providerError ? <p>{rooiamOnly ? "RooIAM sign-in is not configured for this board. Contact the board owner." : "No sign-in provider is configured. Contact your administrator."}</p> : null}
           </div>
           {legacyOpen && configured && widgetUrl ? (
             <iframe
