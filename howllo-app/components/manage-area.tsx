@@ -43,6 +43,7 @@ import { SecurityTab } from "./security-tab";
 import { CustomerSignInTab } from "./customer-signin-tab";
 import { WorkspacePluginsTab } from "./workspace-plugins-tab";
 import { WorkspaceEmailTab } from "./workspace-email-tab";
+import { IdentityDirectory } from "./identity-directory";
 import { prepareBrandImage } from "../lib/prepare-brand-image";
 import { BoardTaxonomyEditor } from "./board-taxonomy-editor";
 import { BoardExtras } from "./board-extras";
@@ -407,6 +408,7 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
         </div>
         <ListPager page={safeMemberPage} total={visibleMembers.length} onPage={setMemberPage} />
       </section>
+      <IdentityDirectory tenant={tenant} canRevoke={myRole === "owner"} />
     </>
   );
 }

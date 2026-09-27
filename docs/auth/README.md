@@ -36,6 +36,10 @@ The older RooIAM widget uses three different values: `HOWLLO_ROOIAM_WIDGET_BASE_
 
 Guides: [local](local.md), [OIDC](oidc.md), [RooIAM](rooiam.md), [Google](google.md), [Microsoft Entra ID](microsoft.md), [Keycloak](keycloak.md), [Authentik](authentik.md), [troubleshooting](troubleshooting.md).
 
+For external staff invitations, member directories and session management,
+see the [identity-management provider boundary](identity-management.md). A
+RooIAM login widget alone does not move those functions to RooIAM.
+
 Supported login modes are local, generic OIDC, the RooIAM widget, Google, Microsoft Entra ID, Keycloak and Authentik. Google, Microsoft, Keycloak and Authentik use the generic OIDC adapter. No provider account is required to boot Howllo.
 
 The compatibility RooIAM widget and `/api/auth/workspace-session` RooIAM token exchange remain available for existing installations. New integrations should use OIDC. The legacy widget needs its own callback registered at the RooIAM client.

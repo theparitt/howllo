@@ -486,6 +486,43 @@ export async function managerListMembers(tenantSlug: string, token: string): Pro
   return unwrap<WorkspaceMember[]>(response);
 }
 
+export async function managerIdentityStatus(tenantSlug: string, token: string): Promise<{ enabled: boolean }> {
+  const response = await apiFetch(
+    buildUrl(`/api/admin/identity/status?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { cache: "no-store", headers: { Authorization: token } },
+  );
+  return unwrap<{ enabled: boolean }>(response);
+}
+
+export async function managerIdentityMembers(
+  tenantSlug: string, token: string, page: number, q: string,
+): Promise<import("./types").IdentityDirectoryPage> {
+  const query = new URLSearchParams({ tenant_slug: tenantSlug, page: String(page), page_size: "20", q });
+  const response = await apiFetch(buildUrl(`/api/admin/identity/members?${query}`),
+    { cache: "no-store", headers: { Authorization: token } });
+  return unwrap<import("./types").IdentityDirectoryPage>(response);
+}
+
+export async function managerIdentityMemberSessions(
+  tenantSlug: string, memberId: string, token: string,
+): Promise<import("./types").IdentityDirectorySession[]> {
+  const response = await apiFetch(
+    buildUrl(`/api/admin/identity/members/${encodeURIComponent(memberId)}/sessions?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { cache: "no-store", headers: { Authorization: token } },
+  );
+  return unwrap<import("./types").IdentityDirectorySession[]>(response);
+}
+
+export async function managerRevokeIdentityMemberSessions(
+  tenantSlug: string, memberId: string, token: string,
+): Promise<void> {
+  const response = await apiFetch(
+    buildUrl(`/api/admin/identity/members/${encodeURIComponent(memberId)}/sessions?tenant_slug=${encodeURIComponent(tenantSlug)}`),
+    { method: "DELETE", headers: { Authorization: token } },
+  );
+  if (!response.ok) await unwrap<unknown>(response);
+}
+
 export async function managerListParticipants(tenantSlug: string, token: string): Promise<import("./types").WorkspaceParticipant[]> {
   const response = await apiFetch(
     buildUrl(`/api/admin/participants?tenant_slug=${encodeURIComponent(tenantSlug)}`),

@@ -14,6 +14,10 @@ pub struct Settings {
     pub rooiam_widget_client_id: Option<String>,
     /// Default login widget for workspaces without an explicit auth row.
     pub workspace_auth_provider: String,
+    /// Optional private, server-to-server identity management adapter.
+    pub identity_bridge_url: Option<String>,
+    pub identity_bridge_token: Option<String>,
+    pub identity_bridge_provider_id: Option<String>,
     /// One-time key gating local admin setup (first password). Until the admin
     /// is bootstrapped, the setup endpoint requires this value. Set via
     /// HOWLLO_ADMIN_BOOTSTRAP_KEY. If unset, local admin setup is disabled.
@@ -80,6 +84,9 @@ impl Settings {
                 .unwrap_or_else(|_| "local".to_string())
                 .trim()
                 .to_ascii_lowercase(),
+            identity_bridge_url: nonempty_env("HOWLLO_IDENTITY_BRIDGE_URL"),
+            identity_bridge_token: nonempty_env("HOWLLO_IDENTITY_BRIDGE_TOKEN"),
+            identity_bridge_provider_id: nonempty_env("HOWLLO_IDENTITY_BRIDGE_PROVIDER_ID"),
             admin_bootstrap_key: env::var("HOWLLO_ADMIN_BOOTSTRAP_KEY")
                 .ok()
                 .map(|value| value.trim().to_string())
@@ -171,6 +178,13 @@ fn bool_flag(name: &str, default: bool) -> bool {
         .ok()
         .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "True"))
         .unwrap_or(default)
+}
+
+fn nonempty_env(name: &str) -> Option<String> {
+    env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 #[cfg(test)]

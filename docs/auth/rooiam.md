@@ -2,6 +2,13 @@
 
 RooIAM is optional. Howllo runs with no RooIAM account, SDK or cloud credentials.
 
+**Current scope:** this guide configures RooIAM sign-in only. Howllo still
+handles staff invitations, member lists, product roles and workspace sessions.
+The [identity-management plan](identity-management.md) describes the separate
+server-side integration needed before hosted Howllo can delegate those
+operations to RooIAM. Do not enable an external management option based on
+these widget settings alone.
+
 The hosted `https://api.rooiam.com` discovery document currently advertises HS256 ID tokens. Howllo's generic OIDC adapter accepts RS256, so **use the RooIAM widget and hosted userinfo integration for this hosted service**. If a RooIAM installation later publishes RS256 ID tokens, it can use the generic OIDC setup below.
 
 For an RS256 RooIAM installation: create an OIDC client, register `https://YOUR_API/api/auth/callback/rooiam`, then add an entry to `HOWLLO_OIDC_PROVIDERS`. The essential values are the exact OIDC issuer and client ID; add a client secret for a confidential client, plus `token_endpoint_auth_method` if its token endpoint requires a method other than `client_secret_basic`.

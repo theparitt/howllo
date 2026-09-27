@@ -20,6 +20,8 @@ pub enum AppError {
     Validation(String),
     #[display(fmt = "Too Many Requests: {_0}")]
     TooManyRequests(String),
+    #[display(fmt = "Service Unavailable: {_0}")]
+    ServiceUnavailable(String),
 }
 
 impl AppError {
@@ -39,6 +41,7 @@ impl AppError {
             AppError::BadRequest(_) => "bad_request",
             AppError::Validation(_) => "validation_error",
             AppError::TooManyRequests(_) => "too_many_requests",
+            AppError::ServiceUnavailable(_) => "service_unavailable",
         }
     }
 
@@ -51,6 +54,7 @@ impl AppError {
             AppError::BadRequest(msg)
             | AppError::Validation(msg)
             | AppError::TooManyRequests(msg) => msg.clone(),
+            AppError::ServiceUnavailable(msg) => msg.clone(),
         }
     }
 }
@@ -65,6 +69,7 @@ impl ResponseError for AppError {
             AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
             AppError::Validation(_) => StatusCode::UNPROCESSABLE_ENTITY,
             AppError::TooManyRequests(_) => StatusCode::TOO_MANY_REQUESTS,
+            AppError::ServiceUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
         }
     }
 

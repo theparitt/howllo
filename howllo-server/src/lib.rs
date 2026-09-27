@@ -11,6 +11,7 @@ pub mod dto;
 pub mod email;
 pub mod errors;
 pub mod exports;
+pub mod external_identity;
 pub mod forum;
 pub mod http;
 pub mod invitations;

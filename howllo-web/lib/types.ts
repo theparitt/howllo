@@ -76,6 +76,31 @@ export type WorkspaceAuthConfig = {
   rooiam_widget_base_url: string | null;
 };
 
+export type IdentityDirectoryMember = {
+  id: string;
+  subject: string;
+  email: string | null;
+  display_name: string | null;
+  status: string;
+  provider_roles: string[];
+  created_at: string;
+};
+
+export type IdentityDirectorySession = {
+  id: string;
+  user_agent: string | null;
+  ip: string | null;
+  last_seen_at: string | null;
+  created_at: string;
+};
+
+export type IdentityDirectoryPage = {
+  items: IdentityDirectoryMember[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
 export type PaginatedResponse<T> = {
   items: T[];
   page: number;

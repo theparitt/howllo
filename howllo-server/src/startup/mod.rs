@@ -2,9 +2,9 @@ use crate::db::DbPool;
 use actix_web::{get, web, HttpResponse, Responder};
 
 use crate::{
-    ai, api_tokens, audit, auth, boards, comments, email, exports, forum, invitations, me,
-    memberships, moderation, moderation_notes, notifications, platform, plugins, policy, posts,
-    realtime, search, subscriptions, tags, tenancy, votes, webhooks,
+    ai, api_tokens, audit, auth, boards, comments, email, exports, external_identity, forum,
+    invitations, me, memberships, moderation, moderation_notes, notifications, platform, plugins,
+    policy, posts, realtime, search, subscriptions, tags, tenancy, votes, webhooks,
 };
 
 #[get("/api/health")]
@@ -55,6 +55,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(auth::create_workspace_session)
         .service(auth::create_sso_session)
         .service(auth::revoke_workspace_session)
+        .service(external_identity::provider_status)
+        .service(external_identity::list_provider_members)
+        .service(external_identity::list_provider_member_sessions)
+        .service(external_identity::revoke_provider_member_sessions)
         .service(platform::get_platform_status)
         .service(email::availability)
         .service(email::get_platform_email)
