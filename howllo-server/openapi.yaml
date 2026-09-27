@@ -9,6 +9,49 @@ servers:
   - url: http://localhost:7700/api
     description: Local development
 paths:
+  /admin/invitations:
+    post:
+      summary: Invite a workspace admin or moderator
+      description: Returns a single-use redemption code once. Share it privately with the invitee; only its hash is stored.
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenant_slug, email, role]
+              properties:
+                tenant_slug: { type: string }
+                email: { type: string, format: email }
+                role: { type: string, enum: [admin, moderator] }
+      responses:
+        '201': { description: Invitation ID, status and one-time redemption_code; Cache-Control no-store }
+        '403': { description: Caller cannot manage members in this workspace }
+        '429': { description: Daily invitation limit exceeded }
+  /me/invitations:
+    get:
+      summary: List invitations bound to the signed-in account
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: Pending invitations; no redemption codes }
+  /me/invitations/redeem:
+    post:
+      summary: Redeem a single-use staff invitation code
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        '200': { description: Invitation accepted and staff membership granted }
+        '404': { description: Code invalid, expired, withdrawn or already used }
+        '429': { description: Too many redemption attempts }
   /auth/providers:
     get:
       summary: List enabled login providers without secrets

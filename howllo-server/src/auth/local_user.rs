@@ -95,7 +95,7 @@ fn token_hash(token: &str) -> String {
     hex::encode(Sha256::digest(token.as_bytes()))
 }
 
-async fn limit_attempt(
+pub(crate) async fn limit_attempt(
     pool: &DbPool,
     scope: &str,
     identity: &str,

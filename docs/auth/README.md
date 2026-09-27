@@ -1,6 +1,6 @@
 # Howllo authentication
 
-Howllo does not require RooIAM. A fresh installation supports local board accounts. Administrators can enable any number of OpenID Connect providers. RooIAM is an optional login widget integration; a RooIAM issuer that signs RS256 ID tokens can also use generic OIDC. The hosted RooIAM issuer currently advertises HS256, so it uses the widget integration.
+Howllo does not require RooIAM. A fresh installation supports local accounts for staff and board participants. Administrators can enable any number of OpenID Connect providers. RooIAM is an optional login widget integration; a RooIAM issuer that signs RS256 ID tokens can also use generic OIDC. The hosted RooIAM issuer currently advertises HS256, so it uses the widget integration.
 
 ```
 browser → /api/auth/providers → local or OIDC → Howllo account session
@@ -19,6 +19,8 @@ Provider configuration is global in `HOWLLO_OIDC_PROVIDERS`. Workspace membershi
 - **OIDC only:** set `HOWLLO_AUTH_LOCAL_ENABLED=false` and put at least one enabled object in `HOWLLO_OIDC_PROVIDERS`.
 - **Multiple sign-in choices:** leave local enabled and put multiple objects in the one JSON array. An object with `enabled=false` is hidden and cannot sign in.
 - **Current split deployment:** set `HOWLLO_AUTH_LOCAL_ENABLED=true`, `HOWLLO_WORKSPACE_AUTH_PROVIDER=rooiam`, and `HOWLLO_OIDC_PROVIDERS=[]`. Set the RooIAM widget/userinfo values on the server and `NEXT_PUBLIC_ROOIAM_WIDGET_*` in `howllo-app/.env.local`. Set `NEXT_PUBLIC_HOWLLO_AUTH_PROVIDERS=local` in `howllo-web/.env.local`. Existing workspaces with an explicit `local` workspace auth row need their setting changed to RooIAM for management sign-in. Local accounts remain available for public board participants.
+
+For standalone staff onboarding, leave Howllo App's `NEXT_PUBLIC_HOWLLO_AUTH_PROVIDER` and `NEXT_PUBLIC_HOWLLO_AUTH_PROVIDERS` set to `local`. An owner creates an invitation in App → Team. The API shows a random redemption code only in that response; only its hash is stored. Share the code privately with the intended teammate. The teammate registers or signs in locally, enters the code under **Staff invitations**, and receives the invited workspace role. The code expires after seven days, is invalid after withdrawal, and cannot be used twice. The email field labels the intended recipient, but local accounts have no verified email; possession of the code authorizes the join. Do not post codes in a public channel.
 
 Each OIDC object needs `id`, `display_name`, the provider's exact `issuer`, `client_id`, and `scopes` including `openid`. Add `client_secret` and, when required, `token_endpoint_auth_method`. Set `HOWLLO_PUBLIC_API_URL` and `HOWLLO_WEB_ORIGIN` to browser-reachable origins. Register `{HOWLLO_PUBLIC_API_URL}/api/auth/callback/{id}` with each provider. The commented configurations for RooIAM, Google, Microsoft, Keycloak and Authentik are in [the server env example](../../howllo-server/.env.example). This is a platform-wide default; tenant-owned customer providers are configured in the workspace app.
 

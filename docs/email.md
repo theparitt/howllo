@@ -34,7 +34,7 @@ to the public customer site for password reset and announcement links.
 
 | Message | Requires workspace opt-in | Requires verified customer email |
 | --- | --- | --- |
-| Staff invitation | No | No; acceptance still requires RooIAM staff sign-in |
+| Staff invitation | No | No; the inviter shares a single-use code privately for local staff, or the recipient accepts with a bound RooIAM identity |
 | Customer email verification and password reset | No | Verification creates the verified address; reset requires one |
 | Reply and important update | Yes | Yes; each customer can turn either off |
 | Daily digest | Yes | Yes; customer must opt in |

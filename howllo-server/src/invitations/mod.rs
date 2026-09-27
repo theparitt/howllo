@@ -26,7 +26,7 @@ pub async fn create_invitation(
     body: web::Json<CreateInvitationRequest>,
     auth: AuthenticatedUser,
 ) -> Result<impl Responder, AppError> {
-    let invitation = invitation_service::create_invitation(
+    let created = invitation_service::create_invitation(
         pool.get_ref(),
         &body.tenant_slug,
         auth.0.id,
@@ -35,12 +35,30 @@ pub async fn create_invitation(
     )
     .await?;
 
-    Ok(HttpResponse::Created().json(serde_json::json!({
-        "id": invitation.id,
-        "email": invitation.email,
-        "role": invitation.role,
-        "status": invitation.status,
-    })))
+    Ok(HttpResponse::Created()
+        .insert_header(("Cache-Control", "no-store"))
+        .json(serde_json::json!({
+            "id": created.invitation.id,
+            "email": created.invitation.email,
+            "role": created.invitation.role,
+            "status": created.invitation.status,
+            "redemption_code": created.redemption_code,
+        })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RedeemInvitationRequest {
+    pub code: String,
+}
+
+#[post("/api/me/invitations/redeem")]
+pub async fn redeem_invitation(
+    pool: web::Data<DbPool>,
+    body: web::Json<RedeemInvitationRequest>,
+    auth: AuthenticatedUser,
+) -> Result<impl Responder, AppError> {
+    invitation_service::redeem_invitation(pool.get_ref(), auth.0.id, &body.code).await?;
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[get("/api/admin/invitations")]
@@ -139,6 +157,211 @@ mod tests {
             )
             .await
         };
+    }
+
+    #[actix_web::test]
+    async fn standalone_staff_code_is_single_use_and_scoped() {
+        let _guard = lock_test_db().await;
+        let (mut settings, pool, seed) = setup().await;
+        settings.rooiam_legacy_hs256_enabled = false;
+        settings.rooiam_hosted_userinfo_url = None;
+        let app = app!(pool, settings);
+
+        let register = |name: &str| {
+            test::TestRequest::post()
+                .uri("/api/auth/local/register")
+                .set_json(json!({"username":name,"password":"a-strong-local-password"}))
+                .to_request()
+        };
+        let owner = read_json(test::call_service(&app, register("standalone_owner")).await).await;
+        let staff = read_json(test::call_service(&app, register("standalone_staff")).await).await;
+        let stranger =
+            read_json(test::call_service(&app, register("standalone_other")).await).await;
+        let owner_token = format!("Bearer {}", owner["access_token"].as_str().unwrap());
+        let staff_token = format!("Bearer {}", staff["access_token"].as_str().unwrap());
+        let stranger_token = format!("Bearer {}", stranger["access_token"].as_str().unwrap());
+        let tenant_id: Uuid = sqlx::query_scalar("SELECT id FROM tenants WHERE slug=$1")
+            .bind(&seed.tenant_slug)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let owner_id: Uuid = sqlx::query_scalar(
+            "SELECT user_id FROM local_credentials WHERE username='standalone_owner'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let staff_id: Uuid = sqlx::query_scalar(
+            "SELECT user_id FROM local_credentials WHERE username='standalone_staff'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO memberships (tenant_id,user_id,role) VALUES ($1,$2,'owner')")
+            .bind(tenant_id)
+            .bind(owner_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let created = read_json(test::call_service(&app, test::TestRequest::post()
+            .uri("/api/admin/invitations")
+            .insert_header(("Authorization", owner_token.clone()))
+            .set_json(json!({"tenant_slug":seed.tenant_slug,"email":"staff@example.com","role":"moderator"}))
+            .to_request()).await).await;
+        let code = created["redemption_code"].as_str().unwrap();
+        let invite_id = created["id"].as_str().unwrap();
+        assert!(code.starts_with("howllo_inv_"));
+        let stored_hash: String = sqlx::query_scalar(
+            "SELECT redemption_code_hash FROM workspace_invitations WHERE id=$1",
+        )
+        .bind(Uuid::parse_str(invite_id).unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_ne!(stored_hash, code);
+
+        let unbound = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri(&format!("/api/me/invitations/{invite_id}/accept"))
+                .insert_header(("Authorization", stranger_token.clone()))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(unbound.status(), StatusCode::NOT_FOUND);
+        let wrong = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/api/me/invitations/redeem")
+                .insert_header(("Authorization", stranger_token.clone()))
+                .set_json(json!({"code":"howllo_inv_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(wrong.status(), StatusCode::NOT_FOUND);
+
+        let accepted = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/api/me/invitations/redeem")
+                .insert_header(("Authorization", staff_token.clone()))
+                .set_json(json!({"code":code}))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(accepted.status(), StatusCode::OK);
+        let role: String =
+            sqlx::query_scalar("SELECT role FROM memberships WHERE tenant_id=$1 AND user_id=$2")
+                .bind(tenant_id)
+                .bind(staff_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(role, "moderator");
+        let staff_session = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/api/auth/workspace-session")
+                .insert_header(("Authorization", staff_token))
+                .set_json(json!({"tenant_slug":seed.tenant_slug}))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(staff_session.status(), StatusCode::CREATED);
+        let session_token = read_json(staff_session).await["session_token"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let role_response = test::call_service(
+            &app,
+            test::TestRequest::get()
+                .uri(&format!(
+                    "/api/me/workspace-role?tenant_slug={}",
+                    seed.tenant_slug
+                ))
+                .insert_header(("Authorization", format!("Bearer {session_token}")))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(role_response.status(), StatusCode::OK);
+        let replay = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/api/me/invitations/redeem")
+                .insert_header(("Authorization", stranger_token.clone()))
+                .set_json(json!({"code":code}))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(replay.status(), StatusCode::NOT_FOUND);
+        let stranger_id: Uuid = sqlx::query_scalar(
+            "SELECT user_id FROM local_credentials WHERE username='standalone_other'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let stranger_membership: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM memberships WHERE tenant_id=$1 AND user_id=$2",
+        )
+        .bind(tenant_id)
+        .bind(stranger_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(stranger_membership, 0);
+
+        let expired = read_json(test::call_service(&app, test::TestRequest::post()
+            .uri("/api/admin/invitations")
+            .insert_header(("Authorization", owner_token.clone()))
+            .set_json(json!({"tenant_slug":seed.tenant_slug,"email":"expired@example.com","role":"admin"}))
+            .to_request()).await).await;
+        sqlx::query(
+            "UPDATE workspace_invitations SET expires_at=NOW()-INTERVAL '1 second' WHERE id=$1",
+        )
+        .bind(Uuid::parse_str(expired["id"].as_str().unwrap()).unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+        let expired_response = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/api/me/invitations/redeem")
+                .insert_header(("Authorization", stranger_token.clone()))
+                .set_json(json!({"code":expired["redemption_code"]}))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(expired_response.status(), StatusCode::NOT_FOUND);
+
+        let withdrawn = read_json(test::call_service(&app, test::TestRequest::post()
+            .uri("/api/admin/invitations")
+            .insert_header(("Authorization", owner_token.clone()))
+            .set_json(json!({"tenant_slug":seed.tenant_slug,"email":"withdrawn@example.com","role":"admin"}))
+            .to_request()).await).await;
+        let withdrawn_id = withdrawn["id"].as_str().unwrap();
+        let withdraw = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri(&format!(
+                    "/api/admin/invitations/{withdrawn_id}/withdraw?tenant_slug={}",
+                    seed.tenant_slug
+                ))
+                .insert_header(("Authorization", owner_token))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(withdraw.status(), StatusCode::NO_CONTENT);
+        let withdrawn_response = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/api/me/invitations/redeem")
+                .insert_header(("Authorization", stranger_token))
+                .set_json(json!({"code":withdrawn["redemption_code"]}))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(withdrawn_response.status(), StatusCode::NOT_FOUND);
     }
 
     #[actix_web::test]

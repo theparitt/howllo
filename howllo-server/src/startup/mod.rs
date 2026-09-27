@@ -135,6 +135,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(invitations::list_invitations)
         .service(invitations::withdraw_invitation)
         .service(invitations::list_my_invitations)
+        .service(invitations::redeem_invitation)
         .service(invitations::accept_invitation)
         .service(invitations::reject_invitation)
         .service(me::get_me)

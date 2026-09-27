@@ -18,7 +18,7 @@ platform admin approves them; each workspace or board chooses which approved
 plugins to enable. Howllo does not load third-party plugin code or tenant
 plugin uploads. See [plugin guide](docs/plugins.md).
 
-Howllo is identity-provider agnostic. RooIAM is supported as an optional integration, but is not required. A fresh installation supports local accounts. You can also use Google, Microsoft Entra ID, Keycloak, Authentik or any compatible OpenID Connect provider through the generic OIDC adapter. See [authentication setup](docs/auth/README.md).
+Howllo supports local accounts without RooIAM. RooIAM and generic OpenID Connect are optional login integrations. Provider isolation and the full standalone release test are still 1.0 gates; see [release gates](docs/RELEASE_GATES.md) and [authentication setup](docs/auth/README.md).
 
 ## Monorepo layout
 
@@ -26,7 +26,7 @@ Howllo is identity-provider agnostic. RooIAM is supported as an optional integra
 howllo/
   howllo-server/      # Rust + Actix + SQLx + PostgreSQL + MinIO   :7700
   howllo-admin/       # Vite + React + TypeScript (platform operator console) :7701
-  howllo-app/         # Next.js (tenant management, RooIAM login)              :7702
+  howllo-app/         # Next.js (tenant management, local or configured SSO)   :7702
   howllo-web/         # Next.js (public boards, local accounts)                 :7703
   howllo-landing/     # Marketing site                             :5114
   howllo-docs/        # Product guides and user tutorials           :5116
@@ -107,10 +107,13 @@ Howllo Web reads login options from `GET /api/auth/providers`. Keep
 Email is optional and disabled on a new installation. Platform admins configure
 SMTP, send a test message, and enable delivery; workspaces then choose their
 email features. See the [email setup and MailHog test guide](docs/email.md).
-Howllo App uses the RooIAM widget and callback on port 7702. To add an
+Howllo App defaults to local sign-in on a fresh installation. Staff invitations
+show a single-use code to the inviter; share it privately with the teammate,
+who signs in and redeems it in App. The hosted deployment can continue to use
+RooIAM. To add an
 OIDC provider, set `HOWLLO_PUBLIC_API_URL`, `HOWLLO_WEB_ORIGIN` and
 `HOWLLO_OIDC_PROVIDERS` as described in [docs/auth/oidc.md](docs/auth/oidc.md).
-Set `NEXT_PUBLIC_ROOIAM_WIDGET_*` in `howllo-app/.env.local` and
+For RooIAM, set `NEXT_PUBLIC_ROOIAM_WIDGET_*` in `howllo-app/.env.local` and
 `HOWLLO_ROOIAM_*` on the server; see [RooIAM setup](docs/auth/rooiam.md).
 
 ## Production routing

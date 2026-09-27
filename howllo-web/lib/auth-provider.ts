@@ -17,7 +17,7 @@ function parseProvider(value: string | undefined): AuthProviderId {
   const normalized = value?.trim().toLowerCase();
   return normalized && KNOWN_PROVIDERS.has(normalized as AuthProviderId)
     ? (normalized as AuthProviderId)
-    : "rooiam";
+    : "local";
 }
 
 function parseProviderList(value: string | undefined, fallback: AuthProviderId) {

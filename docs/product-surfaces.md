@@ -4,13 +4,13 @@ Howllo uses **one set of workspaces, boards, posts, and users** in the server an
 
 | Surface | Audience | Current local URL | Responsibility |
 | --- | --- | --- | --- |
-| Howllo App | Workspace owners and admins | `http://localhost:7702/app/{workspace}` | RooIAM sign-in; create and configure boards, team, workspace sign-in, and share public links |
+| Howllo App | Workspace owners and admins | `http://localhost:7702/app/{workspace}` | Local or configured SSO sign-in; create and configure boards, team, workspace sign-in, and share public links |
 | Howllo Web | End users | `http://localhost:7703/{workspace}` | Browse public boards; Howllo local account sign-in with recovery codes to post, vote, and comment |
 | Howllo Admin | Platform operators | `http://localhost:7701/admin` | Platform settings and cross-workspace operations using the local operator account |
 
-The first two surfaces are separate Next.js deployments. Howllo App uses the existing RooIAM callback on port 7702. Howllo Web uses local credentials and does not load the RooIAM widget. `howllo-admin` is not the tenant app: its local operator password and platform-wide access must not be given to tenants.
+The first two surfaces are separate Next.js deployments. Howllo App defaults to local accounts on a fresh installation and can use the RooIAM callback on port 7702 when configured. Howllo Web uses local credentials by default. `howllo-admin` is not the tenant app: its local operator password and platform-wide access must not be given to tenants.
 
-An account (organization) owns multiple workspaces. A workspace is one project with its own boards, feed, roadmap, staff, and public users. Staff are invited to a specific workspace as admin or moderator and accept in Howllo App using RooIAM. Public users join a specific workspace from Howllo Web using local accounts. App separates staff from public users; owners and admins may suspend a public user for 1–365 days or ban them until manually lifted. The restriction covers participation across all boards in that workspace, including existing sessions. Public boards remain readable without signing in.
+An account (organization) owns multiple workspaces. A workspace is one project with its own boards, feed, roadmap, staff, and public users. Staff are invited to a specific workspace as admin or moderator. They can accept a pending invitation with their RooIAM identity or redeem a single-use code using a local account in Howllo App. Public users join a specific workspace from Howllo Web using local accounts. App separates staff from public users; owners and admins may suspend a public user for 1–365 days or ban them until manually lifted. The restriction covers participation across all boards in that workspace, including existing sessions. Public boards remain readable without signing in.
 
 Howllo App keeps a blue staff badge and cool background so it remains recognizable across workspaces. In App → Public branding, each workspace owner/admin can set the end-user site's name, upload a raster logo, choose accent/background colors, and control roadmap and attribution visibility. Board editors can also upload an icon and choose a board background color. Public Web reads those settings from the workspace branding and board records; branding changes do not alter Howllo App's staff identity.
 

@@ -1,10 +1,9 @@
 //! WebSocket connection endpoint.
 //!
 //! Browsers cannot set an `Authorization` header on a WebSocket handshake, so
-//! the client passes the Rooiam JWT as a short-lived `?ticket=` query param.
-//! We validate it with the same [`RooiamClient`] used for REST auth, resolve
-//! the local user, and verify the user is a member of the requested tenant
-//! before subscribing the socket to that tenant's event stream.
+//! the client passes a workspace session token in `?ticket=`. Existing RooIAM
+//! bearer tokens remain accepted for compatibility. Both paths verify that
+//! the user belongs to the requested workspace before subscribing to events.
 
 use actix_web::{get, web, HttpRequest, HttpResponse};
 use futures::StreamExt;
@@ -23,7 +22,7 @@ use crate::realtime::Hub;
 
 #[derive(Debug, Deserialize)]
 pub struct WsConnectQuery {
-    /// Rooiam JWT (same token used for REST `Authorization: Bearer`).
+    /// Workspace session token, or a RooIAM bearer token for legacy clients.
     pub ticket: String,
     /// Tenant slug the socket wants to subscribe to.
     pub tenant_slug: String,

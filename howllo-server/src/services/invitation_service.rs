@@ -1,4 +1,7 @@
+use argon2::password_hash::rand_core::{OsRng, RngCore};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -40,7 +43,7 @@ pub async fn create_invitation(
     actor_user_id: Uuid,
     email: &str,
     role: &str,
-) -> Result<InvitationRow, AppError> {
+) -> Result<CreatedInvitation, AppError> {
     let tenant_id = membership_repository::resolve_tenant_id(pool, tenant_slug).await?;
     require_permission(pool, tenant_id, actor_user_id, Permission::ManageMembers).await?;
 
@@ -63,6 +66,10 @@ pub async fn create_invitation(
             AppError::InternalServerError
         })?;
 
+    let mut random = [0u8; 32];
+    OsRng.fill_bytes(&mut random);
+    let redemption_code = format!("howllo_inv_{}", URL_SAFE_NO_PAD.encode(random));
+    let code_hash = hex::encode(Sha256::digest(redemption_code.as_bytes()));
     let invitation = invitation_repository::create(
         pool,
         tenant_id,
@@ -70,6 +77,7 @@ pub async fn create_invitation(
         role.as_db_str(),
         actor_user_id,
         existing_user,
+        &code_hash,
     )
     .await
     .map_err(|error| {
@@ -132,7 +140,15 @@ pub async fn create_invitation(
         tracing::warn!(%error, invitation_id = %invitation.id, "invitation email could not be queued");
     }
 
-    Ok(invitation)
+    Ok(CreatedInvitation {
+        invitation,
+        redemption_code,
+    })
+}
+
+pub struct CreatedInvitation {
+    pub invitation: InvitationRow,
+    pub redemption_code: String,
 }
 
 pub async fn list_invitations(
@@ -241,26 +257,49 @@ pub async fn accept_invitation(
     user_id: Uuid,
     invitation_id: Uuid,
 ) -> Result<(), AppError> {
-    let is_staff_identity: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM user_identities WHERE user_id = $1 AND provider_id = 'rooiam')",
-    )
-    .bind(user_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|error| { tracing::error!(%error, "error checking staff identity"); AppError::InternalServerError })?;
-    if !is_staff_identity {
-        return Err(AppError::Forbidden);
-    }
     invitation_repository::expire_for_id_for_user(pool, invitation_id, user_id)
         .await
         .map_err(|error| {
             tracing::error!(%error, invitation_id = %invitation_id, "error expiring invitation");
             AppError::InternalServerError
         })?;
+    accept_bound_invitation(pool, user_id, invitation_id, None).await
+}
+
+pub async fn redeem_invitation(pool: &DbPool, user_id: Uuid, code: &str) -> Result<(), AppError> {
+    let code = code.trim();
+    if code.len() != 54 || !code.starts_with("howllo_inv_") {
+        return Err(AppError::NotFound);
+    }
+    crate::auth::local_user::limit_attempt(pool, "invitation:redeem", &user_id.to_string(), 10)
+        .await?;
+    let code_hash = hex::encode(Sha256::digest(code.as_bytes()));
+    accept_bound_invitation(pool, user_id, Uuid::nil(), Some(&code_hash)).await
+}
+
+async fn accept_bound_invitation(
+    pool: &DbPool,
+    user_id: Uuid,
+    invitation_id: Uuid,
+    code_hash: Option<&str>,
+) -> Result<(), AppError> {
     let mut tx = pool.begin().await.map_err(|error| {
         tracing::error!(%error, invitation_id = %invitation_id, "error starting invitation acceptance");
         AppError::InternalServerError
     })?;
+    let invitation_id = if let Some(code_hash) = code_hash {
+        sqlx::query_scalar::<_, Uuid>(
+            "UPDATE workspace_invitations SET user_id=$1 WHERE redemption_code_hash=$2 AND status='pending' AND COALESCE(expires_at, created_at + INTERVAL '7 days') > NOW() RETURNING id"
+        )
+        .bind(user_id)
+        .bind(code_hash)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|error| { tracing::error!(%error, "error claiming staff invitation"); AppError::InternalServerError })?
+        .ok_or(AppError::NotFound)?
+    } else {
+        invitation_id
+    };
     let invitation = invitation_repository::respond_in_tx(&mut tx, invitation_id, user_id, "accepted")
         .await
         .map_err(|error| {

@@ -1,8 +1,9 @@
 # Roadmap to a self-hosted production release
 
-Updated 2026-09-26. This plan comes from a code and documentation review;
+Updated 2026-09-27. This plan comes from a code and documentation review;
 release gates below have not yet passed. Older MVP readiness and progress
 notes are historical snapshots.
+The [1.0 release gate matrix](RELEASE_GATES.md) is the current go/no-go record.
 
 ## Product rule and current baseline
 
@@ -52,6 +53,9 @@ release blockers below.
    not merge provider identities merely because emails match. For staff
    invitations, require a verified provider email or a single-use invite link;
    local customer accounts currently use usernames without verified email.
+   A single-use staff invitation code can now be redeemed by a local account,
+   including when SMTP and RooIAM are absent. Provider-independent staff
+   onboarding still needs a complete browser and clean-install test.
 5. **Exercise isolation.** Add cross-workspace permission, private media,
    tenant OIDC secret, restriction and revoked-session tests, plus a manual
    browser pass for all three login levels.

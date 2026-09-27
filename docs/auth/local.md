@@ -2,7 +2,7 @@
 
 Local board accounts are enabled by default. Set `HOWLLO_AUTH_LOCAL_ENABLED=true` explicitly in production. A visitor chooses **Local account**, creates a username (3–32 lowercase letters, digits or underscores) and password (12–128 characters), then signs in. Passwords are stored as Argon2id hashes. Login and reset attempts have shared PostgreSQL limits by account and client IP; an additional in-process limit applies per IP and route.
 
-Local accounts have no verified email. They cannot claim email invitations until an explicit verified-email feature is added. They can create a workspace or join a public board through normal Howllo membership rules. To disable local accounts, set `HOWLLO_AUTH_LOCAL_ENABLED=false`; existing sessions still expire or can be revoked.
+Local accounts have no verified email. They cannot claim invitations by email address alone. A workspace owner can give a teammate a single-use invitation code, which the teammate redeems in Howllo App while signed in. They can also create a workspace or join a public board through normal Howllo membership rules. To disable local accounts, set `HOWLLO_AUTH_LOCAL_ENABLED=false`; existing sessions still expire or can be revoked.
 
 ## Password and recovery code
 

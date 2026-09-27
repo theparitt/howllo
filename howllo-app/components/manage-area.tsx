@@ -248,6 +248,7 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [email, setEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("moderator");
+  const [inviteCode, setInviteCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -283,9 +284,11 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
     setBusy(true);
     setError(null);
     setNotice(null);
+    setInviteCode("");
     try {
-      await managerCreateInvitation(tenant, { email: email.trim(), role: inviteRole }, token());
-      setNotice(`Invitation created for ${email.trim()}. Ask them to sign in to Howllo App with RooIAM.`);
+      const created = await managerCreateInvitation(tenant, { email: email.trim(), role: inviteRole }, token());
+      setNotice(`Invitation created for ${email.trim()}. Share the code privately; it will not be shown again.`);
+      setInviteCode(created.redemption_code);
       setEmail("");
       setInviteRole("moderator");
       await reload();
@@ -318,8 +321,12 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
             {busy ? "Sending…" : "Send invite"}
           </button>
         </div>
-        <p className="section-subtitle" style={{ marginTop: "0.6rem" }}>They accept or decline in Howllo App after signing in with RooIAM. When platform email is enabled, they also receive an invitation email.</p>
+        <p className="section-subtitle" style={{ marginTop: "0.6rem" }}>Share the one-time code with your teammate privately. They can redeem it in Howllo App after signing in. Invitation email is sent when platform email is enabled.</p>
         {notice ? <p className="success-text">{notice}</p> : null}
+        {inviteCode ? <div className="manage-form" style={{ marginTop: "0.75rem" }}>
+          <code style={{ overflowWrap: "anywhere" }}>{inviteCode}</code>
+          <button type="button" className="ghost-button" onClick={() => void navigator.clipboard.writeText(inviteCode)}>Copy code</button>
+        </div> : null}
         {error ? <p className="error-text">{error}</p> : null}
       </section>
 

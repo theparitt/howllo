@@ -51,12 +51,13 @@ pub async fn create(
     role: &str,
     invited_by: Uuid,
     user_id: Option<Uuid>,
+    redemption_code_hash: &str,
 ) -> Result<InvitationRow, sqlx::Error> {
     expire_for_email(pool, tenant_id, email_lower).await?;
     sqlx::query_as::<_, InvitationRow>(&format!(
         r#"
-        INSERT INTO workspace_invitations (tenant_id, email, role, invited_by, user_id, expires_at)
-        VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '7 days')
+        INSERT INTO workspace_invitations (tenant_id, email, role, invited_by, user_id, expires_at, redemption_code_hash)
+        VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '7 days', $6)
         RETURNING {ROW_COLS}
         "#
     ))
@@ -65,6 +66,7 @@ pub async fn create(
     .bind(role)
     .bind(invited_by)
     .bind(user_id)
+    .bind(redemption_code_hash)
     .fetch_one(pool)
     .await
 }

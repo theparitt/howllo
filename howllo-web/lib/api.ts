@@ -461,8 +461,13 @@ export async function managerCreateInvitation(
   tenantSlug: string,
   input: { email: string; role: string },
   token: string,
-): Promise<void> {
-  await managerWrite(`/api/admin/invitations`, "POST", token, { ...input, tenant_slug: tenantSlug });
+): Promise<{ id: string; redemption_code: string }> {
+  const response = await apiFetch(buildUrl("/api/admin/invitations"), {
+    method: "POST",
+    headers: { Authorization: token, "Content-Type": "application/json" },
+    body: JSON.stringify({ ...input, tenant_slug: tenantSlug }),
+  });
+  return unwrap<{ id: string; redemption_code: string }>(response);
 }
 
 export async function managerWithdrawInvitation(id: string, tenantSlug: string, token: string): Promise<void> {
@@ -676,6 +681,15 @@ export async function getMyInvitations(token: string): Promise<MyInvitation[]> {
     },
   });
   return unwrap<MyInvitation[]>(response);
+}
+
+export async function redeemInvitation(code: string, token: string): Promise<void> {
+  const response = await apiFetch(buildUrl("/api/me/invitations/redeem"), {
+    method: "POST",
+    headers: { Authorization: token, "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  if (!response.ok) throw new ApiError(response.status, (await response.text()) || "Could not redeem invitation");
 }
 
 export async function respondToInvitation(
