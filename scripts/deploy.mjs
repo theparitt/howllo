@@ -20,9 +20,21 @@ for (const key of requiredUrls) {
     throw new Error(`${key} must be a public HTTPS URL (received ${url.origin})`);
   }
 }
-for (const key of ["NEXT_PUBLIC_ROOIAM_WIDGET_WORKSPACE_ID", "NEXT_PUBLIC_ROOIAM_WIDGET_CLIENT_ID"]) {
-  if (!process.env[key] || process.env[key].startsWith("YOUR_")) {
-    throw new Error(`${key} is required for Howllo App staff sign-in`);
+const providers = {
+  "howllo-app": process.env.HOWLLO_APP_AUTH_PROVIDERS || "local",
+  "howllo-web": process.env.HOWLLO_WEB_AUTH_PROVIDERS || "local",
+};
+for (const [target, selected] of Object.entries(providers)) {
+  const values = selected.split(",").map(value => value.trim()).filter(Boolean);
+  if (!values.length || values.some(value => !["local", "rooiam", "oidc", "oauth2", "disabled"].includes(value))) {
+    throw new Error(`Invalid ${target} auth providers: ${selected}`);
+  }
+  if (values.includes("rooiam")) {
+    for (const key of ["NEXT_PUBLIC_ROOIAM_WIDGET_WORKSPACE_ID", "NEXT_PUBLIC_ROOIAM_WIDGET_CLIENT_ID"]) {
+      if (!process.env[key] || process.env[key].startsWith("YOUR_")) {
+        throw new Error(`${key} is required when ${target} uses RooIAM`);
+      }
+    }
   }
 }
 
@@ -34,8 +46,8 @@ const targets = ["howllo-app", "howllo-web", "howllo-admin", "howllo-landing", "
 for (const target of targets) {
   const targetEnv = {
     ...env,
-    NEXT_PUBLIC_HOWLLO_AUTH_PROVIDER: target === "howllo-web" ? "local" : "rooiam",
-    NEXT_PUBLIC_HOWLLO_AUTH_PROVIDERS: target === "howllo-web" ? "local" : "rooiam",
+    NEXT_PUBLIC_HOWLLO_AUTH_PROVIDER: providers[target]?.split(",")[0] || "local",
+    NEXT_PUBLIC_HOWLLO_AUTH_PROVIDERS: providers[target] || "local",
   };
   const command = dryRun
     ? target === "howllo-app" || target === "howllo-web"

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5faf8">
+  <meta name="description" content="A visual guide to installing Howllo, creating a workspace, publishing a board, and choosing local, Google, or Microsoft sign-in.">
+  <title>Set up Howllo — Howllo Guides</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar"><div class="topbar-inner">
+    <a class="brand" href="https://howllo.dev" aria-label="Howllo home"><img src="/assets/howllo-logo-wordmark-horizontal.svg" alt="Howllo"><span class="brand-tag">Guides</span></a>
+    <nav class="top-links" aria-label="Guide navigation"><a href="/">Tutorials</a><a href="/roadmap.html">Roadmap</a><a href="https://github.com/theparitt/howllo">GitHub</a></nav>
+  </div></header>
+  <main class="guide-page">
+    <section class="guide-hero">
+      <div><span class="eyebrow">Self-host preview</span><h1>Set up a feedback home for your product.</h1><p>Run Howllo, create an empty workspace, add your first board, and invite the people who will manage it.</p><div class="hero-links"><a class="pill" href="#install">Start with the server ↓</a><a class="pill" href="#publish">See the board flow ↓</a></div></div>
+      <img src="/assets/howllo-create-board.png" alt="Howllo mascot setting up a blank feedback board" width="320" height="320">
+    </section>
+
+    <div class="guide-callout"><strong>Release status: preview.</strong> Howllo is usable for evaluation and public feedback. The <a href="/roadmap.html">1.0 roadmap</a> lists security and self-hosting work still open, especially private media and session hardening.</div>
+
+    <section id="shape" class="guide-section">
+      <div class="section-head"><span class="section-number">01</span><div><h2>What runs where</h2><p>One API serves three clear views. A workspace holds the boards for one product or project.</p></div></div>
+      <div class="surface-flow" aria-label="Howllo service map">
+        <article><span class="surface-label">Staff</span><h3>Howllo App</h3><p>Create workspaces and boards, set appearance and sign-in, invite staff, and moderate posts.</p></article>
+        <article><span class="surface-label">Customers</span><h3>Howllo Web</h3><p>Read boards, create topics, vote, comment, and follow product updates.</p></article>
+        <article><span class="surface-label">Operator</span><h3>Howllo Admin</h3><p>Configure the installation, global limits, email, and workspace quotas.</p></article>
+      </div>
+      <p class="guide-caption">The Rust API uses PostgreSQL for accounts and content. MinIO stores uploads. App, Web, and Admin are separate frontends.</p>
+    </section>
+
+    <section id="install" class="guide-section">
+      <div class="section-head"><span class="section-number">02</span><div><h2>Start a local installation</h2><p>These commands run the current source. Use your own PostgreSQL and MinIO addresses when they are already available.</p></div></div>
+      <div class="guide-steps">
+        <article><span class="step-n">1</span><div><h3>Get the source and backing services</h3><p>Install Node.js 22 or newer and Rust. Start the example PostgreSQL and MinIO services from the repository root.</p><pre><code>git clone https://github.com/theparitt/howllo.git
+cd howllo
+docker compose up -d</code></pre></div></article>
+        <article><span class="step-n">2</span><div><h3>Configure and start the API</h3><p>Copy the example env, set strong secrets, and point the database and storage values at your services. The API listens on port 7700.</p><pre><code>cp howllo-server/.env.example howllo-server/.env
+cd howllo-server
+cargo run</code></pre><p>The API applies pending database migrations when it starts.</p></div></article>
+        <article><span class="step-n">3</span><div><h3>Start the three views</h3><p>Back at the repository root, install frontend packages. Run each view in its own terminal.</p><pre><code>npm ci
+npm run dev:app    # localhost:7702
+npm run dev:web    # localhost:7703
+npm run dev:admin  # localhost:7701</code></pre></div></article>
+      </div>
+      <div class="note warning"><strong>Before exposing your server:</strong> set public HTTPS origins, CORS, strong admin and session secrets, backups, and private storage rules. The source checkout is not yet a one-command production stack. See the <a href="https://github.com/theparitt/howllo/blob/main/docs/roadmap.md">technical release plan</a>.</div>
+    </section>
+
+    <section id="publish" class="guide-section">
+      <div class="section-head"><span class="section-number">03</span><div><h2>Create a workspace, then a board</h2><p>A new workspace starts with no boards. Nothing is public until you create and enable a board.</p></div></div>
+      <div class="guide-visual-row"><div class="guide-steps compact">
+        <article><span class="step-n">1</span><div><h3>Open App → Your workspaces</h3><p>Sign in, name your product, and choose <span class="click">Create workspace</span>.</p></div></article>
+        <article><span class="step-n">2</span><div><h3>Open Boards → Create board</h3><p>Choose Bug reports, Feature requests, Discussion, or Announcements. Set its name, URL and options.</p></div></article>
+        <article><span class="step-n">3</span><div><h3>Preview, enable, and share</h3><p>Review the board’s appearance and posting rules. Enable the board, then copy its public link for customers.</p></div></article>
+      </div><figure><img src="/assets/howllo-create-board.png" alt="Howllo mascot preparing a blank board" loading="lazy" width="320" height="320"><figcaption>Workspace first. Boards one at a time.</figcaption></figure></div>
+      <p><a href="/#boards">See the full board tutorial →</a></p>
+    </section>
+
+    <section id="sign-in" class="guide-section">
+      <div class="section-head"><span class="section-number">04</span><div><h2>Choose sign-in</h2><p>A fresh open-source install works with local accounts. Google and Microsoft are optional OpenID Connect choices.</p></div></div>
+      <div class="surface-flow auth-flow">
+        <article><span class="surface-label">Default</span><h3>Local passwords</h3><p>Users save a one-time recovery code at registration. No external identity service is required.</p></article>
+        <article><span class="surface-label">Staff login</span><h3>Google or Microsoft</h3><p>Add an enabled entry to <code>HOWLLO_OIDC_PROVIDERS</code> in the API env. Register the exact API callback shown below.</p></article>
+        <article><span class="surface-label">Customer login</span><h3>Per workspace</h3><p>In App → Customer sign-in, enter your own provider client ID and secret. Copy the redirect URI shown there into Google or Microsoft.</p></article>
+      </div>
+      <div class="guide-example"><strong>Staff callback</strong><code>https://YOUR-API/api/auth/callback/google</code><code>https://YOUR-API/api/auth/callback/microsoft</code><p>Google issuer: <code>https://accounts.google.com</code>. Microsoft issuer: <code>https://login.microsoftonline.com/YOUR-TENANT-ID/v2.0</code>. Use a specific Microsoft tenant ID. Keep client secrets on the server.</p></div>
+      <p>Set <code>HOWLLO_PUBLIC_API_URL</code> and the frontend origins first. For customer providers, also set <code>HOWLLO_OIDC_CONFIG_KEY</code> so Howllo can encrypt the tenant’s client secret. Follow the <a href="https://github.com/theparitt/howllo/blob/main/docs/auth/oidc.md">exact OIDC setup</a> for JSON examples and callback checks.</p>
+    </section>
+
+    <section id="team" class="guide-section">
+      <div class="section-head"><span class="section-number">05</span><div><h2>Invite a teammate</h2><p>Staff roles belong to the workspace. The person you invite chooses whether to accept.</p></div></div>
+      <div class="guide-visual-row"><div class="guide-steps compact"><article><span class="step-n">1</span><div><h3>App → Staff → Invite</h3><p>Enter an email and choose admin or moderator.</p></div></article><article><span class="step-n">2</span><div><h3>Share the invitation</h3><p>With local accounts, share the one-time invitation code privately. The invitee signs in and accepts in App.</p></div></article><article><span class="step-n">3</span><div><h3>Check Staff</h3><p>See the invitation status and the new staff member. An owner can change their Howllo role or remove access.</p></div></article></div><figure><img src="/assets/howllo-invite-team.png" alt="Howllo mascot offering a staff invitation" loading="lazy" width="320" height="320"><figcaption>The invitee must accept before gaining a staff role.</figcaption></figure></div>
+      <p><a href="/#staff">See the staff tutorial →</a></p>
+    </section>
+
+    <section id="operate" class="guide-section">
+      <div class="section-head"><span class="section-number">06</span><div><h2>Run and maintain the service</h2><p>Use Howllo Admin for platform settings. Workspace staff use App for their own boards and members.</p></div></div>
+      <div class="surface-flow"><article><h3>Set safe defaults</h3><p>Admin → Platform settings controls quotas and limits; workspace owners can adjust allowed settings in App → Security.</p></article><article><h3>Back up both stores</h3><p>Back up PostgreSQL and MinIO together, then test a restore before relying on the installation.</p></article><article><h3>Track release gates</h3><p>Private media and browser session hardening are still open for 1.0. Check the <a href="/roadmap.html">public roadmap</a>.</p></article></div>
+    </section>
+    <footer class="footer"><span>Howllo Guides · Apache 2.0</span><a href="https://github.com/theparitt/howllo">Source on GitHub ↗</a></footer>
+  </main>
+</body>
+</html>

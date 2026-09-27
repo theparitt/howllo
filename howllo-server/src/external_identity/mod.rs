@@ -112,6 +112,8 @@ pub(crate) async fn call_bridge(
         AppError::ServiceUnavailable("Identity directory is unavailable.".into())
     })?;
     match response.status().as_u16() {
+        401 => return Err(AppError::Unauthorized),
+        403 => return Err(AppError::Forbidden),
         404 => return Err(AppError::NotFound),
         429 => {
             return Err(AppError::TooManyRequests(

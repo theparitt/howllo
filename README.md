@@ -18,7 +18,7 @@ platform admin approves them; each workspace or board chooses which approved
 plugins to enable. Howllo does not load third-party plugin code or tenant
 plugin uploads. See [plugin guide](docs/plugins.md).
 
-Howllo supports local accounts without RooIAM. RooIAM and generic OpenID Connect are optional login integrations. Provider isolation and the full standalone release test are still 1.0 gates; see [release gates](docs/RELEASE_GATES.md) and [authentication setup](docs/auth/README.md).
+Howllo starts with local accounts and recovery codes. Google and Microsoft sign-in are optional OpenID Connect choices that an operator or workspace owner can configure. Provider isolation and a clean standalone install remain 1.0 gates; see the [release gates](docs/RELEASE_GATES.md), [visual setup guide](https://docs.howllo.dev/self-host.html), and [public roadmap](https://docs.howllo.dev/roadmap.html).
 
 ## Monorepo layout
 
@@ -102,19 +102,19 @@ Copy `howllo-app/.env.example` to `howllo-app/.env.local`,
 public API URL. The API URL in those files must be reachable from users'
 browsers. The backend CORS list must include both frontend origins.
 
-Howllo Web reads login options from `GET /api/auth/providers`. Keep
-`HOWLLO_AUTH_LOCAL_ENABLED=true` on the server for its end-user accounts.
+Howllo Web reads workspace login options from the API. Keep
+`HOWLLO_AUTH_LOCAL_ENABLED=true` on the server for a local-account install.
 Email is optional and disabled on a new installation. Platform admins configure
 SMTP, send a test message, and enable delivery; workspaces then choose their
 email features. See the [email setup and MailHog test guide](docs/email.md).
 Howllo App defaults to local sign-in on a fresh installation. Staff invitations
 show a single-use code to the inviter; share it privately with the teammate,
-who signs in and redeems it in App. The hosted deployment can continue to use
-RooIAM. To add an
-OIDC provider, set `HOWLLO_PUBLIC_API_URL`, `HOWLLO_WEB_ORIGIN` and
+who signs in and redeems it in App. To add Google or Microsoft for staff,
+set `HOWLLO_PUBLIC_API_URL`, `HOWLLO_WEB_ORIGIN` and
 `HOWLLO_OIDC_PROVIDERS` as described in [docs/auth/oidc.md](docs/auth/oidc.md).
-For RooIAM, set `NEXT_PUBLIC_ROOIAM_WIDGET_*` in `howllo-app/.env.local` and
-`HOWLLO_ROOIAM_*` on the server; see [RooIAM setup](docs/auth/rooiam.md).
+Workspace owners configure customer Google or Microsoft credentials in
+**App → Customer sign-in**; Howllo stores the client secret encrypted with
+`HOWLLO_OIDC_CONFIG_KEY`.
 
 ## Production routing
 
@@ -132,7 +132,7 @@ docs.howllo.dev      -> howllo-docs
 
 Install dependencies with `npm ci`, copy `.env.production.example` to
 `.env.production`, and fill in the public HTTPS API, App, and Web origins plus
-the RooIAM widget workspace and client IDs. The root deployment script reads
+the public frontend origins. The root deployment script reads
 `.env.production`; shell environment variables take precedence. The file is
 gitignored. Keep the API URL reachable from both browsers and Cloudflare
 Workers; `192.168.x.x` and `localhost` are not public origins.
@@ -142,8 +142,8 @@ dry runs. Run `npm run deploy` to publish separate Workers for `howllo-app`,
 `howllo-web`, `howllo-admin`, `howllo-landing`, and `howllo-docs`. Authenticate Wrangler with
 `npx wrangler login` (or a Cloudflare API token in CI). Wrangler binds the
 production domains above as Worker custom domains. Register
-`https://app.howllo.dev/auth/callback` (or your chosen App domain) with RooIAM,
-and configure the backend's public origin/CORS for App, Web, and Admin. The
+the exact callback URLs shown in the sign-in settings with your configured
+OAuth provider, and configure the backend's public origin/CORS for App, Web, and Admin. The
 `api.howllo.dev` DNS record is a proxied CNAME to the `howllo-api` Cloudflare
 Tunnel, whose connector runs on the API host. On the current host,
 `howllo-server.service` and `howllo-api-tunnel.service` keep the API and tunnel

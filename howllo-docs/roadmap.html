@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5faf8">
+  <meta name="description" content="The public Howllo open-source roadmap: what works today, what comes next, and what must be done before a stable 1.0 release.">
+  <title>Open-source roadmap — Howllo Guides</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar"><div class="topbar-inner">
+    <a class="brand" href="https://howllo.dev" aria-label="Howllo home"><img src="/assets/howllo-logo-wordmark-horizontal.svg" alt="Howllo"><span class="brand-tag">Roadmap</span></a>
+    <nav class="top-links" aria-label="Guide navigation"><a href="/">Tutorials</a><a href="/self-host.html">Set up</a><a href="https://github.com/theparitt/howllo">GitHub</a></nav>
+  </div></header>
+  <main class="guide-page">
+    <section class="guide-hero roadmap-hero">
+      <div><span class="eyebrow">Open-source roadmap · updated September 2026</span><h1>A simple place to hear customers. A reliable one to run yourself.</h1><p>Howllo is a public feedback board and product roadmap for teams. This page shows what you can try now and what still needs work before a stable self-hosted release.</p><div class="hero-links"><a class="pill" href="#now">What works now ↓</a><a class="pill" href="#next">What comes next ↓</a></div></div>
+      <img src="/assets/howllo-roadmap.png" alt="Howllo mascot walking forward with a roadmap and flag" width="320" height="320">
+    </section>
+
+    <div class="roadmap-status"><span class="status-dot" aria-hidden="true"></span><div><strong>Current stage: preview</strong><p>The hosted demo and source are available. This is not yet a 1.0 self-hosted production release. Dates below are intentionally not promised.</p></div></div>
+
+    <section id="now" class="guide-section">
+      <div class="section-head"><span class="section-number">✓</span><div><h2>What you can use today</h2><p>The core feedback loop is built. These are present in the source, though the release gates below remain open.</p></div></div>
+      <div class="roadmap-grid">
+        <article><span class="roadmap-badge shipped">Available in preview</span><h3>Workspaces and boards</h3><p>Create a workspace, then add boards one at a time for bugs, ideas, discussions, or updates. Choose which pages and boards to publish.</p></article>
+        <article><span class="roadmap-badge shipped">Available in preview</span><h3>Customer feedback</h3><p>People can post, search, vote, comment, and follow updates. Staff can triage, change status, and moderate.</p></article>
+        <article><span class="roadmap-badge shipped">Available in preview</span><h3>Accounts and controls</h3><p>Local passwords and recovery codes work without an identity service. Staff invitations, restrictions, rate limits, quotas, and basic audit records are present.</p></article>
+        <article><span class="roadmap-badge validation">Needs wider validation</span><h3>Google and Microsoft sign-in</h3><p>Generic OpenID Connect supports both when configured with your own client credentials. The clean-install and browser verification gate is still open.</p></article>
+      </div>
+    </section>
+
+    <section id="next" class="guide-section">
+      <div class="section-head"><span class="section-number">→</span><div><h2>The path to 1.0</h2><p>We are prioritizing safety and a smooth daily forum experience before adding more specialized features.</p></div></div>
+      <div class="roadmap-track">
+        <article><div class="track-marker">1</div><div><span class="roadmap-badge active">Current focus</span><h3>Trustworthy sign-in and private content</h3><p>Harden browser sessions, prove that private attachments stay private, test account revocation and workspace isolation, and complete the separation of optional identity integrations from the open-source core.</p><small>Done when a fresh install works with local accounts alone and private content cannot leak through a public file URL.</small></div></article>
+        <article><div class="track-marker">2</div><div><span class="roadmap-badge planned">Planned</span><h3>A calmer everyday forum</h3><p>Add post and reply reporting, clearer spam review, appeals, and small usability improvements for members and moderators.</p><small>Done when normal users can participate without routine manual approval and moderators can explain every delay.</small></div></article>
+        <article><div class="track-marker">3</div><div><span class="roadmap-badge planned">Planned</span><h3>Self-hosting you can rely on</h3><p>Ship a versioned production stack, tested backup and restore, upgrade guidance, security checks, and monitoring basics.</p><small>Done when a new maintainer can install, upgrade, and restore Howllo without a hosted identity or cloud account.</small></div></article>
+        <article><div class="track-marker">4</div><div><span class="roadmap-badge later">After 1.0</span><h3>Optional first-party extras</h3><p>Add carefully reviewed board extensions such as richer formatting, polls, and themes. A workspace chooses which approved features to enable.</p><small>Core posting must keep working with every optional extension turned off.</small></div></article>
+      </div>
+    </section>
+
+    <section class="guide-section">
+      <div class="section-head"><span class="section-number">?</span><div><h2>What “1.0” will mean</h2><p>A stable release is a promise about operation and safety, not just a long feature list.</p></div></div>
+      <div class="surface-flow"><article><h3>Install independently</h3><p>No identity-provider account or third-party plugin is required to run the core.</p></article><article><h3>Keep data safe</h3><p>Sessions, workspace access, private files, and backups have been tested across real failure cases.</p></article><article><h3>Upgrade confidently</h3><p>Documented migrations, rollback guidance, automated checks, and a tested restore path.</p></article></div>
+      <div class="guide-callout"><strong>Want the engineering checklist?</strong> Read the <a href="https://github.com/theparitt/howllo/blob/main/docs/roadmap.md">detailed release plan</a> and <a href="https://github.com/theparitt/howllo/blob/main/docs/RELEASE_GATES.md">1.0 release gates</a>. The public roadmap is a summary of those records.</div>
+    </section>
+    <footer class="footer"><span>Howllo Guides · Apache 2.0</span><a href="/self-host.html">Set up Howllo ↗</a></footer>
+  </main>
+</body>
+</html>

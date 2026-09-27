@@ -182,11 +182,36 @@ pub async fn create_workspace_session(
     // Staff sign-in stays independent of public board sign-in settings.
     let is_staff: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM memberships WHERE tenant_id=$1 AND user_id=$2 AND role IN ('owner','admin','moderator'))")
         .bind(tenant_id).bind(user.id).fetch_one(pool.get_ref()).await.map_err(|_| AppError::InternalServerError)?;
+    let mut verified_rooiam_customer = false;
     if crate::external_identity::linked_workspace(pool.get_ref(), settings.get_ref(), tenant_id).await? {
         let provider_id = crate::external_identity::provider_id(settings.get_ref())?;
         let subject: Option<String> = sqlx::query_scalar("SELECT subject FROM user_identities WHERE user_id=$1 AND provider_id=$2")
             .bind(user.id).bind(provider_id).fetch_optional(pool.get_ref()).await
             .map_err(|_| AppError::InternalServerError)?;
+        if !is_staff && subject.is_some() && account_session.is_none() {
+            verified_rooiam_customer = crate::auth::customer_auth::is_customer_provider_enabled(
+                pool.get_ref(), tenant_id, "rooiam",
+            ).await? && crate::auth::customer_auth::verify_customer_rooiam_token(
+                pool.get_ref(), tenant_id, access_token,
+            ).await?;
+            if !verified_rooiam_customer { return Err(AppError::Forbidden); }
+            let client_id: String = sqlx::query_scalar(
+                "SELECT rooiam_client_id FROM workspace_customer_auth WHERE tenant_id=$1 AND rooiam_enabled=TRUE",
+            ).bind(tenant_id).fetch_optional(pool.get_ref()).await
+                .map_err(|_| AppError::InternalServerError)?.flatten().ok_or(AppError::Forbidden)?;
+            let enrolled = crate::external_identity::call_bridge(
+                settings.get_ref(), reqwest::Method::POST,
+                &format!("/v1/workspaces/{tenant_id}/enroll"), None,
+                Some(&serde_json::json!({
+                    "access_token": access_token, "client_id": client_id,
+                    "subject": subject.as_deref().ok_or(AppError::Forbidden)?,
+                })),
+            ).await?;
+            if enrolled.get("subject").and_then(|value| value.as_str()) != subject.as_deref()
+                || enrolled.get("status").and_then(|value| value.as_str()) != Some("active") {
+                return Err(AppError::Forbidden);
+            }
+        }
         if is_staff || subject.is_some() {
             let subject = subject.ok_or(AppError::Forbidden)?;
             let subject_segment = crate::external_identity::encoded_subject(&subject)?;
@@ -227,7 +252,7 @@ pub async fn create_workspace_session(
                 && crate::auth::rooiam::RooiamClient::new(settings.rooiam_jwt_secret.clone())
                     .validate_token(access_token)
                     .is_ok();
-            if !legacy
+            if !legacy && !verified_rooiam_customer
                 && (!crate::auth::customer_auth::is_customer_provider_enabled(
                     pool.get_ref(),
                     tenant_id,
