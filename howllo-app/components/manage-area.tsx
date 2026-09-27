@@ -710,7 +710,7 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
           </div>
         </label>
         <div className="manage-label">Header image
-          {headerImageUrl ? <img src={headerImageUrl} alt="Board header preview" style={{ display: "block", width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 12, margin: "0.6rem 0" }} /> : <span className="section-subtitle">Shown above this board’s posts.</span>}
+          {headerImageUrl ? <img src={headerImageUrl} alt="Board header preview" style={{ display: "block", width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 12, margin: "0.6rem 0" }} /> : <span className="section-subtitle">Optional. The board uses a subtle color header until you add an image.</span>}
           <input className="manage-input" type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={async (event) => {
             const file = event.target.files?.[0]; event.target.value = ""; if (!file) return;
             setBusy(true); setError(null);
@@ -718,7 +718,7 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
             catch (cause) { setError(cause instanceof Error ? cause.message : "Could not upload header."); }
             finally { setBusy(false); }
           }} />
-          <span className="section-subtitle">Use a wide image. PNG, JPG or WebP · up to 5 MB · fitted within 1800 × 600.</span>
+          <span className="section-subtitle">Shown behind the board title. Use a wide image; its edges may be cropped. PNG, JPG or WebP · up to 5 MB · fitted within 1800 × 600.</span>
           {headerImageUrl ? <button type="button" className="ghost-button" disabled={busy} onClick={() => setHeaderImageUrl(null)}>Remove header</button> : null}
         </div>
         <div className="manage-label">Background image

@@ -89,8 +89,8 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
         <RealtimeRefresh boardId={board.id} tenantSlug={tenant} />
         <section className="page-head">
           <Link className="back-link" href={buildTenantPath("/", tenant, defaultTenantSlug)}>← All boards</Link>
-          {board.header_image_url ? <img className="experience__cover" src={board.header_image_url} alt="" /> : null}
-          <div className="board-page-heading experience__heading" style={board.background_color ? { backgroundColor: `color-mix(in srgb, ${board.background_color} 22%, white)` } : undefined}>
+          <div className={`board-page-heading experience__heading experience__masthead${board.header_image_url ? " experience__masthead--with-image" : ""}`} style={board.background_color ? { backgroundColor: `color-mix(in srgb, ${board.background_color} 48%, white)` } : undefined}>
+            {board.header_image_url ? <img className="experience__cover" src={board.header_image_url} alt="" /> : null}
             <div>
               <span className="experience__eyebrow">{kind === "announcements" ? "Updates" : kind === "bug-reports" ? "Issue tracker" : kind === "discussions" ? "Community" : "Ideas"}</span>
               <h1 className="page-title">{board.name}</h1>
