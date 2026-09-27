@@ -135,11 +135,13 @@ async function scenario(manifest) {
     answer = actor("U-ANSWER-1", 17), foreign = actor("U-FOREIGN", 18), guest = actor("U-GUEST", 19);
   const people = [ownerA, ownerB, admin, moderator, rejectedInvitee, author, voter1, voter2, voter3, answer, foreign];
   const identities = new Set();
+  const identityByActor = new Map();
   for (const person of people) {
     const me = await person.request("GET", "/api/me", undefined, null, true);
     requireCheck(`AUTH-${person.id}`, person.id, null, me.status === 200 && !!me.body?.id && !identities.has(me.body.id),
       "distinct authenticated user identity", me);
     identities.add(me.body.id);
+    identityByActor.set(person.id, me.body.id);
   }
   const a = await ownerA.request("POST", "/api/admin/tenants", { name: `Howllo Test A ${suffix}` }, null, true);
   requireCheck("TENANT-A", ownerA.id, null, a.status === 201 && !!a.body?.slug, "workspace A created", a);
@@ -185,6 +187,25 @@ async function scenario(manifest) {
     { tenant_slug: A, slug: `rejected-${suffix}`, name: "Forbidden", board_type: "discussions", is_private: false }, A, true);
   check("RBAC-REJECT-NO-STAFF-ACCESS", rejectedInvitee.id, A, rejectAccess.status === 403,
     "rejected invite grants no staff permission", rejectAccess, "P0");
+  const revokedInvitation = await ownerA.request("POST", "/api/admin/invitations",
+    { tenant_slug: A, email: rejectedInvitee.email, role: "moderator" }, A, true);
+  requireCheck("INV-REINVITE-AFTER-REJECT", ownerA.id, A, revokedInvitation.status === 201,
+    "a rejected email may receive a new invitation", revokedInvitation);
+  const revokedId = uuid(revokedInvitation.body.id);
+  const foreignWithdraw = await ownerB.request("POST", `/api/admin/invitations/${revokedId}/withdraw?tenant_slug=${encodeURIComponent(B)}`,
+    undefined, B, true);
+  check("INV-FOREIGN-WITHDRAW-DENIED", ownerB.id, A, foreignWithdraw.status === 404,
+    "owner B cannot withdraw an A invitation", foreignWithdraw, "P0");
+  const withdrawn = await ownerA.request("POST", `/api/admin/invitations/${revokedId}/withdraw?tenant_slug=${encodeURIComponent(A)}`,
+    undefined, A, true);
+  requireCheck("INV-WITHDRAW", ownerA.id, A, withdrawn.status === 204,
+    "owner withdraws pending invitation", withdrawn);
+  const revokedAccept = await rejectedInvitee.request("POST", `/api/me/invitations/${revokedId}/accept`, undefined, null, true);
+  check("INV-WITHDRAWN-CANNOT-ACCEPT", rejectedInvitee.id, A, revokedAccept.status >= 400,
+    "withdrawn invitation cannot be accepted", revokedAccept, "P0");
+  const revokedState = observe(`SELECT json_build_object('status',status,'membership',(SELECT count(*) FROM memberships m WHERE m.tenant_id=i.tenant_id AND m.user_id=i.user_id)) FROM workspace_invitations i WHERE id='${revokedId}'`);
+  check("INV-WITHDRAWN-DB", "SYS-02", A, revokedState?.status === "withdrawn" && revokedState?.membership === 0,
+    "withdrawal creates no membership", { status: 200, body: revokedState }, "P0");
 
   for (const preset of presets) {
     const slug = `${preset.type}-${suffix}`;
@@ -350,6 +371,30 @@ async function scenario(manifest) {
   check("MOD-CONCURRENT-DB-AUDIT", "SYS-03", A,
     ["approved", "rejected"].includes(reviewed?.review_state) && reviewed?.is_hidden === (reviewed?.review_state === "rejected") && reviewed?.audit === 1,
     "one final review state and one decision audit", { status: 200, body: reviewed }, "P0");
+  const foreignEndpoints = [
+    ["GET", `/api/boards/${privateBoard.body.slug}?tenant_slug=${encodeURIComponent(A)}`],
+    ["GET", `/api/admin/members?tenant_slug=${encodeURIComponent(A)}`],
+    ["GET", `/api/admin/invitations?tenant_slug=${encodeURIComponent(A)}`],
+    ["GET", `/api/admin/audit-logs?tenant_slug=${encodeURIComponent(A)}`],
+  ];
+  for (const [index, [method, path]] of foreignEndpoints.entries()) {
+    const response = await foreign.request(method, path, undefined, B);
+    check(`SEC-FOREIGN-RESOURCE-${index + 1}`, foreign.id, A,
+      response.status === 403 || response.status === 404,
+      "workspace B session cannot access A private or privileged resource",
+      response, "P0");
+  }
+  const moderatorId = uuid(identityByActor.get(moderator.id));
+  const demoted = await ownerA.request("PATCH", `/api/admin/members/${moderatorId}/role?tenant_slug=${encodeURIComponent(A)}`,
+    { role: "member" }, A, true);
+  requireCheck("RBAC-DEMOTE-MODERATOR", ownerA.id, A, demoted.status === 200 && demoted.body?.role === "member",
+    "owner demotes moderator", demoted);
+  const staleModeration = await moderator.request("PATCH", `/api/admin/posts/${postId}/lock`, { is_locked: true }, A);
+  check("RBAC-STALE-SESSION-DENIED", moderator.id, A, staleModeration.status === 403,
+    "existing workspace session cannot retain revoked moderator power", staleModeration, "P0");
+  const demotionState = observe(`SELECT json_build_object('role',m.role,'audit',(SELECT count(*) FROM audit_logs a WHERE a.entity_id=m.user_id AND a.action='member_role_changed')) FROM memberships m WHERE m.tenant_id='${uuid(a.body.id)}' AND m.user_id='${moderatorId}'`);
+  check("RBAC-DEMOTION-DB-AUDIT", "SYS-03", A, demotionState?.role === "member" && demotionState?.audit >= 1,
+    "membership and audit record the demotion", { status: 200, body: demotionState }, "P0");
   const audit = observe(`SELECT json_build_object('board_create',count(*) FILTER (WHERE entity_type='board' AND action='board_created'),'all',count(*)) FROM audit_logs WHERE tenant_id='${uuid(a.body.id)}'`);
   check("AUDIT-BOARD", "SYS-03", A, audit?.board_create >= presets.length, "board mutations have workspace audit entries", { status: 200, body: audit });
 }
