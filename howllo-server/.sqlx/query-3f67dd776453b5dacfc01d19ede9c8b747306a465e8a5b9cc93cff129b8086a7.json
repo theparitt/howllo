@@ -1,0 +1,101 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT p.id, p.title, p.body, p.status, u.display_name as author_display_name,\n               p.vote_count, (p.pinned_at IS NOT NULL) AS \"is_pinned!\", p.is_locked, p.duplicate_of_post_id, p.created_at, b.slug as board_slug,\n               p.attachments, cat.name AS \"category_name?\", cat.color AS \"category_color?\"\n        FROM posts p\n        JOIN boards b ON p.board_id = b.id\n        JOIN tenants t ON p.tenant_id = t.id\n        JOIN users u ON p.user_id = u.id\n        LEFT JOIN board_categories cat ON cat.id=p.category_id AND cat.board_id=b.id\n        WHERE p.id = $1 AND t.slug = $2 AND p.is_hidden = false AND p.deleted_at IS NULL\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "body",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "author_display_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "vote_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "is_pinned!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "is_locked",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "duplicate_of_post_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "board_slug",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 11,
+        "name": "attachments",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 12,
+        "name": "category_name?",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 13,
+        "name": "category_color?",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3f67dd776453b5dacfc01d19ede9c8b747306a465e8a5b9cc93cff129b8086a7"
+}

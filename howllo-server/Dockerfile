@@ -12,6 +12,7 @@ COPY db ./db
 COPY .sqlx ./.sqlx
 COPY .env.example ./.env.example
 
+ENV SQLX_OFFLINE=true
 RUN cargo build --release
 
 EXPOSE 7700

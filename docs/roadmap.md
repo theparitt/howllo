@@ -20,7 +20,9 @@ per-user/per-board post and comment limits, burst cooldowns, quotas, IP/country
 rules, manual or automatic post review, and approved appearance plugins.
 The first-party plugin registry now rejects unknown catalog rows, and local
 operator setup requires a 12-character password. Operator setup and login
-share a PostgreSQL-based attempt limit. These changes do not close the other
+share a PostgreSQL-based attempt limit. Local login/signup/recovery now have
+shared account/IP attempt limits, and client IP headers are trusted only from
+the local tunnel. These changes do not close the other
 release blockers below.
 
 ## Phase 0 — release blockers: identity, privacy and abuse
@@ -36,14 +38,13 @@ release blockers below.
    promising that all board data is private. New private-board screenshot
    uploads and attachment references are currently rejected; existing public
    object URLs attached to private posts still require an audit and migration.
-3. **Make rate limits work behind proxies and across replicas.** Local auth has
-   a ten-per-minute in-memory limit keyed by TCP peer. Behind one reverse proxy
-   that peer may be shared by all customers; process restart/replicas reset the
-   count. The general public-write IP limiter also defaults to disabled,
-   though workspace account/board limits still apply. Resolve real IP only
-   through a configured trusted proxy, then use a
-   shared limiter for login, signup, recovery and writes. Cover account and IP
-   dimensions, including platform-admin login.
+3. **Finish shared write rate limits.** Local auth and admin login now use
+   PostgreSQL counters, and the public-write limiter defaults to enabled. The
+   latter remains in memory; replicas and restarts do not share its IP count,
+   though workspace account/board limits still apply. The tunnel client IP
+   header is accepted only from a loopback peer. Add an explicit trusted-proxy
+   configuration for non-loopback self-hosting and share write limits across
+   replicas.
 4. **Harden privileged login.** Increase the eight-character local operator
    password minimum, add MFA/passkeys or require administrator OIDC with MFA,
    and require fresh authentication for sensitive settings. Provide local or

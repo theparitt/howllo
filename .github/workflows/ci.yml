@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: howllo_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5433/howllo_test
+    steps:
+      - uses: actions/checkout@v6
+      - name: Rust toolchain
+        run: rustup update stable && rustup default stable
+      - name: Install SQLx CLI
+        run: cargo install sqlx-cli --version 0.7.4 --no-default-features --features rustls,postgres --locked
+      - name: Apply migrations
+        working-directory: howllo-server
+        run: cargo sqlx migrate run --source db/migrations
+      - name: Test server
+        working-directory: howllo-server
+        run: cargo test --locked
+      - name: Check offline Docker build inputs
+        working-directory: howllo-server
+        env:
+          SQLX_OFFLINE: "true"
+        run: cargo check --locked
+
+  frontends:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:7700
+      NEXT_PUBLIC_HOWLLO_AUTH_PROVIDER: local
+      NEXT_PUBLIC_HOWLLO_AUTH_PROVIDERS: local
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm -w howllo-admin run build
+      - run: npm -w howllo-app run build
+      - run: npm -w howllo-web run build

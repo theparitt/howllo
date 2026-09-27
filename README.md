@@ -5,6 +5,11 @@
 
 Howllo is open source under the [Apache License 2.0](LICENSE). Contributions are welcome on [GitHub](https://github.com/theparitt/howllo).
 
+**Release status:** preview. The hosted demo is live, but the self-hosted
+production release has open security and operations gates. See the
+[release roadmap](docs/roadmap.md) before using private boards or sensitive
+customer data.
+
 Multi-tenant feedback and roadmap platform. Customers submit and
 vote on feedback; product teams triage, set roadmap status, and respond.
 

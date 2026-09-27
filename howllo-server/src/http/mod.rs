@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::future::{ready, Ready};
+use std::net::IpAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -18,6 +19,24 @@ use crate::config::Settings;
 use crate::errors::AppError;
 
 pub const REQUEST_ID_HEADER: &str = "x-request-id";
+
+/// Use Cloudflare's client IP only when the immediate peer is our local
+/// tunnel/reverse proxy. Direct clients cannot choose their own IP by adding
+/// a forwarding header.
+pub fn client_ip(req: &actix_web::HttpRequest) -> Option<IpAddr> {
+    let peer = req.peer_addr()?.ip();
+    if peer.is_loopback() {
+        if let Some(ip) = req
+            .headers()
+            .get("cf-connecting-ip")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<IpAddr>().ok())
+        {
+            return Some(ip);
+        }
+    }
+    Some(peer)
+}
 
 tokio::task_local! {
     static CURRENT_REQUEST_ID: String;
@@ -99,10 +118,8 @@ where
             .map(|data| data.get_ref().clone());
         let method = req.method().clone();
         let path = req.path().to_string();
-        let peer = req
-            .connection_info()
-            .realip_remote_addr()
-            .map(ToString::to_string)
+        let peer = client_ip(req.request())
+            .map(|ip| ip.to_string())
             .unwrap_or_else(|| "unknown".to_string());
 
         let local_auth = path.starts_with("/api/auth/local/");
@@ -119,16 +136,7 @@ where
                     };
                     let now = Instant::now();
                     let window = Duration::from_secs(60);
-                    // Do not trust a caller-supplied Forwarded/X-Forwarded-For
-                    // header for password attempt limits.
-                    let limiter_peer = if local_auth {
-                        req.peer_addr()
-                            .map(|addr| addr.ip().to_string())
-                            .unwrap_or_else(|| peer.clone())
-                    } else {
-                        peer.clone()
-                    };
-                    let key = format!("{limiter_peer}:{path}:{method}");
+                    let key = format!("{peer}:{path}:{method}");
                     let mut bucket = self.buckets.entry(key).or_default();
 
                     while let Some(front) = bucket.front() {
@@ -215,6 +223,27 @@ mod tests {
     use crate::startup;
 
     use super::RequestId;
+
+    #[actix_web::test]
+    async fn forwarded_ip_is_trusted_only_from_local_proxy() {
+        let remote = test::TestRequest::default()
+            .peer_addr("203.0.113.10:443".parse().unwrap())
+            .insert_header(("cf-connecting-ip", "198.51.100.7"))
+            .to_http_request();
+        assert_eq!(
+            super::client_ip(&remote).unwrap().to_string(),
+            "203.0.113.10"
+        );
+
+        let local_proxy = test::TestRequest::default()
+            .peer_addr("127.0.0.1:30000".parse().unwrap())
+            .insert_header(("cf-connecting-ip", "198.51.100.7"))
+            .to_http_request();
+        assert_eq!(
+            super::client_ip(&local_proxy).unwrap().to_string(),
+            "198.51.100.7"
+        );
+    }
 
     #[actix_web::test]
     async fn request_id_is_added_to_response() {
@@ -445,6 +474,8 @@ pub mod test_support {
         pool.execute(
             r#"
             TRUNCATE TABLE
+                admin_auth_rate_limit,
+                local_auth_rate_limits,
                 audit_logs,
                 ai_suggestions,
                 notifications,

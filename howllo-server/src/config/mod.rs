@@ -88,7 +88,7 @@ impl Settings {
                 .filter(|value| !value.is_empty())
                 .map(ToString::to_string)
                 .collect(),
-            rate_limit_enabled: bool_flag("HOWLLO_RATE_LIMIT_ENABLED", false),
+            rate_limit_enabled: bool_flag("HOWLLO_RATE_LIMIT_ENABLED", true),
             public_write_rate_limit: env::var("HOWLLO_PUBLIC_WRITE_RATE_LIMIT")
                 .ok()
                 .and_then(|value| value.parse().ok())

@@ -276,15 +276,7 @@ pub async fn enforce_ip_policy(
         return Ok(());
     }
     let peer = req.peer_addr().map(|addr| addr.ip());
-    let forwarded = if peer.is_some_and(|ip| ip.is_loopback()) {
-        req.headers()
-            .get("cf-connecting-ip")
-            .and_then(|h| h.to_str().ok())
-            .and_then(|s| s.parse::<IpAddr>().ok())
-    } else {
-        None
-    };
-    let ip = forwarded.or(peer).ok_or(AppError::Forbidden)?;
+    let ip = crate::http::client_ip(req).ok_or(AppError::Forbidden)?;
     let matches = |list: &[String]| {
         list.iter().any(|v| {
             v.parse::<IpNet>()
