@@ -46,12 +46,13 @@ export function AttachmentPreview({ url, plugins, compact = false }: { url: stri
   const imageDialog = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
   const [modelReady, setModelReady] = useState(false);
+  const [modelError, setModelError] = useState(false);
   const kind = attachmentKind(url);
   useEffect(() => {
-    if (open && kind === "glb" && hasCapability(plugins, "attachment.preview.glb")) {
-      void import("@google/model-viewer").then(() => setModelReady(true));
+    if (open && kind === "glb" && !modelReady && !modelError && hasCapability(plugins, "attachment.preview.glb")) {
+      void import("@google/model-viewer").then(() => setModelReady(true)).catch(() => setModelError(true));
     }
-  }, [open, kind, plugins]);
+  }, [open, kind, plugins, modelReady, modelError]);
   if (!safeUrl) return null;
   if (kind === "image") return <>
     <button type="button" className="attachment-thumb" onClick={() => imageDialog.current?.showModal()} aria-label="Preview attached image"><img src={safeUrl} alt="Post attachment" loading="lazy" /></button>
@@ -68,8 +69,8 @@ export function AttachmentPreview({ url, plugins, compact = false }: { url: stri
     <button type="button" className="ghost-button" onClick={() => setOpen((current) => !current)} aria-expanded={open}>{open ? "Hide" : "Preview"} {label.toLowerCase()}</button>
     <a href={safeUrl} target="_blank" rel="noreferrer">Open file ↗</a>
     {open && kind === "pdf" ? <iframe className="howllo-pdf-preview" src={safeUrl} title="PDF attachment preview" loading="lazy" /> : null}
-    {open && kind === "glb" ? modelReady
-      ? createElement("model-viewer", { className: "howllo-model-preview", src: safeUrl, alt: "Interactive 3D attachment", "camera-controls": "", loading: "lazy" })
+    {open && kind === "glb" ? modelError ? <span className="muted">Preview unavailable. Use Open file above.</span> : modelReady
+      ? createElement("model-viewer", { className: "howllo-model-preview", src: safeUrl, alt: "Interactive 3D attachment", "camera-controls": "", loading: "lazy", onError: () => setModelError(true) })
       : <span className="muted">Loading preview…</span> : null}
   </div>;
 }
