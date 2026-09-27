@@ -39,6 +39,11 @@ DATABASE_URL=postgres://postgres:password@localhost:5432/howllo cargo run --rele
 docker compose up --build
 ```
 
+This Compose file runs only the API and PostgreSQL with development secrets.
+It is an API build example, not the complete self-hosted deployment. The App,
+Web, Admin, TLS proxy, MinIO and production secret setup are still being
+assembled into a reference stack. See [the release roadmap](../../docs/roadmap.md).
+
 ## Verify
 
 ```bash

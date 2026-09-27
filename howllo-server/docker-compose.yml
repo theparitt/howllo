@@ -17,8 +17,8 @@ services:
 
   howllo-server:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: howllo-server/Dockerfile
     environment:
       HOWLLO_DATABASE_URL: postgres://postgres:postgres@postgres:5432/howllo
       HOWLLO_BIND_ADDRESS: 0.0.0.0:7700
@@ -39,6 +39,9 @@ services:
         condition: service_healthy
     ports:
       - "7700:7700"
+    volumes:
+      - howllo-uploads:/app/data/uploads
 
 volumes:
   howllo-postgres:
+  howllo-uploads:
