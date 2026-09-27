@@ -291,6 +291,56 @@ pub async fn create_post(
                 .into(),
         ));
     }
+    if attachments.len() > 10 {
+        return Err(AppError::Validation(
+            "Add up to 10 attachments per post.".into(),
+        ));
+    }
+    let upload_prefix = if attachments.is_empty() {
+        String::new()
+    } else {
+        let storage_base = crate::storage::load_platform_storage_config(pool)
+            .await?
+            .public_base_url;
+        format!(
+            "{}/workspaces/{}/uploads/",
+            storage_base.trim_end_matches('/'),
+            board.tenant_id
+        )
+    };
+    for attachment in attachments {
+        let parsed = url::Url::parse(attachment)
+            .map_err(|_| AppError::Validation("Invalid attachment URL.".into()))?;
+        if !matches!(parsed.scheme(), "http" | "https") || attachment.len() > 2048 {
+            return Err(AppError::Validation("Invalid attachment URL.".into()));
+        }
+        let file_path = parsed.path().to_ascii_lowercase();
+        let required_plugin = if file_path.ends_with(".pdf") {
+            Some("pdf-preview")
+        } else if file_path.ends_with(".glb") {
+            Some("model-preview")
+        } else {
+            None
+        };
+        if let Some(plugin_id) = required_plugin {
+            if !attachment.starts_with(&upload_prefix) {
+                return Err(AppError::Validation(
+                    "Upload this file to the workspace before attaching it.".into(),
+                ));
+            }
+            let installed: Option<(String, String, String)> = sqlx::query_as(
+                "SELECT p.version,p.slot,p.stylesheet_path FROM board_plugins bp JOIN plugin_catalog p ON p.id=bp.plugin_id WHERE bp.board_id=$1 AND bp.plugin_id=$2 AND bp.enabled=TRUE AND p.is_approved=TRUE"
+            ).bind(board.board_id).bind(plugin_id).fetch_optional(pool).await
+                .map_err(|_| AppError::InternalServerError)?;
+            if !installed.is_some_and(|(version, slot, path)| {
+                crate::plugins::registry::matches(plugin_id, &version, &slot, &path)
+            }) {
+                return Err(AppError::Validation(
+                    "This board does not have the required attachment plugin enabled.".into(),
+                ));
+            }
+        }
+    }
     if tag_ids.len() > 3
         || tag_ids
             .iter()

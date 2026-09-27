@@ -31,7 +31,7 @@ fn ensure_platform_admin(auth: &AuthenticatedUser) -> Result<(), AppError> {
     }
 }
 
-// ── Image upload (any authenticated user — for post screenshots) ───────────────
+// ── Public media upload (private boards remain blocked) ───────────────────────
 
 #[derive(Deserialize)]
 pub struct UploadRequest {
@@ -40,7 +40,7 @@ pub struct UploadRequest {
     pub board_slug: Option<String>,
     /// Original filename (used only to pick an extension).
     pub filename: String,
-    /// MIME type, e.g. "image/png". Must be an image.
+    /// MIME type; verified against file bytes before storage.
     pub content_type: String,
     /// Base64-encoded file bytes (no data: URL prefix).
     pub data: String,
@@ -52,6 +52,111 @@ pub struct UploadResponse {
 }
 
 const MAX_UPLOAD_BYTES: usize = 8 * 1024 * 1024; // 8 MB
+
+fn validated_media_extension(content_type: &str, bytes: &[u8]) -> Result<&'static str, AppError> {
+    let matches = match content_type {
+        "image/png" => bytes.starts_with(b"\x89PNG\r\n\x1a\n").then_some("png"),
+        "image/jpeg" => bytes.starts_with(b"\xff\xd8\xff").then_some("jpg"),
+        "image/gif" => {
+            (bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a")).then_some("gif")
+        }
+        "image/webp" => {
+            (bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP")
+                .then_some("webp")
+        }
+        "application/pdf" => (bytes.starts_with(b"%PDF-")
+            && bytes[bytes.len().saturating_sub(1024)..]
+                .windows(5)
+                .any(|part| part == b"%%EOF"))
+        .then_some("pdf"),
+        "model/gltf-binary" => valid_self_contained_glb(bytes).then_some("glb"),
+        _ => None,
+    };
+    matches.ok_or_else(|| AppError::Validation("Unsupported or invalid file type.".into()))
+}
+
+fn valid_self_contained_glb(bytes: &[u8]) -> bool {
+    if bytes.len() < 20
+        || &bytes[..4] != b"glTF"
+        || u32::from_le_bytes(bytes[4..8].try_into().unwrap()) != 2
+        || u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize != bytes.len()
+    {
+        return false;
+    }
+    let json_length = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+    if &bytes[16..20] != b"JSON" || json_length > bytes.len().saturating_sub(20) {
+        return false;
+    }
+    let Ok(document) = serde_json::from_slice::<serde_json::Value>(&bytes[20..20 + json_length])
+    else {
+        return false;
+    };
+    fn has_uri(value: &serde_json::Value) -> bool {
+        match value {
+            serde_json::Value::Object(fields) => {
+                fields.contains_key("uri") || fields.values().any(has_uri)
+            }
+            serde_json::Value::Array(items) => items.iter().any(has_uri),
+            _ => false,
+        }
+    }
+    if has_uri(&document)
+        || document.pointer("/asset/version").and_then(|v| v.as_str()) != Some("2.0")
+    {
+        return false;
+    }
+    let tail = &bytes[20 + json_length..];
+    tail.is_empty()
+        || (tail.len() >= 8
+            && &tail[4..8] == b"BIN\0"
+            && u32::from_le_bytes(tail[..4].try_into().unwrap()) as usize == tail.len() - 8)
+}
+
+#[cfg(test)]
+mod media_validation_tests {
+    use super::{valid_self_contained_glb, validated_media_extension};
+
+    #[test]
+    fn rejects_claimed_image_with_html_bytes() {
+        assert!(validated_media_extension("image/webp", b"<script>alert(1)</script>").is_err());
+        assert!(validated_media_extension("image/svg+xml", b"<svg></svg>").is_err());
+        assert_eq!(
+            validated_media_extension("image/webp", b"RIFF\0\0\0\0WEBP").unwrap(),
+            "webp"
+        );
+        assert_eq!(
+            validated_media_extension("application/pdf", b"%PDF-1.7\n%%EOF").unwrap(),
+            "pdf"
+        );
+        assert!(validated_media_extension("application/pdf", b"%PDF-1.7\n<script>").is_err());
+    }
+
+    #[test]
+    fn requires_a_self_contained_glb() {
+        fn glb(json: &str) -> Vec<u8> {
+            let mut chunk = json.as_bytes().to_vec();
+            while chunk.len() % 4 != 0 {
+                chunk.push(b' ');
+            }
+            let mut bytes = b"glTF".to_vec();
+            bytes.extend_from_slice(&2_u32.to_le_bytes());
+            bytes.extend_from_slice(&((20 + chunk.len()) as u32).to_le_bytes());
+            bytes.extend_from_slice(&(chunk.len() as u32).to_le_bytes());
+            bytes.extend_from_slice(b"JSON");
+            bytes.extend_from_slice(&chunk);
+            bytes
+        }
+        assert!(valid_self_contained_glb(&glb(
+            r#"{"asset":{"version":"2.0"}}"#
+        )));
+        assert!(!valid_self_contained_glb(&glb(
+            r#"{"asset":{"version":"2.0"},"images":[{"uri":"https://example.com/a.png"}]}"#
+        )));
+        assert!(!valid_self_contained_glb(&glb(
+            r#"{"asset":{"version":"1.0"}}"#
+        )));
+    }
+}
 
 #[post("/api/uploads")]
 pub async fn upload_image(
@@ -71,53 +176,63 @@ pub async fn upload_image(
             .await
             .map_err(|_| AppError::Forbidden)?;
     }
-    if let Some(board_slug) = body.board_slug.as_deref() {
-        let is_private: Option<bool> = sqlx::query_scalar(
-            "SELECT is_private FROM boards WHERE tenant_id=$1 AND slug=$2 AND is_enabled=TRUE",
+    let board = if let Some(board_slug) = body.board_slug.as_deref() {
+        let board: Option<(Uuid, bool)> = sqlx::query_as(
+            "SELECT id,is_private FROM boards WHERE tenant_id=$1 AND slug=$2 AND is_enabled=TRUE",
         )
         .bind(tenant_id)
         .bind(board_slug)
         .fetch_optional(pool.get_ref())
         .await
         .map_err(|_| AppError::InternalServerError)?;
-        match is_private {
-            Some(true) => {
+        match board {
+            Some((_, true)) => {
                 return Err(AppError::Validation(
-                    "Screenshots are unavailable on private boards until private storage is configured."
+                    "Attachments are unavailable on private boards until private storage is configured."
                         .into(),
                 ))
             }
-            Some(false) => (),
+            Some((id, false)) => Some(id),
             None => return Err(AppError::NotFound),
         }
-    }
+    } else {
+        None
+    };
     let policy = crate::policy::workspace_policy(pool.get_ref(), tenant_id).await?;
     use base64::Engine;
 
     let content_type = body.content_type.trim().to_lowercase();
-    if !content_type.starts_with("image/") {
-        return Err(AppError::Validation(
-            "Only image uploads are allowed.".into(),
-        ));
-    }
-
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(body.data.trim())
-        .map_err(|_| AppError::Validation("Invalid base64 image data.".into()))?;
+        .map_err(|_| AppError::Validation("Invalid base64 file data.".into()))?;
     if bytes.is_empty() {
         return Err(AppError::Validation("Empty upload.".into()));
     }
     if bytes.len() > MAX_UPLOAD_BYTES {
-        return Err(AppError::Validation("Image exceeds the 8 MB limit.".into()));
+        return Err(AppError::Validation("File exceeds the 8 MB limit.".into()));
     }
-
-    let ext = match content_type.as_str() {
-        "image/png" => "png",
-        "image/jpeg" | "image/jpg" => "jpg",
-        "image/gif" => "gif",
-        "image/webp" => "webp",
-        _ => "bin",
+    let ext = validated_media_extension(&content_type, &bytes)?;
+    let required_plugin = match ext {
+        "pdf" => Some("pdf-preview"),
+        "glb" => Some("model-preview"),
+        _ => None,
     };
+    if let Some(plugin_id) = required_plugin {
+        let board_id = board.ok_or_else(|| {
+            AppError::Validation("A public board is required for this file type.".into())
+        })?;
+        let row: Option<(String, String, String)> = sqlx::query_as(
+            "SELECT p.version,p.slot,p.stylesheet_path FROM board_plugins bp JOIN plugin_catalog p ON p.id=bp.plugin_id WHERE bp.board_id=$1 AND bp.plugin_id=$2 AND bp.enabled=TRUE AND p.is_approved=TRUE"
+        ).bind(board_id).bind(plugin_id).fetch_optional(pool.get_ref()).await
+            .map_err(|_| AppError::InternalServerError)?;
+        if !row.is_some_and(|(version, slot, path)| {
+            crate::plugins::registry::matches(plugin_id, &version, &slot, &path)
+        }) {
+            return Err(AppError::Validation(
+                "Enable the matching board plugin before uploading this file type.".into(),
+            ));
+        }
+    }
     let relative = format!(
         "workspaces/{tenant_id}/uploads/{}.{}",
         uuid::Uuid::new_v4(),
@@ -194,10 +309,13 @@ pub async fn serve_upload(
         Some("jpg") | Some("jpeg") => "image/jpeg",
         Some("gif") => "image/gif",
         Some("webp") => "image/webp",
+        Some("pdf") => "application/pdf",
+        Some("glb") => "model/gltf-binary",
         _ => "application/octet-stream",
     };
     Ok(HttpResponse::Ok()
         .content_type(content_type)
+        .insert_header(("x-content-type-options", "nosniff"))
         .insert_header(("cache-control", "public, max-age=31536000, immutable"))
         .body(bytes))
 }
@@ -838,7 +956,9 @@ mod quota_tests {
             "Member",
             &settings.rooiam_jwt_secret,
         );
-        let data = base64::engine::general_purpose::STANDARD.encode(vec![1u8; 700 * 1024]);
+        let mut image = vec![1u8; 700 * 1024];
+        image[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+        let data = base64::engine::general_purpose::STANDARD.encode(image);
         for expected in [StatusCode::OK, StatusCode::UNPROCESSABLE_ENTITY] {
             let request = test::TestRequest::post().uri("/api/uploads")
                 .insert_header(("Authorization", member.clone()))

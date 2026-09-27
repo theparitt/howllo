@@ -7,6 +7,8 @@ pub struct BuiltInPlugin {
     pub stylesheet_path: &'static str,
     pub version: &'static str,
     pub stylesheet: &'static str,
+    pub runtime_kind: &'static str,
+    pub capabilities: &'static [&'static str],
 }
 
 pub const BUILT_INS: &[BuiltInPlugin] = &[
@@ -16,6 +18,8 @@ pub const BUILT_INS: &[BuiltInPlugin] = &[
         stylesheet_path: "/plugins/editorial-type.css",
         version: "1.0.0",
         stylesheet: include_str!("../../../howllo-web/public/plugins/editorial-type.css"),
+        runtime_kind: "style",
+        capabilities: &["workspace.typography"],
     },
     BuiltInPlugin {
         id: "clean-type",
@@ -23,6 +27,8 @@ pub const BUILT_INS: &[BuiltInPlugin] = &[
         stylesheet_path: "/plugins/clean-type.css",
         version: "1.0.0",
         stylesheet: include_str!("../../../howllo-web/public/plugins/clean-type.css"),
+        runtime_kind: "style",
+        capabilities: &["workspace.typography"],
     },
     BuiltInPlugin {
         id: "board-grid",
@@ -30,6 +36,8 @@ pub const BUILT_INS: &[BuiltInPlugin] = &[
         stylesheet_path: "/plugins/board-grid.css",
         version: "1.0.0",
         stylesheet: include_str!("../../../howllo-web/public/plugins/board-grid.css"),
+        runtime_kind: "style",
+        capabilities: &["board.directory.layout"],
     },
     BuiltInPlugin {
         id: "compact-topics",
@@ -37,6 +45,8 @@ pub const BUILT_INS: &[BuiltInPlugin] = &[
         stylesheet_path: "/plugins/compact-topics.css",
         version: "1.0.0",
         stylesheet: include_str!("../../../howllo-web/public/plugins/compact-topics.css"),
+        runtime_kind: "style",
+        capabilities: &["board.topics.layout"],
     },
     BuiltInPlugin {
         id: "reading-type",
@@ -44,6 +54,35 @@ pub const BUILT_INS: &[BuiltInPlugin] = &[
         stylesheet_path: "/plugins/reading-type.css",
         version: "1.0.0",
         stylesheet: include_str!("../../../howllo-web/public/plugins/reading-type.css"),
+        runtime_kind: "style",
+        capabilities: &["board.topics.typography"],
+    },
+    BuiltInPlugin {
+        id: "simple-markdown",
+        slot: "board.post.markdown",
+        stylesheet_path: "/plugins/simple-markdown.css",
+        version: "1.0.0",
+        stylesheet: include_str!("../../../howllo-web/public/plugins/simple-markdown.css"),
+        runtime_kind: "component",
+        capabilities: &["post.editor", "post.body"],
+    },
+    BuiltInPlugin {
+        id: "pdf-preview",
+        slot: "board.attachments.pdf",
+        stylesheet_path: "/plugins/pdf-preview.css",
+        version: "1.0.0",
+        stylesheet: include_str!("../../../howllo-web/public/plugins/pdf-preview.css"),
+        runtime_kind: "component",
+        capabilities: &["attachment.upload.pdf", "attachment.preview.pdf"],
+    },
+    BuiltInPlugin {
+        id: "model-preview",
+        slot: "board.attachments.model",
+        stylesheet_path: "/plugins/model-preview.css",
+        version: "1.0.0",
+        stylesheet: include_str!("../../../howllo-web/public/plugins/model-preview.css"),
+        runtime_kind: "component",
+        capabilities: &["attachment.upload.glb", "attachment.preview.glb"],
     },
 ];
 

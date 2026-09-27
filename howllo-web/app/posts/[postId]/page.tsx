@@ -14,6 +14,8 @@ import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { WorkspaceState } from "@/components/workspace-state";
 import { plural } from "@/lib/format";
 import { boardKind, boardVoteLabel } from "@/lib/board-experience";
+import { activeBoardPlugins } from "@/lib/board-plugin-runtime";
+import { AttachmentPreview, PostBody } from "@/components/board-plugin-content";
 
 type PostPageProps = {
   params: Promise<{
@@ -49,11 +51,12 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
     ]);
     const board = await getBoardDetail(tenant, post.board_slug, token);
     const presentation = await getBoardPresentation(tenant, post.board_slug, token);
+    const plugins = activeBoardPlugins(presentation);
     const kind = boardKind(board.board_type);
-    const bugSections = kind === "bug-reports" && post.body.startsWith("Steps to reproduce\n")
-      ? post.body.split(/\n\n(?=(?:Expected result|Actual result|Environment)\n)/).map((part) => {
+    const bugSections = kind === "bug-reports" && /^(?:\*\*)?Steps to reproduce(?:\*\*)?\n/.test(post.body)
+      ? post.body.split(/\n\n(?=(?:\*\*)?(?:Expected result|Actual result|Environment)(?:\*\*)?\n)/).map((part) => {
           const split = part.indexOf("\n");
-          return { label: part.slice(0, split), content: part.slice(split + 1) };
+          return { label: part.slice(0, split).replaceAll("**", ""), content: part.slice(split + 1) };
         })
       : null;
 
@@ -100,20 +103,10 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
               </div>
             ) : null}
             <hr className="divider" />
-            {bugSections ? <div className="bug-report-sections">{bugSections.map((section) => <section key={section.label}><h2>{section.label}</h2><p className="post-body">{section.content}</p></section>)}</div> : <p className="post-body">{post.body}</p>}
+            {bugSections ? <div className="bug-report-sections">{bugSections.map((section) => <section key={section.label}><h2>{section.label}</h2><PostBody text={section.content} plugins={plugins} /></section>)}</div> : <PostBody text={post.body} plugins={plugins} />}
             {post.attachments && post.attachments.length > 0 ? (
               <div className="attachment-grid" style={{ marginTop: "1.1rem" }}>
-                {post.attachments.map((url) => (
-                  <a
-                    className="attachment-thumb"
-                    href={url}
-                    target="_blank"
-                    rel="noreferrer"
-                    key={url}
-                  >
-                    <img src={url} alt="Attachment" />
-                  </a>
-                ))}
+                {post.attachments.map((url) => <AttachmentPreview url={url} plugins={plugins} key={url} />)}
               </div>
             ) : null}
             <PostActions tenantSlug={tenant} postId={post.id} allowVotes={board.allow_votes} voteLabel={boardVoteLabel(board.board_type)} initiallyVoted={post.has_voted ?? false} initiallyFollowing={post.follow_state?.is_following ?? false} />

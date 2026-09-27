@@ -94,12 +94,24 @@ pub async fn get_public_presentation(
         sidebar_text: String::new(),
         footer_text: String::new(),
     });
-    Ok(HttpResponse::Ok().insert_header(("Cache-Control", "no-store")).json(serde_json::json!({
-        "announcement": presentation.announcement,
-        "sidebar_text": presentation.sidebar_text,
-        "footer_text": presentation.footer_text,
-        "plugins": plugins.into_iter().filter(|(id, version, slot, path)| registry::matches(id, version, slot, path)).map(|(id, _, _, stylesheet_path)| serde_json::json!({ "id": id, "stylesheet_path": stylesheet_path })).collect::<Vec<_>>()
-    })))
+    Ok(HttpResponse::Ok()
+        .insert_header(("Cache-Control", "no-store"))
+        .json(serde_json::json!({
+            "api_version": 2,
+            "announcement": presentation.announcement,
+            "sidebar_text": presentation.sidebar_text,
+            "footer_text": presentation.footer_text,
+            "plugins": plugins.into_iter().filter_map(|(id, version, slot, path)| {
+                let built_in = registry::find(&id)?;
+                if !registry::matches(&id, &version, &slot, &path) { return None; }
+                Some(serde_json::json!({
+                    "id": id, "version": version, "slot": slot,
+                    "runtime_kind": built_in.runtime_kind,
+                    "capabilities": built_in.capabilities,
+                    "stylesheet_path": path,
+                }))
+            }).collect::<Vec<_>>()
+        })))
 }
 
 #[get("/api/admin/boards/{id}/presentation")]
@@ -155,7 +167,7 @@ pub async fn list_board_plugins(
 ) -> Result<impl Responder, AppError> {
     let id = path.into_inner();
     board_tenant(pool.get_ref(), id, auth.0.id, Permission::ManageBoards).await?;
-    let mut plugins: Vec<BoardPlugin> = sqlx::query_as("SELECT p.id,p.version,p.name,p.description,p.slot,p.stylesheet_path,COALESCE(bp.enabled,FALSE) AS enabled FROM plugin_catalog p LEFT JOIN board_plugins bp ON bp.plugin_id=p.id AND bp.board_id=$1 WHERE p.is_approved=TRUE AND p.slot LIKE 'board.topics.%' ORDER BY p.slot,p.name")
+    let mut plugins: Vec<BoardPlugin> = sqlx::query_as("SELECT p.id,p.version,p.name,p.description,p.slot,p.stylesheet_path,COALESCE(bp.enabled,FALSE) AS enabled FROM plugin_catalog p LEFT JOIN board_plugins bp ON bp.plugin_id=p.id AND bp.board_id=$1 WHERE p.is_approved=TRUE AND p.slot LIKE 'board.%' AND p.slot <> 'board.directory.layout' ORDER BY p.slot,p.name")
         .bind(id).fetch_all(pool.get_ref()).await.map_err(db_error)?;
     plugins.retain(|p| registry::matches(&p.id, &p.version, &p.slot, &p.stylesheet_path));
     Ok(HttpResponse::Ok()
@@ -188,7 +200,7 @@ pub async fn toggle_board_plugin(
             .await
             .map_err(db_error)?;
     let (slot, approved) = row.ok_or(AppError::NotFound)?;
-    if !slot.starts_with("board.topics.") {
+    if !slot.starts_with("board.") || slot == "board.directory.layout" {
         return Err(AppError::Validation(
             "This plugin cannot be enabled on a board".into(),
         ));

@@ -3,7 +3,9 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { createPost, uploadImage } from "@/lib/api";
+import { createPost, uploadAttachment } from "@/lib/api";
+import { attachmentAccept, attachmentKind, hasCapability, type ActiveBoardPlugins } from "@/lib/board-plugin-runtime";
+import { MarkdownEditor } from "@/components/board-plugin-content";
 import { readStoredBearerToken } from "@/components/dev-auth-panel";
 import { buildTenantPath } from "@/lib/default-tenant";
 import { requestLogin } from "@/components/auth-login";
@@ -17,6 +19,7 @@ type CreatePostFormProps = {
   isPrivate: boolean;
   categories: BoardCategory[];
   tags: Tag[];
+  plugins: ActiveBoardPlugins;
 };
 
 function submissionMessage(error: unknown): string {
@@ -28,7 +31,7 @@ function submissionMessage(error: unknown): string {
   return error.message;
 }
 
-export function CreatePostForm({ tenantSlug, boardSlug, boardKind, isPrivate, categories, tags }: CreatePostFormProps) {
+export function CreatePostForm({ tenantSlug, boardSlug, boardKind, isPrivate, categories, tags, plugins }: CreatePostFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const draftKey = `howllo.post-draft.${tenantSlug}.${boardSlug}`;
@@ -79,15 +82,26 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind, isPrivate, ca
     const files = Array.from(event.target.files ?? []);
     event.target.value = "";
     if (files.length === 0) return;
+    if (attachments.length + files.length > 10) {
+      setError("Add up to 10 attachments per post.");
+      return;
+    }
     const token = readStoredBearerToken(tenantSlug);
     if (!token) {
-      setError("Sign in before attaching screenshots.");
+      setError("Sign in before attaching files.");
       return;
     }
     setUploading(true);
     setError(null);
     try {
-      const urls = await Promise.all(files.map((file) => uploadImage(file, token, tenantSlug, boardSlug)));
+      for (const file of files) {
+        const kind = attachmentKind(file.name);
+        if (kind === "unknown" || (kind === "pdf" && !hasCapability(plugins, "attachment.upload.pdf")) ||
+          (kind === "glb" && !hasCapability(plugins, "attachment.upload.glb"))) {
+          throw new Error("This file type is not enabled for this board.");
+        }
+      }
+      const urls = await Promise.all(files.map((file) => uploadAttachment(file, token, tenantSlug, boardSlug)));
       setAttachments((current) => [...current, ...urls]);
     } catch (uploadError) {
       setError(
@@ -120,10 +134,10 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind, isPrivate, ca
         boardSlug,
         title,
         body: boardKind === "bug-reports" ? [
-          `Steps to reproduce\n${steps.trim()}`,
-          `Expected result\n${expected.trim()}`,
-          `Actual result\n${actual.trim()}`,
-          environment.trim() ? `Environment\n${environment.trim()}` : "",
+          `${hasCapability(plugins, "post.editor") ? "**Steps to reproduce**" : "Steps to reproduce"}\n${steps.trim()}`,
+          `${hasCapability(plugins, "post.editor") ? "**Expected result**" : "Expected result"}\n${expected.trim()}`,
+          `${hasCapability(plugins, "post.editor") ? "**Actual result**" : "Actual result"}\n${actual.trim()}`,
+          environment.trim() ? `${hasCapability(plugins, "post.editor") ? "**Environment**" : "Environment"}\n${environment.trim()}` : "",
         ].filter(Boolean).join("\n\n") : body,
         attachments,
         categoryId: categoryId || null,
@@ -166,31 +180,28 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind, isPrivate, ca
         />
       </label>
       {boardKind === "bug-reports" ? <div className="field-grid">
-        <label className="manage-label">Steps to reproduce<textarea className="textarea" value={steps} onChange={(event) => setSteps(event.target.value)} placeholder="1. Open…\n2. Click…" required /></label>
-        <label className="manage-label">Expected result<textarea className="textarea" value={expected} onChange={(event) => setExpected(event.target.value)} placeholder="What should have happened?" required /></label>
-        <label className="manage-label">Actual result<textarea className="textarea" value={actual} onChange={(event) => setActual(event.target.value)} placeholder="What happened instead?" required /></label>
+        {hasCapability(plugins, "post.editor") ? <>
+          <MarkdownEditor label="Steps to reproduce" value={steps} onChange={setSteps} placeholder="1. Open…\n2. Click…" required />
+          <MarkdownEditor label="Expected result" value={expected} onChange={setExpected} placeholder="What should have happened?" required />
+          <MarkdownEditor label="Actual result" value={actual} onChange={setActual} placeholder="What happened instead?" required />
+        </> : <>
+          <label className="manage-label">Steps to reproduce<textarea className="textarea" value={steps} onChange={(event) => setSteps(event.target.value)} placeholder="1. Open…\n2. Click…" required /></label>
+          <label className="manage-label">Expected result<textarea className="textarea" value={expected} onChange={(event) => setExpected(event.target.value)} placeholder="What should have happened?" required /></label>
+          <label className="manage-label">Actual result<textarea className="textarea" value={actual} onChange={(event) => setActual(event.target.value)} placeholder="What happened instead?" required /></label>
+        </>}
         <label className="manage-label">Device or browser (optional)<input className="field" value={environment} onChange={(event) => setEnvironment(event.target.value)} placeholder="e.g. Chrome on Windows" /></label>
-      </div> : <label>
-        <span className="muted" style={{ display: "block", marginBottom: "0.45rem", fontSize: "0.86rem" }}>
-          {boardKind === "discussions" ? "Your message" : "Why would this help?"}
-        </span>
-        <textarea
-          className="textarea"
-          value={body}
-          onChange={(event) => setBody(event.target.value)}
-          placeholder={boardKind === "discussions" ? "Share context so others can join the conversation." : "Describe the problem and the outcome you want."}
-          required
-        />
-      </label>}
+      </div> : hasCapability(plugins, "post.editor") ?
+        <MarkdownEditor label={boardKind === "discussions" ? "Your message" : "Why would this help?"} value={body} onChange={setBody} placeholder={boardKind === "discussions" ? "Share context so others can join the conversation." : "Describe the problem and the outcome you want."} required />
+        : <label><span className="muted" style={{ display: "block", marginBottom: "0.45rem", fontSize: "0.86rem" }}>{boardKind === "discussions" ? "Your message" : "Why would this help?"}</span><textarea className="textarea" value={body} onChange={(event) => setBody(event.target.value)} placeholder={boardKind === "discussions" ? "Share context so others can join the conversation." : "Describe the problem and the outcome you want."} required /></label>}
       {categories.length ? <label className="manage-label">Category<select className="field" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}><option value="">Choose a category (optional)</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label> : null}
       {tags.length ? <fieldset className="experience__tag-picker"><legend>Tags (up to 3, optional)</legend><div>{tags.map((tag) => <label key={tag.id}><input type="checkbox" checked={tagIds.includes(tag.id)} disabled={!tagIds.includes(tag.id) && tagIds.length >= 3} onChange={(event) => setTagIds((current) => event.target.checked ? [...current, tag.id] : current.filter((id) => id !== tag.id))} /><span>#{tag.name}</span></label>)}</div></fieldset> : null}
       <div>
-        {!isPrivate ? <div className="muted" style={{ marginBottom: "0.45rem", fontSize: "0.86rem" }}>Screenshots (optional)</div> : null}
+        {!isPrivate ? <div className="muted" style={{ marginBottom: "0.45rem", fontSize: "0.86rem" }}>Attachments (optional, 8 MB per file)</div> : null}
         {attachments.length > 0 ? (
           <div className="attachment-grid" style={{ marginBottom: "0.85rem" }}>
             {attachments.map((url) => (
               <div className="attachment-thumb" key={url}>
-                <img src={url} alt="attachment" />
+                {attachmentKind(url) === "image" ? <img src={url} alt="attachment" /> : <span className="attachment-file">{attachmentKind(url) === "pdf" ? "PDF" : "3D model"}</span>}
                 <button
                   type="button"
                   className="attachment-remove"
@@ -206,7 +217,7 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind, isPrivate, ca
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept={attachmentAccept(plugins)}
           multiple
           hidden
           onChange={onPickFiles}
@@ -219,7 +230,7 @@ export function CreatePostForm({ tenantSlug, boardSlug, boardKind, isPrivate, ca
               disabled={uploading}
               onClick={() => fileInputRef.current?.click()}
             >
-              {uploading ? "Uploading…" : "Add screenshot"}
+              {uploading ? "Uploading…" : "Add attachment"}
             </button>
           </div> : null}
           <div className="form-actions__primary">

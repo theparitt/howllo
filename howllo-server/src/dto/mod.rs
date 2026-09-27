@@ -188,7 +188,7 @@ pub struct CreatePostRequest {
     pub category_id: Option<Uuid>,
     #[serde(default)]
     pub tag_ids: Vec<Uuid>,
-    /// Public URLs of images attached to this post (from /api/uploads). Optional.
+    /// Public URLs of board attachments (from /api/uploads). Optional.
     #[serde(default)]
     pub attachments: Vec<String>,
 }

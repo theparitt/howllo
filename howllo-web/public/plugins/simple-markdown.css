@@ -1,0 +1,11 @@
+.howllo-markdown { overflow-wrap: anywhere; line-height: 1.7; white-space: normal; }
+.howllo-markdown p { margin: 0.7rem 0; }
+.howllo-markdown ul, .howllo-markdown ol { padding-left: 1.4rem; }
+.howllo-markdown blockquote { margin: 0.8rem 0; padding-left: 0.9rem; border-left: 3px solid var(--border); }
+.howllo-markdown > :first-child { margin-top: 0; }
+.howllo-markdown > :last-child { margin-bottom: 0; }
+.howllo-markdown a { color: var(--primary-dark); text-decoration: underline; }
+.howllo-markdown code { padding: 0.1rem 0.25rem; border-radius: 0.25rem; background: var(--panel-strong); }
+.howllo-markdown-editor__toolbar { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.45rem; }
+.howllo-markdown-editor__toolbar button { padding: 0.35rem 0.65rem; border: 1px solid var(--border); border-radius: 0.4rem; background: var(--panel-strong); color: var(--text); cursor: pointer; }
+.howllo-markdown-editor__preview { min-height: 7rem; margin-top: 0.55rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: 0.5rem; background: var(--panel-strong); }

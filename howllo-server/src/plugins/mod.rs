@@ -1,4 +1,4 @@
-//! Approved public-board appearance plugins. No tenant-supplied code runs here.
+//! Approved first-party public-board plugins. No tenant-supplied code runs here.
 pub mod registry;
 use actix_web::{get, patch, put, web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
@@ -114,7 +114,7 @@ pub async fn list_workspace_plugins(
 ) -> Result<impl Responder, AppError> {
     let tenant = manage_tenant(pool.get_ref(), &path, auth.0.id).await?;
     let mut plugins = sqlx::query_as::<_, WorkspacePluginRow>(
-        "SELECT p.id, p.version, p.name, p.description, p.slot, p.stylesheet_path, COALESCE(w.enabled,FALSE) AS enabled FROM plugin_catalog p LEFT JOIN workspace_plugins w ON w.plugin_id=p.id AND w.tenant_id=$1 WHERE p.is_approved=TRUE AND p.slot NOT LIKE 'board.topics.%' ORDER BY p.slot,p.name"
+        "SELECT p.id, p.version, p.name, p.description, p.slot, p.stylesheet_path, COALESCE(w.enabled,FALSE) AS enabled FROM plugin_catalog p LEFT JOIN workspace_plugins w ON w.plugin_id=p.id AND w.tenant_id=$1 WHERE p.is_approved=TRUE AND p.slot IN ('workspace.typography','board.directory.layout') ORDER BY p.slot,p.name"
     ).bind(tenant).fetch_all(pool.get_ref()).await.map_err(db_error)?;
     plugins.retain(|p| registry::matches(&p.id, &p.version, &p.slot, &p.stylesheet_path));
     Ok(HttpResponse::Ok()
@@ -143,7 +143,7 @@ pub async fn set_workspace_plugin(
             .await
             .map_err(db_error)?;
     let (slot, approved) = row.ok_or(AppError::NotFound)?;
-    if slot.starts_with("board.topics.") {
+    if slot.starts_with("board.") && slot != "board.directory.layout" {
         return Err(AppError::Validation(
             "Enable this plugin on an individual board".into(),
         ));

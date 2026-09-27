@@ -180,10 +180,11 @@ export async function getBoardCategories(tenantSlug: string, boardSlug: string, 
 }
 
 export type BoardPresentation = {
+  api_version?: number;
   announcement: string;
   sidebar_text: string;
   footer_text: string;
-  plugins: { id: string; stylesheet_path: string }[];
+  plugins: { id: string; version?: string; slot?: string; runtime_kind?: string; capabilities?: string[]; stylesheet_path: string }[];
 };
 
 export async function getBoardPresentation(tenantSlug: string, boardSlug: string, token?: string): Promise<BoardPresentation> {
@@ -856,10 +857,10 @@ export async function createPost(input: {
   return unwrap<{ id: string; review_state: "approved" | "pending" }>(response);
 }
 
-/** Upload an image (base64) and return its public URL. */
-export async function uploadImage(file: File, token: string, tenantSlug: string, boardSlug?: string): Promise<string> {
+/** Upload a supported board attachment. The server checks the actual file bytes and board plugin state. */
+export async function uploadAttachment(file: File, token: string, tenantSlug: string, boardSlug?: string): Promise<string> {
   if (file.size > 8 * 1024 * 1024) {
-    throw new Error("Image exceeds the 8 MB upload limit.");
+    throw new Error("File exceeds the 8 MB upload limit.");
   }
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -875,13 +876,15 @@ export async function uploadImage(file: File, token: string, tenantSlug: string,
       tenant_slug: tenantSlug,
       board_slug: boardSlug,
       filename: file.name,
-      content_type: file.type,
+      content_type: file.name.toLowerCase().endsWith(".glb") ? "model/gltf-binary" : file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : file.type,
       data: base64,
     }),
   });
   const result = await unwrap<{ url: string }>(response);
   return result.url;
 }
+
+export const uploadImage = uploadAttachment;
 
 export async function createComment(input: {
   postId: string;
