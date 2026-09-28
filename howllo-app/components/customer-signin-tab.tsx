@@ -112,7 +112,7 @@ export function CustomerSignInTab({ tenant }: { tenant: string }) {
       {settings.rooiam_enabled ? <div className="stack">
         <label>RooIAM workspace ID<input className="field" value={settings.rooiam_workspace_id ?? ""} onChange={(event) => setSettings({ ...settings, rooiam_workspace_id: event.target.value })} /></label>
         <label>RooIAM client ID<input className="field" value={settings.rooiam_client_id ?? ""} onChange={(event) => setSettings({ ...settings, rooiam_client_id: event.target.value })} /></label>
-        <p className="section-subtitle">Set the redirect URI to your customer site’s /auth/callback URL in RooIAM.</p>
+        <p className="section-subtitle">Set the redirect URI to your website’s /auth/callback URL in RooIAM.</p>
       </div> : null}
       <button className="button button--cta" type="button" disabled={busy} onClick={() => void saveMethods()}>Save methods</button>
     </section>

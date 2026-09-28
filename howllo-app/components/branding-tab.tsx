@@ -49,7 +49,7 @@ export function BrandingTab({ tenant }: { tenant: string }) {
       setShowPoweredBy(branding.show_powered_by);
       setRequirePostApproval(branding.require_post_approval);
     } catch (cause) {
-      setLoadError(cause instanceof Error ? cause.message : "Could not load customer site settings.");
+      setLoadError(cause instanceof Error ? cause.message : "Could not load appearance and page settings.");
     } finally { setLoading(false); }
   }, [tenant]);
   useEffect(() => { void load(); }, [load]);
@@ -131,7 +131,7 @@ export function BrandingTab({ tenant }: { tenant: string }) {
       <button type="button" className="button button--cta" disabled={busy} onClick={() => void togglePublication()} style={{ marginTop: "1rem" }}>{isPublished ? "Unpublish workspace" : "Publish workspace"}</button>
     </section>
     <section className="panel">
-      <h2 className="section-title">Pages on your customer site</h2>
+      <h2 className="section-title">Visible pages</h2>
       <p className="section-subtitle">Choose what visitors see in this workspace.</p>
       <form className="manage-fields" style={{ marginTop: "1rem" }} onSubmit={(event) => void savePages(event)}>
         <label className="manage-check"><input type="checkbox" checked={showBoards} disabled={busy} onChange={(event) => setShowBoards(event.target.checked)} /> Boards</label>
@@ -142,7 +142,7 @@ export function BrandingTab({ tenant }: { tenant: string }) {
         <p className="section-subtitle">When off, regular posts publish immediately. Suspicious posts still wait for review.</p>
         <div className="manage-row__actions">
           <button className="button button--cta" type="submit" disabled={busy}>{busy ? "Saving…" : "Save settings"}</button>
-          <a className="ghost-button" href={`${(process.env.NEXT_PUBLIC_HOWLLO_PUBLIC_WEB_URL || "http://localhost:7703").replace(/\/$/, "")}/${encodeURIComponent(tenant)}`} target="_blank" rel="noreferrer">View customer site ↗</a>
+          <a className="ghost-button" href={`${(process.env.NEXT_PUBLIC_HOWLLO_PUBLIC_WEB_URL || "http://localhost:7703").replace(/\/$/, "")}/${encodeURIComponent(tenant)}`} target="_blank" rel="noreferrer">View website ↗</a>
         </div>
       </form>
       {pageNotice ? <p className="success-text" role="status">{pageNotice}</p> : null}

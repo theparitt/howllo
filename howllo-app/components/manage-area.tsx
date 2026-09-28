@@ -57,7 +57,7 @@ const PUBLIC_WEB_URL = (process.env.NEXT_PUBLIC_HOWLLO_PUBLIC_WEB_URL || "http:/
 type ManageTab = "team" | "boards" | "branding" | "plugins" | "security" | "signin" | "external_sso" | "participants" | "moderation" | "email";
 const NAV_ITEMS: { key: ManageTab; label: string; group: string; icon: string }[] = [
   { key: "boards", label: "Boards", group: "Workspace", icon: "M4 5h16v14H4zM4 10h16M10 10v9" },
-  { key: "branding", label: "Customer site", group: "Workspace", icon: "M3 5h18v14H3zM3 9h18M7 14h4" },
+  { key: "branding", label: "Appearance & pages", group: "Workspace", icon: "M3 5h18v14H3zM3 9h18M7 14h4" },
   { key: "plugins", label: "Plugins", group: "Workspace", icon: "M9 3v5H4v5h5v5h5v-5h5V8h-5V3z" },
   { key: "team", label: "Staff", group: "People", icon: "M16 19v-1a4 4 0 00-8 0v1M12 11a3 3 0 100-6 3 3 0 000 6" },
   { key: "participants", label: "Board members", group: "People", icon: "M4 19v-1a4 4 0 018 0v1M8 11a3 3 0 100-6 3 3 0 000 6M16 8h5M16 12h5" },
@@ -687,7 +687,7 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
 
   return (
     <section className="panel">
-      <div className="manage-board-heading"><h2 className="section-title">{board.name}</h2><span><strong>{board.is_enabled ? workspacePublished ? "Active" : "Ready" : board.first_enabled_at ? "Paused" : "Draft"}</strong><HelpTip label="About board visibility">A board appears on the customer site only when it is enabled and the workspace is published. Paused and draft boards are hidden.</HelpTip></span></div>
+      <div className="manage-board-heading"><h2 className="section-title">{board.name}</h2><span><strong>{board.is_enabled ? workspacePublished ? "Active" : "Ready" : board.first_enabled_at ? "Paused" : "Draft"}</strong><HelpTip label="About board visibility">A board appears on the website only when it is enabled and the workspace is published. Paused and draft boards are hidden.</HelpTip></span></div>
       <div className="manage-board-links">
         {board.is_enabled && workspacePublished ? <a className="button" href={publicBoardUrl(tenant, board.slug)}>Open board ↗</a> : null}
         {!board.is_private && board.is_enabled && workspacePublished ? <button className="button" type="button" onClick={() => {
