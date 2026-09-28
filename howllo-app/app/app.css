@@ -556,6 +556,19 @@
 .app-shell--manager .workspace-plugin-card__body .section-subtitle { margin: 0; }
 .app-shell--manager .workspace-plugin-card__footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid #e3e9eb; padding-top: 12px; }
 .app-shell--manager .workspace-plugin-card__cover { display: block; width: 100%; height: auto; aspect-ratio: 3 / 1; object-fit: cover; border: 1px solid #e3e9eb; border-radius: 8px; background: #f5f8f9; }
+.app-shell--manager .board-plugin-list { display: grid; border-top: 1px solid #e3e9eb; }
+.app-shell--manager .board-plugin-row { display: grid; grid-template-columns: 128px minmax(0, 1fr) auto; align-items: center; gap: 16px; min-width: 0; padding: 12px 0; border-bottom: 1px solid #e3e9eb; }
+.app-shell--manager .board-plugin-row__cover { display: block; width: 128px; height: 72px; object-fit: cover; border-radius: 7px; background: #f5f8f9; }
+.app-shell--manager .board-plugin-row__body { display: grid; justify-items: start; gap: 3px; min-width: 0; }
+.app-shell--manager .board-plugin-row__body h4, .app-shell--manager .board-plugin-row__body p { margin: 0; }
+.app-shell--manager .board-plugin-row__body h4 { font-size: 14px; }
+.app-shell--manager .board-plugin-row__body p { color: #526570; font-size: 13px; }
+.app-shell--manager .board-plugin-row__body .member-row__status { margin-top: 4px; }
+@media (max-width: 560px) {
+  .app-shell--manager .board-plugin-row { grid-template-columns: 112px minmax(0, 1fr); gap: 8px 12px; }
+  .app-shell--manager .board-plugin-row__cover { width: 112px; height: 68px; }
+  .app-shell--manager .board-plugin-row > .ghost-button { grid-column: 2; justify-self: start; }
+}
 .app-shell--manager .sso-setup { display: grid; gap: 16px; max-width: 800px; }
 .app-shell--manager .sso-setup__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .app-shell--manager .sso-setup__steps { display: grid; justify-items: start; gap: 16px; padding-top: 16px; border-top: 1px solid #e3e9eb; }

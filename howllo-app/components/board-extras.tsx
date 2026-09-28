@@ -78,10 +78,10 @@ export function BoardExtras({ tenant, boardId }: { tenant: string; boardId: stri
       {dirty ? <div className="manage-row__actions"><span className="section-subtitle">Unsaved changes</span><button type="button" className="button button--cta" disabled={busy || loading} onClick={() => void save()}>{busy ? "Saving…" : "Save board content"}</button></div> : null}
     </div>
     {plugins.length > 0 ? <div className="board-extras__plugins"><h3 className="section-title">Optional plugins</h3><p className="section-subtitle">Built into Howllo and approved by the platform admin. Each setting applies only to this board.</p>
-      <div className="workspace-plugin-grid">{plugins.map((plugin) => <section className="panel workspace-plugin-card" key={plugin.id}>
-        {pluginCovers[plugin.id] ? <img className="workspace-plugin-card__cover" src={pluginCovers[plugin.id]} alt="" width="1080" height="360" loading="lazy" decoding="async" /> : null}
-        <div className="workspace-plugin-card__body"><h4 className="section-title">{plugin.name}</h4><p className="section-subtitle">{plugin.description}</p></div>
-        <div className="workspace-plugin-card__footer"><span className="member-row__status" data-status={plugin.enabled ? "active" : "off"}>{plugin.enabled ? "Enabled" : "Off"}</span><button type="button" className="ghost-button" disabled={busy} onClick={() => void toggle(plugin)}>{plugin.enabled ? "Disable" : "Enable"}</button></div>
+      <div className="board-plugin-list">{plugins.map((plugin) => <section className="board-plugin-row" key={plugin.id}>
+        {pluginCovers[plugin.id] ? <img className="board-plugin-row__cover" src={pluginCovers[plugin.id]} alt="" width="1080" height="360" loading="lazy" decoding="async" /> : null}
+        <div className="board-plugin-row__body"><h4>{plugin.name}</h4><p>{plugin.description}</p><span className="member-row__status" data-status={plugin.enabled ? "active" : "off"}>{plugin.enabled ? "Enabled" : "Off"}</span></div>
+        <button type="button" className="ghost-button" disabled={busy} onClick={() => void toggle(plugin)}>{plugin.enabled ? "Disable" : "Enable"}</button>
       </section>)}</div>
     </div> : null}
     {message ? <p className="success-text" role="status">{message}</p> : null}
