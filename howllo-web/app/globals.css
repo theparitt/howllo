@@ -589,6 +589,21 @@ select {
   padding: 1.6rem;
 }
 
+.provider-mark { display: block; flex: none; width: 1.25rem; height: 1.25rem; }
+.auth-provider-button {
+  display: flex; align-items: center; justify-content: flex-start; gap: .8rem;
+  width: 100%; min-height: 3.15rem; padding: .65rem .95rem;
+  border: 1px solid var(--border-strong); border-radius: .8rem;
+  background: #fff; color: var(--text); text-align: left; font-weight: 700;
+  cursor: pointer; transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+.auth-provider-button:hover { border-color: var(--primary); background: #fffdfb; transform: translateY(-1px); }
+.auth-provider-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.auth-provider-button .provider-mark { width: 1.35rem; height: 1.35rem; }
+.linked-provider-list { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .8rem; }
+.linked-provider { display: inline-flex; align-items: center; gap: .45rem; padding: .4rem .65rem; border: 1px solid var(--border-strong); border-radius: .65rem; background: #fff; font-size: .82rem; font-weight: 700; }
+.linked-provider .provider-mark { width: 1rem; height: 1rem; }
+
 .widget-shell--rooiam .widget-shell__content {
   display: none;
 }

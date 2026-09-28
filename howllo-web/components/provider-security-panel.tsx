@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { clearStoredBearerToken, readStoredBearerToken } from "@/components/dev-auth-panel";
 import { providerAccountRequest } from "@/lib/auth-api";
+import { ProviderMark } from "@/components/provider-mark";
 
 type Session = { id: string; user_agent: string | null; ip: string | null; created_at: string; last_seen_at: string | null; is_current: boolean };
 type Passkey = { id: string; name: string; created_at: string; last_used_at: string | null };
@@ -69,7 +70,9 @@ export function ProviderSecurityPanel({ tenantSlug }: { tenantSlug: string }) {
     {linkedAccounts ? <article className="panel">
       <h2 className="section-title">Sign-in account</h2>
       <p className="section-subtitle">{linkedAccounts.primary_email || "No email on this account"}</p>
-      <p style={{ marginTop: "0.8rem" }}>Connected: {linkedAccounts.providers.filter(provider => provider.linked).map(provider => provider.provider).join(", ") || "No social accounts"}</p>
+      <div className="linked-provider-list" aria-label="Connected sign-in providers">
+        {linkedAccounts.providers.filter(provider => provider.linked).length ? linkedAccounts.providers.filter(provider => provider.linked).map(provider => <span className="linked-provider" key={provider.provider}><ProviderMark provider={provider.provider} />{provider.provider === "oidc" ? "OpenID Connect" : provider.provider.charAt(0).toUpperCase() + provider.provider.slice(1)}</span>) : <span className="section-subtitle">No social accounts connected</span>}
+      </div>
       <a className="button button--secondary" style={{ marginTop: "1rem" }} href="https://app.rooiam.com/my/account" target="_blank" rel="noreferrer">Manage email and connected accounts ↗</a>
     </article> : null}
     <article className="panel">

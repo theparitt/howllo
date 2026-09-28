@@ -367,6 +367,20 @@
 .app-shell--manager .branding-pages > .section-subtitle { margin: .6rem 0 1rem; }
 .app-shell--manager .branding-preset[aria-pressed="true"] { border-color: #58a8b5; background: #eaf5f5; box-shadow: inset 0 0 0 1px #58a8b5; }
 .app-shell--manager .provider-tabs { display: flex; gap: .5rem; flex-wrap: wrap; }
+.app-shell--manager .provider-choice {
+  display: inline-flex; align-items: center; gap: .55rem; min-height: 3rem;
+  padding: .45rem .8rem .45rem .5rem; border: 1px solid #d6e2e3;
+  border-radius: .75rem; background: #fff; color: #324b55;
+  font-size: .88rem; font-weight: 750; cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+.app-shell--manager .provider-choice:hover { border-color: #78b0ba; transform: translateY(-1px); }
+.app-shell--manager .provider-choice[aria-pressed="true"] { border-color: #61a7b3; background: #eaf5f5; box-shadow: inset 0 0 0 1px #61a7b3; }
+.app-shell--manager .provider-choice[data-provider="google"][aria-pressed="true"] { border-color: #83afe8; background: #f1f6fe; box-shadow: inset 0 0 0 1px #83afe8; }
+.app-shell--manager .provider-choice[data-provider="microsoft"][aria-pressed="true"] { border-color: #94bc85; background: #f2f8ee; box-shadow: inset 0 0 0 1px #94bc85; }
+.app-shell--manager .provider-choice[data-provider="oidc"][aria-pressed="true"] { border-color: #af9bd2; background: #f6f2fb; box-shadow: inset 0 0 0 1px #af9bd2; }
+.app-shell--manager .provider-choice__mark { display: grid; place-items: center; width: 2rem; height: 2rem; border: 1px solid #ecf0f0; border-radius: .52rem; background: #fff; }
+.app-shell--manager .provider-choice__status { margin-left: .15rem; padding: .2rem .4rem; border-radius: 999px; background: #def3e7; color: #28714e; font-size: .67rem; }
 .app-shell--manager .workspace-home__list { grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: .8rem; }
 .app-shell--manager .workspace-home__item { min-height: 7rem; border-radius: .9rem; box-shadow: none; }
 .app-shell--manager .workspace-home__item:hover { border-color: #7bb6bf; box-shadow: 0 5px 20px rgba(23, 111, 139, .07); }

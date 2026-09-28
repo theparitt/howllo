@@ -9,6 +9,7 @@ import { getLoginProviders, getCustomerRooiamConfig, localSignIn, logoutAccount,
 import { API_BASE_URL } from "@/lib/config";
 import { ENABLED_AUTH_PROVIDERS } from "@/lib/auth-provider";
 import { rememberRooiamReturnTo } from "@/lib/rooiam-auth";
+import { ProviderMark } from "@/components/provider-mark";
 import {
   clearAllStoredBearerTokens,
   clearStoredBearerToken,
@@ -444,18 +445,18 @@ export function AuthLogin({ myHref, staffMode = false, hideSignedOutTrigger = fa
           <div className="widget-shell__content">
             <h2 style={{ margin: 0 }}>{staffMode ? registerMode ? "Create a staff account" : resetMode || emailResetMode ? "Reset your password" : "Staff sign in" : "Sign in to Howllo"}</h2>
             {!recoveryCode && !localOpen && !legacyOpen && !emailResetMode && providers.map((provider) => provider.kind === "oidc" ? (
-              <button key={provider.id} className="button" type="button" onClick={() => {
+              <button key={provider.id} className="auth-provider-button" type="button" onClick={() => {
                 const url = new URL(`${API_BASE_URL}${provider.login_url}`);
                 url.searchParams.set("return_to", `${window.location.pathname}${window.location.search}`);
                 window.location.assign(url.toString());
-              }}>Continue with {provider.display_name}</button>
+              }}><ProviderMark provider={provider.id} /><span>Continue with {provider.display_name}</span></button>
             ) : (
-              <button key={provider.id} className="button" type="button" onClick={() => { setLocalOpen(true); setLegacyOpen(false); }}>
-                Continue with {provider.display_name}
+              <button key={provider.id} className="auth-provider-button" type="button" onClick={() => { setLocalOpen(true); setLegacyOpen(false); }}>
+                <ProviderMark provider="local" /><span>Continue with {provider.display_name}</span>
               </button>
             ))}
             {!recoveryCode && !legacyOpen && !emailResetMode && configured && widgetUrl && !providers.some((provider) => provider.id === "rooiam") ? (
-              <button className="button" type="button" onClick={() => { setLegacyOpen(true); setLocalOpen(false); }}>Continue with RooIAM</button>
+              <button className="auth-provider-button" type="button" onClick={() => { setLegacyOpen(true); setLocalOpen(false); }}><ProviderMark provider="rooiam" /><span>Continue with RooIAM</span></button>
             ) : null}
             {recoveryCode ? (
               <div className="stack" role="status">

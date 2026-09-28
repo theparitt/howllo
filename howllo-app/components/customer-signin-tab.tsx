@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { API_BASE_URL } from "@/lib/config";
 import { readStoredBearerToken } from "@/components/dev-auth-panel";
+import { ProviderMark } from "@/components/provider-mark";
 
 type Provider = { key: string; display_name: string; issuer: string; client_id: string; has_client_secret: boolean; token_endpoint_auth_method: string; enabled: boolean; callback_url: string };
 type Settings = {
@@ -120,7 +121,7 @@ export function CustomerSignInTab({ tenant }: { tenant: string }) {
       <h2>Social and OpenID Connect</h2>
       <p className="section-subtitle">Use your own app credentials for each provider. Client secrets are stored encrypted and are never shown again.</p>
       {!settings.callback_url_configured ? <p className="notice" role="status">Social sign-in needs a public API URL. Ask the platform administrator to configure it before adding a provider.</p> : null}
-      <div className="provider-tabs" role="group" aria-label="Sign-in provider">{choices.map((item) => <button key={item.key} type="button" className={choice === item.key ? "button" : "ghost-button"} aria-pressed={choice === item.key} onClick={() => select(item.key)}>{item.label}{settings.providers.some((provider) => provider.key === item.key && provider.enabled) ? " · On" : ""}</button>)}</div>
+      <div className="provider-tabs" role="group" aria-label="Sign-in provider">{choices.map((item) => <button key={item.key} type="button" className="provider-choice" data-provider={item.key} aria-pressed={choice === item.key} onClick={() => select(item.key)}><span className="provider-choice__mark"><ProviderMark provider={item.key} /></span><span>{item.label}</span>{settings.providers.some((provider) => provider.key === item.key && provider.enabled) ? <span className="provider-choice__status">On</span> : null}</button>)}</div>
       <p className="section-subtitle">{choices.find((item) => item.key === choice)?.hint}</p>
       <label>Button label<input className="field" value={displayName} maxLength={60} onChange={(event) => setDisplayName(event.target.value)} /></label>
       <label>Issuer URL<input className="field" value={issuer} placeholder={choices.find((item) => item.key === choice)?.issuer} onChange={(event) => setIssuer(event.target.value)} /></label>
