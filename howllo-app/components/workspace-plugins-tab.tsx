@@ -9,6 +9,7 @@ const slotName: Record<string, string> = {
   "workspace.typography": "Typography",
   "board.directory.layout": "Board directory",
 };
+const previewKind: Record<string, string> = { "editorial-type": "editorial", "clean-type": "clean", "board-grid": "grid" };
 
 export function WorkspacePluginsTab({ tenant }: { tenant: string }) {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
@@ -37,6 +38,8 @@ export function WorkspacePluginsTab({ tenant }: { tenant: string }) {
   }, [tenant]);
 
   async function toggle(plugin: Plugin) {
+    const replaced = !plugin.enabled ? plugins.find((item) => item.slot === plugin.slot && item.enabled && item.id !== plugin.id) : null;
+    if (replaced && !window.confirm(`Enable ${plugin.name}? This will turn off ${replaced.name} for ${slotName[plugin.slot] ?? plugin.slot}.`)) return;
     setBusy(plugin.id); setError(""); setNotice("");
     try {
       const response = await fetch(`${endpoint}/${encodeURIComponent(plugin.id)}`, {
@@ -50,14 +53,13 @@ export function WorkspacePluginsTab({ tenant }: { tenant: string }) {
     finally { setBusy(null); }
   }
 
-  return <div className="page-stack workspace-plugin-list" style={{ maxWidth: 850 }}>
-    <p className="section-subtitle">Optional features supplied by Howllo. Enable only what you need.</p>
-    {loading ? <section className="panel">Loading plugins…</section> : plugins.length === 0 ? <section className="panel">No plugins are available yet.</section> : plugins.map((plugin) => <section className="panel" key={plugin.id}>
-      <div className="manage-row" style={{ justifyContent: "space-between", gap: "1rem" }}>
-        <div><p className="section-subtitle" style={{ margin: 0 }}>{slotName[plugin.slot] ?? plugin.slot} · v{plugin.version}</p><h3 className="section-title" style={{ margin: ".35rem 0" }}>{plugin.name}</h3><p className="section-subtitle">{plugin.description}</p></div>
-        <button type="button" className={plugin.enabled ? "button" : "button button--cta"} disabled={busy !== null} onClick={() => void toggle(plugin)}>{plugin.enabled ? "Disable" : "Enable"}</button>
-      </div>
-    </section>)}
+  return <div className="page-stack workspace-plugin-list">
+    <p className="section-subtitle">Optional features supplied by Howllo. One choice can be active in each style slot.</p>
+    {loading ? <section className="panel">Loading plugins…</section> : plugins.length === 0 ? <section className="panel"><h2 className="section-title">No plugins available</h2><p className="section-subtitle">Approved workspace plugins will appear here.</p></section> : <div className="workspace-plugin-grid">{plugins.map((plugin) => <section className="panel workspace-plugin-card" key={plugin.id}>
+      {previewKind[plugin.id] ? <div className={`workspace-plugin-preview workspace-plugin-preview--${previewKind[plugin.id]}`} aria-hidden="true">{previewKind[plugin.id] === "grid" ? <div className="workspace-plugin-preview__grid"><span>Ideas</span><span>Bugs</span><span>Updates</span></div> : <><strong>A better place for ideas</strong><span>Tell us what matters to you.</span></>}</div> : null}
+      <div className="workspace-plugin-card__body"><p className="section-subtitle">{slotName[plugin.slot] ?? plugin.slot} · v{plugin.version}</p><h3 className="section-title">{plugin.name}</h3><p className="section-subtitle">{plugin.description}</p></div>
+      <div className="workspace-plugin-card__footer"><span className="member-row__status" data-status={plugin.enabled ? "active" : "off"}>{plugin.enabled ? "Enabled" : "Off"}</span><button type="button" className="ghost-button" disabled={busy !== null} onClick={() => void toggle(plugin)}>{busy === plugin.id ? "Saving…" : plugin.enabled ? "Disable" : "Enable"}</button></div>
+    </section>)}</div>}
     {notice ? <p role="status" className="success-text">{notice}</p> : null}
     {error ? <p role="alert" className="error-text">{error}</p> : null}
   </div>;

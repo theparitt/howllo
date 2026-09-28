@@ -161,20 +161,19 @@ export function ModerationTab({ tenant }: { tenant: string }) {
     {message ? <p className="moderation-browser__success" role="status">{message}</p> : null}
     {error ? <p className="error-text" role="alert">{error}</p> : null}
 
-    <div className="moderation-browser__layout">
+    {!loading && items.length === 0 && !error ? <div className="moderation-empty" role="status"><span className="moderation-empty__icon" aria-hidden="true">✓</span><h3>{view === "review" ? "All caught up" : "No posts found"}</h3><p>{view === "review" ? "Posts that need review will appear here." : "Try another search or clear the current query."}</p>{view === "review" ? <button type="button" className="ghost-button" onClick={() => selectView("posts")}>View all posts</button> : search ? <button type="button" className="ghost-button" onClick={() => { setSearchInput(""); setSearch(""); setPage(1); }}>Clear search</button> : null}</div> : <div className={`moderation-browser__layout${selected ? " moderation-browser__layout--selected" : ""}`}>
       <div className="moderation-browser__list">
         <p className="section-subtitle">{loading ? "Loading posts…" : view === "review" ? `${total} needing review` : `${total} ${total === 1 ? "post" : "posts"}`}</p>
-        {!loading && items.length === 0 && !error ? <p className="section-subtitle">{view === "review" ? "No posts need review." : "No posts match your search."}</p> : null}
         {items.map((item) => <button key={item.id} type="button" className={selectedId === item.id ? "moderation-browser__row moderation-browser__row--active" : "moderation-browser__row"} aria-pressed={selectedId === item.id} onClick={() => selectPost(item)}>
           <strong>{item.title}</strong>
           <span>{item.board_slug} · {item.author_display_name}</span>
           <span>{item.review_state === "pending" ? "Waiting for approval" : item.is_hidden ? "Hidden" : label(item.status)} · {new Date(item.created_at).toLocaleDateString()}</span>
         </button>)}
-        <div className="list-pager">
+        {items.length > 0 ? <div className="list-pager">
           <button className="ghost-button" type="button" disabled={page <= 1 || loading} onClick={() => { setPage((current) => current - 1); setSelectedId(null); }}>Previous</button>
           <span>Page {page}</span>
           <button className="ghost-button" type="button" disabled={!hasNext || loading} onClick={() => { setPage((current) => current + 1); setSelectedId(null); }}>Next</button>
-        </div>
+        </div> : null}
       </div>
 
       {selected ? <div className="moderation-browser__detail" aria-label={`Manage ${selected.title}`}>
@@ -230,6 +229,6 @@ export function ModerationTab({ tenant }: { tenant: string }) {
           </div>
         </> : null}
       </div> : <div className="moderation-browser__placeholder"><p>Select a post to review its content and actions.</p></div>}
-    </div>
+    </div>}
   </section>;
 }

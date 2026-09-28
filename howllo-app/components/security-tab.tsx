@@ -33,7 +33,7 @@ function LimitControl({ label, limitKey, form, view, onChange }: {
         placeholder={`Default ${view.defaults[limitKey]}`} onChange={(event) => onChange(limitKey, event.target.value === "" ? null : Number(event.target.value))} />
       {custom ? <button type="button" onClick={() => onChange(limitKey, null)} aria-label={`Reset ${label.toLowerCase()} to platform default`}>Reset</button> : null}
     </span>
-    <small>{custom ? `Default ${view.defaults[limitKey]} · max ${cap}` : `Maximum ${cap}`}</small>
+    <small>{custom ? `Platform default ${view.defaults[limitKey]} · maximum ${cap}` : `Inherited: platform default ${view.defaults[limitKey]} · maximum ${cap}`}</small>
   </div>;
 }
 
@@ -84,6 +84,15 @@ export function SecurityTab({ tenant }: { tenant: string }) {
     finally { setBusy(false); }
   }
 
+  const dirty = Boolean(input && view) && JSON.stringify(input) !== JSON.stringify(view?.overrides);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
   if (!view || !form || !input) return <section className="panel">{error || "Loading settings…"}</section>;
 
   const setLimit = (key: LimitKey, value: number | null) => { setForm({ ...form, [key]: value }); setNotice(""); };
@@ -95,10 +104,9 @@ export function SecurityTab({ tenant }: { tenant: string }) {
   const storageMb = effective("storage_mb");
   const storageError = storageMb < usedMb ? "The limit must be higher than the storage already used." : "";
   const hasRules = Boolean(input.ip_allowlist.length || input.ip_blocklist.length || input.blocked_countries.length);
-  const dirty = JSON.stringify(input) !== JSON.stringify(view.overrides);
   const limitProps = { form, view, onChange: setLimit };
 
-  return <form className="security-page" onSubmit={(event) => void save(event)}>
+  return <form className="security-page" data-unsaved-changes={dirty} onSubmit={(event) => void save(event)}>
     <section className="security-section">
       <div className="security-section__head"><div><h2>Member activity</h2><p>Limits for each person across this workspace.</p></div></div>
       <div className="security-setting-row"><div><strong>Posts</strong><p>New topics from one member</p></div><div className="security-setting-row__controls"><LimitControl label="Per hour" limitKey="posts_per_hour" {...limitProps} /><LimitControl label="Per day" limitKey="posts_per_day" {...limitProps} /></div></div>
@@ -128,7 +136,7 @@ export function SecurityTab({ tenant }: { tenant: string }) {
       </div>
     </details>
 
-    <div className="security-actions"><span>{dirty ? "Unsaved changes" : "Using saved settings"}</span><button className="button" type="submit" disabled={busy || !dirty || Boolean(postsError || commentsError || storageError)}>{busy ? "Saving…" : "Save changes"}</button></div>
+    {dirty ? <div className="security-actions"><span>Unsaved changes</span><button className="button button--cta" type="submit" disabled={busy || Boolean(postsError || commentsError || storageError)}>{busy ? "Saving…" : "Save changes"}</button></div> : null}
     {notice ? <p className="success-text" role="status">{notice}</p> : null}
     {error ? <p className="error-text" role="alert">{error}</p> : null}
   </form>;

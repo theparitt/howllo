@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RooiamInlineLogin } from "@/components/rooiam-inline-login";
 import { ENABLED_AUTH_PROVIDERS } from "@/lib/auth-provider";
@@ -50,6 +51,7 @@ import { BoardTaxonomyEditor } from "./board-taxonomy-editor";
 import { BoardExtras } from "./board-extras";
 import { BoardTopics } from "./board-topics";
 import { LIST_PAGE_SIZE, ListPager, ListSearch } from "./list-controls";
+import { WorkspacePageHeader } from "./workspace-page-header";
 
 const INVITE_ROLES = ["admin", "moderator"];
 const MEMBER_ROLES = ["owner", "admin", "moderator", "member"];
@@ -68,6 +70,24 @@ const NAV_ITEMS: { key: ManageTab; label: string; group: string; icon: string }[
   { key: "external_sso", label: "External SSO", group: "Settings", icon: "M4 8h16M4 16h16M8 4v16" },
 ];
 const BOARD_NAV_ITEMS = new Set<ManageTab>(["boards", "branding", "participants", "moderation"]);
+const PAGE_DESCRIPTIONS: Record<ManageTab, string> = {
+  boards: "Create boards and decide what visitors can see.",
+  branding: "Set up the pages and appearance of your public website.",
+  plugins: "Choose optional features for this workspace.",
+  team: "Invite teammates and manage workspace access.",
+  participants: "Manage people who joined your boards.",
+  moderation: "Review submissions and manage published posts.",
+  security: "Set activity limits and posting access for this workspace.",
+  email: "Choose which emails this workspace sends.",
+  signin: "Choose how customers sign in.",
+  external_sso: "Connect your existing customer sign-in system.",
+};
+const BOARD_TYPE_ICONS: Record<string, string> = {
+  "feature-requests": "M12 3v18M3 12h18M5 5l14 14M19 5L5 19",
+  "bug-reports": "M8 4h8M9 8h6M6 11h12M6 15h12M9 19h6M4 9l-2-2M20 9l2-2M4 17l-2 2M20 17l2 2",
+  discussions: "M4 5h16v11H9l-5 4V5zM8 9h8M8 12h5",
+  announcements: "M4 10v4h4l9 5V5l-9 5H4zM8 14l2 6h3",
+};
 
 function NavIcon({ path }: { path: string }) {
   return <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={path} /></svg>;
@@ -77,11 +97,15 @@ function publicBoardUrl(tenant: string, boardSlug: string): string {
   return `${PUBLIC_WEB_URL}/${encodeURIComponent(tenant)}/boards/${encodeURIComponent(boardSlug)}`;
 }
 
+function canLeaveUnsavedPage(): boolean {
+  return !document.querySelector('[data-unsaved-changes="true"]') || window.confirm("You have unsaved changes. Leave without saving them?");
+}
+
 function BoardTypePicker({ value, onChange, group }: { value: string; onChange: (type: string) => void; group: string }) {
   return <div className="board-kind-picker" role="radiogroup" aria-label="Board type">
     {BOARD_PRESETS.map((preset) => <label key={preset.value} className={`board-kind-picker__option${value === preset.value ? " board-kind-picker__option--active" : ""}`}>
       <input type="radio" name={group} value={preset.value} checked={value === preset.value} onChange={() => onChange(preset.value)} />
-      <strong>{preset.label}</strong><span>{preset.description}</span>
+      <span className="board-kind-picker__heading"><span className="board-kind-picker__icon"><NavIcon path={BOARD_TYPE_ICONS[preset.value]} /></span><strong>{preset.label}</strong><span className="board-kind-picker__check" aria-hidden="true">✓</span></span><span>{preset.description}</span>
     </label>)}
   </div>;
 }
@@ -101,14 +125,28 @@ function HelpTip({ label, children }: { label: string; children: React.ReactNode
 
 export function ManageArea() {
   const [tenant, setTenant] = useState<string | null>(null);
+  const [workspaceName, setWorkspaceName] = useState("");
   const [role, setRole] = useState<string | null | undefined>(undefined);
   const [tab, setTab] = useState<ManageTab>("boards");
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [boardCreateOpen, setBoardCreateOpen] = useState(false);
+  const [staffInviteOpen, setStaffInviteOpen] = useState(false);
+  const [pendingInviteCode, setPendingInviteCode] = useState("");
+  const mobileNavButton = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
   const [boardList, setBoardList] = useState<ManageBoard[] | null>(null);
   const [moderatorBoardCount, setModeratorBoardCount] = useState<number | null>(null);
   const [boardLoadError, setBoardLoadError] = useState("");
   const [boardRefresh, setBoardRefresh] = useState(0);
   const [emailAvailable, setEmailAvailable] = useState(false);
+
+  useEffect(() => {
+    if (!pendingInviteCode) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [pendingInviteCode]);
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/email/availability`, { cache: "no-store" })
@@ -119,6 +157,23 @@ export function ManageArea() {
 
   useEffect(() => { setCollapsed(window.localStorage.getItem("howllo.staff.sidebar.collapsed") === "true"); }, []);
   const toggleSidebar = () => setCollapsed((value) => { window.localStorage.setItem("howllo.staff.sidebar.collapsed", String(!value)); return !value; });
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    sidebarRef.current?.querySelector<HTMLButtonElement>(".manage-sidebar__mobile-close")?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setMobileNavOpen(false); mobileNavButton.current?.focus(); return; }
+      if (event.key !== "Tab" || !sidebarRef.current) return;
+      const focusables = Array.from(sidebarRef.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled])'));
+      const first = focusables[0]; const last = focusables.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener("keydown", handleKeyDown); };
+  }, [mobileNavOpen]);
 
   useEffect(() => {
     const resolve = () => setTenant(getCurrentWorkspaceSlug());
@@ -166,6 +221,15 @@ export function ManageArea() {
   }, [tenant, role, boardRefresh]);
 
   useEffect(() => {
+    if (!tenant || (role !== "owner" && role !== "admin")) { setWorkspaceName(""); return; }
+    let active = true;
+    getTenantManagementSettings(tenant, readStoredBearerToken(tenant).trim())
+      .then((settings) => { if (active) setWorkspaceName(settings.tenant_name || tenant); })
+      .catch(() => { if (active) setWorkspaceName(tenant); });
+    return () => { active = false; };
+  }, [tenant, role]);
+
+  useEffect(() => {
     if (role === "moderator") setTab("moderation");
   }, [role]);
 
@@ -211,25 +275,25 @@ export function ManageArea() {
 
   const noBoards = boardList?.length === 0;
   const visibleNav = NAV_ITEMS.filter((item) => (role !== "moderator" || item.key === "moderation") && (!noBoards || !BOARD_NAV_ITEMS.has(item.key)) && (item.key !== "email" || emailAvailable));
+  const activeTab = role === "moderator" ? "moderation" : tab;
+  const pageTitle = noBoards && tab === "boards" ? "Create your first board" : NAV_ITEMS.find((item) => item.key === activeTab)?.label ?? "Workspace";
 
   return (
     <div className={`manage-layout${collapsed ? " manage-layout--collapsed" : ""}`}>
-      <label className="manage-mobile-nav">Workspace section
-        <select className="manage-input" value={tab} onChange={(event) => setTab(event.target.value as ManageTab)}>
-          {noBoards ? <option value="boards">Create a board</option> : null}
-          {visibleNav.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
-        </select>
-      </label>
-      <aside className="manage-sidebar" aria-label="Workspace navigation">
-        <div className="manage-sidebar__top"><span className="manage-sidebar__title">Workspace</span><button type="button" className="manage-sidebar__toggle" onClick={toggleSidebar} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}><NavIcon path={collapsed ? "M9 5l7 7-7 7" : "M15 5l-7 7 7 7"} /></button></div>
+      <button ref={mobileNavButton} type="button" className="manage-mobile-nav" aria-haspopup="dialog" aria-expanded={mobileNavOpen} onClick={() => setMobileNavOpen(true)}><NavIcon path="M4 7h16M4 12h16M4 17h16" /><span>{pageTitle}</span><span aria-hidden="true">⌄</span></button>
+      {mobileNavOpen ? <div className="manage-drawer-backdrop" onClick={() => { setMobileNavOpen(false); mobileNavButton.current?.focus(); }} aria-hidden="true" /> : null}
+      <aside ref={sidebarRef} className={`manage-sidebar${mobileNavOpen ? " manage-sidebar--open" : ""}`} aria-label="Workspace navigation" role={mobileNavOpen ? "dialog" : undefined} aria-modal={mobileNavOpen ? true : undefined}>
+        <div className="manage-sidebar__top"><div className="manage-sidebar__identity"><span className="manage-sidebar__overline">Workspace</span><strong className="manage-sidebar__title" title={workspaceName || tenant || undefined}>{workspaceName || tenant}</strong><span className="manage-sidebar__role">{role}</span></div><button type="button" className="manage-sidebar__toggle" onClick={toggleSidebar} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}><NavIcon path={collapsed ? "M9 5l7 7-7 7" : "M15 5l-7 7 7 7"} /></button><button type="button" className="manage-sidebar__mobile-close" onClick={() => { setMobileNavOpen(false); mobileNavButton.current?.focus(); }} aria-label="Close navigation">×</button></div>
+        <Link href="/" className="manage-sidebar__back" onClick={() => setMobileNavOpen(false)}>← All workspaces</Link>
+        {tenant ? <a className="manage-sidebar__website" href={`${PUBLIC_WEB_URL}/${encodeURIComponent(tenant)}`} target="_blank" rel="noopener noreferrer">Open website ↗</a> : null}
         {noBoards ? <button type="button" className={`manage-sidebar__create${tab === "boards" ? " manage-sidebar__create--active" : ""}`} aria-label="Create a board" title={collapsed ? "Create a board" : undefined} onClick={() => setTab("boards")}><NavIcon path="M12 5v14M5 12h14" /><span>Create a board</span></button> : null}
         {Array.from(new Set(visibleNav.map((item) => item.group))).map((group) => <div className="manage-sidebar__group" key={group}>
           <span className="manage-sidebar__group-label">{group}</span>
-          {visibleNav.filter((item) => item.group === group).map((item) => <button key={item.key} type="button" className={`manage-sidebar__item${tab === item.key ? " manage-sidebar__item--active" : ""}`} aria-current={tab === item.key ? "page" : undefined} aria-label={item.label} title={collapsed ? item.label : undefined} onClick={() => setTab(item.key)}><NavIcon path={item.icon} /><span>{item.label}</span></button>)}
+          {visibleNav.filter((item) => item.group === group).map((item) => <button key={item.key} type="button" className={`manage-sidebar__item${tab === item.key ? " manage-sidebar__item--active" : ""}`} aria-current={tab === item.key ? "page" : undefined} aria-label={item.label} title={collapsed ? item.label : undefined} onClick={() => { if (tab !== item.key && !canLeaveUnsavedPage()) return; setTab(item.key); setMobileNavOpen(false); }}><NavIcon path={item.icon} /><span>{item.label}</span></button>)}
         </div>)}
       </aside>
-      <div className="manage-layout__content">
-      <header className="manage-layout__heading"><h1 className="page-title">{noBoards && tab === "boards" ? "Create your first board" : NAV_ITEMS.find((item) => item.key === (role === "moderator" ? "moderation" : tab))?.label}</h1>{tab === "branding" ? <p>Logo, colors, and pages your customers see.</p> : null}</header>
+      <div className={`manage-layout__content manage-layout__content--${activeTab}`}>
+      <WorkspacePageHeader title={pageTitle} description={PAGE_DESCRIPTIONS[activeTab]} actions={role !== "moderator" && tab === "boards" && !noBoards ? <button className={boardCreateOpen ? "ghost-button" : "button button--cta"} type="button" aria-expanded={boardCreateOpen} onClick={() => setBoardCreateOpen((value) => !value)}>{boardCreateOpen ? "Cancel" : "Create board"}</button> : role !== "moderator" && tab === "team" && !pendingInviteCode ? <button className={staffInviteOpen ? "ghost-button" : "button button--cta"} type="button" aria-expanded={staffInviteOpen} onClick={() => setStaffInviteOpen((value) => !value)}>{staffInviteOpen ? "Close invite" : "Invite teammate"}</button> : null} />
       {tenant ? (
         tab === "moderation" || role === "moderator" ? (
           <ModerationTab tenant={tenant} />
@@ -244,9 +308,9 @@ export function ManageArea() {
         ) : tab === "email" ? (
           <WorkspaceEmailTab tenant={tenant} />
         ) : tab === "team" ? (
-          <TeamTab tenant={tenant} myRole={role!} />
+          <TeamTab tenant={tenant} myRole={role!} inviteOpen={staffInviteOpen} setInviteOpen={setStaffInviteOpen} inviteCode={pendingInviteCode} setInviteCode={setPendingInviteCode} />
         ) : tab === "boards" ? (
-          <BoardsTab tenant={tenant} initialBoards={boardList ?? []} onBoardsChange={setBoardList} />
+          <BoardsTab tenant={tenant} initialBoards={boardList ?? []} onBoardsChange={setBoardList} creating={boardCreateOpen} setCreating={setBoardCreateOpen} />
         ) : tab === "signin" ? (
           <CustomerSignInTab tenant={tenant} />
         ) : (
@@ -258,13 +322,12 @@ export function ManageArea() {
   );
 }
 
-function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
+function TeamTab({ tenant, myRole, inviteOpen, setInviteOpen, inviteCode, setInviteCode }: { tenant: string; myRole: string; inviteOpen: boolean; setInviteOpen: (open: boolean) => void; inviteCode: string; setInviteCode: (code: string) => void }) {
   const [linkedIdentity, setLinkedIdentity] = useState(false);
   const [invites, setInvites] = useState<MyInvitation[]>([]);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [email, setEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("moderator");
-  const [inviteCode, setInviteCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -331,7 +394,6 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
     setBusy(true);
     setError(null);
     setNotice(null);
-    setInviteCode("");
     try {
       const created = await managerCreateInvitation(tenant, { email: email.trim(), role: inviteRole }, token());
       setNotice(created.provider_id
@@ -359,20 +421,17 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
 
   return (
     <>
-      <div className="manage-board-links" style={{ justifyContent: "flex-end" }}>
-        <button type="button" className="ghost-button" disabled={refreshing} onClick={() => void reload()}>{refreshing ? "Refreshing…" : "Refresh staff"}</button>
-      </div>
       {inviteActivity ? <p className="success-text" role="status">{inviteActivity}</p> : null}
       {listError ? <p className="error-text" role="alert">{listError}</p> : null}
-      <section className="panel">
+      {inviteOpen || inviteCode ? <section className="panel staff-invite-panel">
         <h2 className="section-title">Invite a teammate</h2>
         <p className="section-subtitle">Invite someone to help manage this workspace.</p>
         <div className="manage-form" style={{ marginTop: "1rem" }}>
-          <input className="manage-input" type="email" aria-label="Teammate email" placeholder="person@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <select className="manage-input" aria-label="Invitation role" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
+          <input className="manage-input" type="email" aria-label="Teammate email" placeholder="person@example.com" value={email} disabled={Boolean(inviteCode)} onChange={(e) => setEmail(e.target.value)} />
+          <select className="manage-input" aria-label="Invitation role" value={inviteRole} disabled={Boolean(inviteCode)} onChange={(e) => setInviteRole(e.target.value)}>
             {INVITE_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
-          <button type="button" className="button button--cta" disabled={busy || !email.trim()} onClick={invite}>
+          <button type="button" className="button button--cta" disabled={busy || !email.trim() || Boolean(inviteCode)} onClick={invite}>
             {busy ? "Creating…" : "Create invitation"}
           </button>
         </div>
@@ -380,12 +439,14 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
           ? "They will receive an invitation from the sign-in provider. After accepting it, they can join in Howllo App."
           : "Share the one-time code privately. If workspace email is enabled, they will also receive the invitation by email."} <HelpTip label="About staff roles">Admins can manage boards, settings, and staff. Moderators handle posts and comments. You can change their role after they join.</HelpTip></div>
         {notice ? <p className="success-text">{notice}</p> : null}
+        {inviteCode ? <p className="section-subtitle">Keep this code until you have shared it. It remains here if you switch pages, but disappears on reload.</p> : null}
         {inviteCode ? <div className="manage-form" style={{ marginTop: "0.75rem" }}>
           <code style={{ overflowWrap: "anywhere" }}>{inviteCode}</code>
           <button type="button" className="ghost-button" onClick={() => void navigator.clipboard.writeText(inviteCode).then(() => setNotice("Invitation code copied. Share it privately with your teammate.")).catch(() => setError("Could not copy the code. Select and copy it manually."))}>Copy invitation code</button>
+          <button type="button" className="ghost-button" onClick={() => { if (window.confirm("Have you copied the one-time code? It cannot be shown again.")) { setInviteCode(""); setInviteOpen(false); } }}>Done</button>
         </div> : null}
         {error ? <p className="error-text">{error}</p> : null}
-      </section>
+      </section> : null}
 
       {invites.length > 0 ? (
         <section className="panel">
@@ -412,7 +473,7 @@ function TeamTab({ tenant, myRole }: { tenant: string; myRole: string }) {
       ) : null}
 
       <section className="panel">
-        <div style={{ display: "flex", alignItems: "center" }}><h2 className="section-title">People with workspace access</h2><HelpTip label="About workspace access">Owners and admins manage the workspace, moderators review posts, and members can access private boards. Public board visitors are managed under Board members. Role changes save immediately.</HelpTip></div>
+        <div className="staff-list-heading"><div style={{ display: "flex", alignItems: "center" }}><h2 className="section-title">People with workspace access</h2><HelpTip label="About workspace access">Owners and admins manage the workspace, moderators review posts, and members can access private boards. Public board visitors are managed under Board members. Role changes save immediately.</HelpTip></div><button type="button" className="ghost-button" aria-label="Refresh staff" disabled={refreshing} onClick={() => void reload()}>{refreshing ? "Refreshing…" : "Refresh"}</button></div>
         <ListSearch value={memberQuery} onChange={(value) => { setMemberQuery(value); setMemberPage(1); }} placeholder="Search staff by name or email"><select className="manage-input" aria-label="Filter staff by role" value={memberRole} onChange={(event) => { setMemberRole(event.target.value); setMemberPage(1); }}><option value="all">All roles</option>{MEMBER_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}</select></ListSearch>
         <div className="list-stack" style={{ marginTop: "1rem" }}>
           {visibleMembers.slice((safeMemberPage - 1) * LIST_PAGE_SIZE, safeMemberPage * LIST_PAGE_SIZE).map((m) => (
@@ -472,12 +533,13 @@ function MemberRow({
   };
 
   return (
-    <div className="manage-row">
-      <div>
+    <div className="manage-row staff-member-row">
+      <div className="staff-member-row__person"><span className="member-row__avatar" aria-hidden="true">{(member.display_name || member.email || "?").slice(0, 1).toUpperCase()}</span><div>
         <strong>{member.display_name}</strong>
         <p className="section-subtitle">{member.email}</p>
+        {isLastOwner ? <p className="staff-member-row__note">Workspace owner · at least one owner is required</p> : !canManageMember ? <p className="staff-member-row__note">Only an owner can change this role</p> : null}
         {error ? <p className="error-text">{error}</p> : null}
-      </div>
+      </div></div>
       <div className="manage-row__actions">
         <select className="manage-input" aria-label={`Role for ${member.display_name}`} title={isLastOwner ? "Keep at least one owner in this workspace" : !canManageMember ? "Only an owner can change another owner's role" : "Role changes save immediately"} value={member.role} disabled={busy || !canManageMember || isLastOwner} onChange={(e) => changeRole(e.target.value)}>
           {!canManageMember ? <option value="owner">owner</option> : null}
@@ -489,12 +551,11 @@ function MemberRow({
   );
 }
 
-function BoardsTab({ tenant, initialBoards, onBoardsChange }: { tenant: string; initialBoards: ManageBoard[]; onBoardsChange: (boards: ManageBoard[]) => void }) {
+function BoardsTab({ tenant, initialBoards, onBoardsChange, creating, setCreating }: { tenant: string; initialBoards: ManageBoard[]; onBoardsChange: (boards: ManageBoard[]) => void; creating: boolean; setCreating: (creating: boolean) => void }) {
   const [boards, setBoards] = useState<ManageBoard[]>(initialBoards);
   const [loading, setLoading] = useState(true);
   const [workspacePublished, setWorkspacePublished] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [slugInput, setSlugInput] = useState("");
   const [description, setDescription] = useState("");
@@ -514,7 +575,7 @@ function BoardsTab({ tenant, initialBoards, onBoardsChange }: { tenant: string; 
       setBoards(list);
       onBoardsChange(list);
       setWorkspacePublished(settings.is_published);
-      setSelected((cur) => (cur && list.some((item) => item.id === cur) ? cur : list[0]?.id ?? null));
+      setSelected((cur) => (cur && list.some((item) => item.id === cur) ? cur : window.innerWidth <= 720 ? null : list[0]?.id ?? null));
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load boards.");
@@ -532,6 +593,7 @@ function BoardsTab({ tenant, initialBoards, onBoardsChange }: { tenant: string; 
 
   async function createBoard(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canLeaveUnsavedPage()) return;
     if (!name.trim() || !slug) return;
     if (boards.some((existing) => existing.slug === slug)) {
       setError(`A board with the URL slug "${slug}" already exists.`);
@@ -567,13 +629,12 @@ function BoardsTab({ tenant, initialBoards, onBoardsChange }: { tenant: string; 
 
   return (
     <div className="page-stack">
-      <section className="panel">
+      {creating || boards.length === 0 ? <section className="panel board-create-panel">
         <div className="manage-board-heading">
           <div>
-            <h2 className="section-title">{boards.length === 0 ? "Board details" : "Manage boards"}</h2>
-            <p className="section-subtitle">{boards.length === 0 ? "Give your board a name and choose how people will use it." : "Create boards one at a time. Each starts as a draft until you publish it."}</p>
+            <h2 className="section-title">{boards.length === 0 ? "Your first board" : "Create a board"}</h2>
+            <p className="section-subtitle">Give it a name, then choose how people will use it. New boards start as drafts.</p>
           </div>
-          {boards.length > 0 ? <button className="button button--cta" type="button" onClick={() => setCreating((value) => !value)}>{creating ? "Cancel" : "Create board"}</button> : null}
         </div>
         {creating || boards.length === 0 ? <form className="manage-fields board-create-form" style={{ marginTop: "1rem" }} onSubmit={(event) => void createBoard(event)}>
           <label className="manage-label">Board name<input className="manage-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Product ideas" required /></label>
@@ -584,21 +645,21 @@ function BoardsTab({ tenant, initialBoards, onBoardsChange }: { tenant: string; 
           <button className="button button--cta" type="submit" disabled={busy || !name.trim() || !slug}>{busy ? "Creating…" : "Create board"}</button>
         </form> : null}
         {error ? <p className="error-text" role="alert">{error}</p> : null}
-      </section>
-      {boards.length > 0 ? <section className="dashboard-grid">
-        <section className="panel" style={{ alignSelf: "start" }}>
-          <h2 className="section-title">Select a board</h2>
+      </section> : null}
+      {boards.length > 0 ? <section className={`dashboard-grid board-manager-grid${selected ? " board-manager-grid--detail" : ""}`}>
+        <section className="panel board-manager-list" style={{ alignSelf: "start" }}>
+          <h2 className="section-title">Your boards <span className="board-manager-count">{boards.length}</span></h2>
           <div className="list-stack" style={{ marginTop: "1rem" }}>
             {boards.map((b) => (
-              <button type="button" key={b.id} className={`manage-board-tab${b.id === selected ? " manage-board-tab--active" : ""}`} onClick={() => setSelected(b.id)}>
+              <button type="button" key={b.id} className={`manage-board-tab${b.id === selected ? " manage-board-tab--active" : ""}`} onClick={() => { if (b.id !== selected && canLeaveUnsavedPage()) setSelected(b.id); }}>
                 <strong>{b.name}</strong>
                 <span className="section-subtitle">{boardPreset(b.board_type).label}{b.is_private ? " · private" : ""} · {b.is_enabled ? workspacePublished ? "Active" : "Ready" : b.first_enabled_at ? "Paused" : "Draft"}</span>
               </button>
             ))}
           </div>
         </section>
-        {board ? <BoardEditor key={board.id} board={board} tenant={tenant} workspacePublished={workspacePublished} onSaved={reload} onDeleted={afterDelete} /> : (
-          <section className="panel"><p className="section-subtitle">Select a board to edit.</p></section>
+        {board ? <div className="board-manager-detail"><button className="ghost-button board-manager-back" type="button" onClick={() => { if (canLeaveUnsavedPage()) setSelected(null); }}>← All boards</button><BoardEditor key={board.id} board={board} tenant={tenant} workspacePublished={workspacePublished} onSaved={reload} onDeleted={afterDelete} /></div> : (
+          <section className="panel board-manager-placeholder"><p className="section-subtitle">Select a board to edit.</p></section>
         )}
       </section> : null}
     </div>
@@ -624,6 +685,17 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
   const [deleteSummary, setDeleteSummary] = useState<BoardSummary | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [confirmSlug, setConfirmSlug] = useState("");
+  const dirty = name !== board.name || description !== (board.description ?? "") || boardType !== boardKind(board.board_type)
+    || introText !== (board.intro_text ?? "") || allowVotes !== board.allow_votes || allowComments !== board.allow_comments
+    || isPrivate !== board.is_private || bg !== (board.background_color ?? "#fff1ea")
+    || iconUrl !== board.icon_url || headerImageUrl !== board.header_image_url || backgroundImageUrl !== board.background_image_url;
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 
   const save = async () => {
     setBusy(true); setError(null); setNotice(null);
@@ -692,22 +764,27 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
   };
 
   return (
-    <section className="panel">
-      <div className="manage-board-heading"><h2 className="section-title">{board.name}</h2><span><strong>{board.is_enabled ? workspacePublished ? "Active" : "Ready" : board.first_enabled_at ? "Paused" : "Draft"}</strong><HelpTip label="About board visibility">A board appears on the website only when it is enabled and the workspace is published. Paused and draft boards are hidden.</HelpTip></span></div>
+    <section className="panel board-editor" data-unsaved-changes={dirty}>
+      <div className="manage-board-heading"><div><h2 className="section-title">{board.name}</h2><p className="section-subtitle">/{tenant}/boards/{board.slug}</p></div><span className="board-status"><strong>{board.is_enabled ? workspacePublished ? "Active" : "Ready" : board.first_enabled_at ? "Paused" : "Draft"}</strong><HelpTip label="About board visibility">A board appears on the website only when it is enabled and the workspace is published. Paused and draft boards are hidden.</HelpTip></span></div>
       <div className="manage-board-links">
-        {board.is_enabled && workspacePublished ? <a className="button" href={publicBoardUrl(tenant, board.slug)}>Open board ↗</a> : null}
-        {!board.is_private && board.is_enabled && workspacePublished ? <button className="button" type="button" onClick={() => {
+        {board.is_enabled && workspacePublished ? <a className="ghost-button" href={publicBoardUrl(tenant, board.slug)}>Open board ↗</a> : null}
+        {!board.is_private && board.is_enabled && workspacePublished ? <button className="ghost-button" type="button" onClick={() => {
           const url = publicBoardUrl(tenant, board.slug);
           void navigator.clipboard.writeText(url).then(() => setNotice("Public board link copied.")).catch(() => setError("Could not copy link. Open the board and copy its URL."));
         }}>Copy board link</button> : <span className="section-subtitle">{!board.is_enabled ? "Hidden from visitors" : !workspacePublished ? "Publish the workspace to share its boards." : "Private: workspace members only"}</span>}
       </div>
-      <div className="manage-fields" style={{ marginTop: "1rem" }}>
+      <div className="board-editor-section"><h3 className="section-title">Basics</h3><div className="manage-fields">
         <label className="manage-label">Name<input className="manage-input" value={name} onChange={(e) => setName(e.target.value)} /></label>
         <label className="manage-label">Description<textarea className="manage-input" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
         <div className="manage-label">Board type<BoardTypePicker value={boardType} group="edit-board-kind" onChange={(next) => { setBoardType(next); setAllowVotes(boardPreset(next).defaultVotes); setAllowComments(boardPreset(next).defaultComments); }} /></div>
         <label className="manage-label">Board introduction<textarea className="manage-input" rows={2} maxLength={240} value={introText} onChange={(e) => setIntroText(e.target.value)} placeholder="Optional guidance shown above posts" /></label>
+      </div></div>
+      <div className="board-editor-section"><h3 className="section-title">Participation</h3><div className="manage-fields">
         <label className="manage-check"><input type="checkbox" checked={allowVotes} onChange={(e) => setAllowVotes(e.target.checked)} /> {boardKind(boardType) === "bug-reports" ? "Let visitors mark a bug as affecting them" : boardKind(boardType) === "discussions" ? "Let visitors like discussions" : boardKind(boardType) === "announcements" ? "Let visitors mark updates helpful" : "Let visitors vote on ideas"}</label>
         <label className="manage-check"><input type="checkbox" checked={allowComments} onChange={(e) => setAllowComments(e.target.checked)} /> {boardKind(boardType) === "discussions" ? "Let visitors reply" : boardKind(boardType) === "announcements" ? "Let visitors respond" : "Let visitors comment"}</label>
+        <label className="manage-check"><input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} /> Private board (members only)</label>
+      </div></div>
+      <div className="board-editor-section"><h3 className="section-title">Appearance</h3>
         <details className="board-extras"><summary>Images and colors</summary><div className="manage-fields" style={{ marginTop: "1rem" }}>
         <label className="manage-label">Background color
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
@@ -756,14 +833,14 @@ function BoardEditor({ board, tenant, workspacePublished, onSaved, onDeleted }: 
           {iconUrl ? <button type="button" className="ghost-button" disabled={busy} onClick={() => setIconUrl(null)}>Remove icon</button> : null}
         </div>
         </div></details>
-        <label className="manage-check"><input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} /> Private board (members only)</label>
       </div>
       <BoardTaxonomyEditor boardId={board.id} tenant={tenant} />
       <BoardExtras boardId={board.id} tenant={tenant} />
       {board.is_enabled && workspacePublished ? <BoardTopics boardSlug={board.slug} tenant={tenant} /> : null}
-      <div className="manage-board-links">
-        <button type="button" className="button button--cta" disabled={busy || !name.trim()} onClick={save}>{busy ? "Saving…" : "Save changes"}</button>
-        <button type="button" className="ghost-button" disabled={busy} onClick={() => void setPublication(!board.is_enabled)}>{board.is_enabled ? "Pause board" : board.first_enabled_at ? "Resume board" : workspacePublished ? "Publish board" : "Enable board"}</button>
+      <div className="manage-board-links board-editor-actions">
+        {dirty ? <button type="button" className="button button--cta" disabled={busy || !name.trim()} onClick={save}>{busy ? "Saving…" : "Save changes"}</button> : null}
+        {dirty ? <span className="section-subtitle">Unsaved changes</span> : null}
+        <button type="button" className="ghost-button" disabled={busy || dirty} title={dirty ? "Save board changes first" : undefined} onClick={() => void setPublication(!board.is_enabled)}>{board.is_enabled ? "Pause board" : board.first_enabled_at ? "Resume board" : workspacePublished ? "Publish board" : "Enable board"}</button>
         {notice ? <span className="success-text">{notice}</span> : null}
       </div>
       {boardKind(board.board_type) === "announcements" ? <AnnouncementComposer tenant={tenant} board={board} available={board.is_enabled && workspacePublished} /> : null}
@@ -826,14 +903,17 @@ function AnnouncementComposer({ tenant, board, available }: { tenant: string; bo
 
 function SsoTab({ tenant }: { tenant: string }) {
   const [cfg, setCfg] = useState<SsoConfig | null>(null);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
   const token = () => readStoredBearerToken(tenant).trim();
 
   useEffect(() => {
     const t = token();
     if (!t) return;
-    getSsoConfig(tenant, t).then(setCfg).catch(() => setCfg(null));
+    getSsoConfig(tenant, t).then((value) => { setCfg(value); setLoadFailed(false); }).catch((cause) => { setError(cause instanceof Error ? cause.message : "Could not load SSO settings."); setLoadFailed(true); }).finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant]);
 
@@ -841,26 +921,29 @@ function SsoTab({ tenant }: { tenant: string }) {
   const secret = cfg?.secret ?? "";
 
   const enableOrRotate = async () => {
-    setBusy(true);
+    if (cfg?.enabled && !window.confirm("Regenerate this workspace secret? Your server must use the new secret before customers can start new SSO sessions.")) return;
+    setBusy(true); setError("");
     try {
       setCfg(await regenerateSsoSecret(tenant, token()));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not enable SSO.");
     } finally {
       setBusy(false);
     }
   };
   const turnOff = async () => {
     if (!window.confirm("Disable SSO? Existing sessions keep working; new SSO logins are rejected.")) return;
-    setBusy(true);
+    setBusy(true); setError("");
     try {
       setCfg(await disableSso(tenant, token()));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not disable SSO.");
     } finally {
       setBusy(false);
     }
   };
   const copy = (text: string) => {
-    navigator.clipboard?.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    void navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => setError("Could not copy. Select the secret and copy it manually."));
   };
 
   const snippet = `// On YOUR server (Node) — never expose the secret to the browser.
@@ -881,15 +964,12 @@ const { session_token } = await res.json();
 // Use session_token as the Bearer token for the board — no login screen.`;
 
   return (
-    <section className="panel">
-      <h2 className="section-title">Use your own login</h2>
-      <p className="section-subtitle" style={{ marginTop: "0.3rem" }}>
-        Let your already-signed-in users post &amp; vote without a howllo login. Your backend signs a
-        token with the workspace secret; howllo trusts it and mints a session.
-      </p>
+    <section className="panel sso-setup">
+      <div className="sso-setup__head"><div><h2 className="section-title">Use your own login</h2><p className="section-subtitle">Let customers already signed in to your product use this workspace without another sign-in.</p></div><span className="member-row__status" data-status={cfg?.enabled ? "active" : "off"}>{cfg?.enabled ? "Enabled" : "Off"}</span></div>
+      <p className="section-subtitle">Your backend signs a token with a workspace secret and exchanges it for a Howllo session.</p>
 
-      {!cfg?.enabled ? (
-        <div style={{ marginTop: "1rem" }}>
+      {loading ? <p className="section-subtitle">Loading SSO settings…</p> : loadFailed ? <button className="ghost-button" type="button" onClick={() => { setLoading(true); setError(""); getSsoConfig(tenant, token()).then((value) => { setCfg(value); setLoadFailed(false); }).catch((cause) => setError(cause instanceof Error ? cause.message : "Could not load SSO settings.")).finally(() => setLoading(false)); }}>Retry</button> : !cfg?.enabled ? (
+        <div className="sso-setup__steps"><ol><li>Enable SSO for this workspace.</li><li>Keep the generated secret on your server.</li><li>Exchange signed tokens at the endpoint shown here.</li></ol>
           <button type="button" className="button button--cta" disabled={busy} onClick={enableOrRotate}>
             {busy ? "Enabling…" : "Enable SSO"}
           </button>
@@ -925,6 +1005,7 @@ const { session_token } = await res.json();
           </div>
         </div>
       )}
+      {error ? <p className="error-text" role="alert">{error}</p> : null}
     </section>
   );
 }
