@@ -13,11 +13,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return <div className="app-shell app-shell--themed app-shell--manager">
     <header className="site-header"><div className="site-header__inner">
       <div className="brand">
-        <div className="app-brand-line"><Link href="/" className="brand__title" aria-label="Howllo Staff App"><img alt="Howllo" src="/brand/howllo-logo-wordmark-horizontal.svg" className="brand__logo" style={{ height: "1.7rem" }} /></Link><span className="app-brand-badge">STAFF APP</span></div>
-        <div className="brand__meta">Manage workspaces and public boards</div>
+        <div className="app-brand-line"><Link href="/" className="brand__title" aria-label="Howllo Staff App"><img alt="Howllo" src="/brand/howllo-logo-wordmark-horizontal.svg" className="brand__logo" style={{ height: "1.7rem" }} /></Link><span className="app-brand-badge">STAFF</span></div>
       </div>
       <nav className="nav" aria-label="App navigation">
-        {tenantSlug ? <a className="nav__link" href={`${publicWebUrl}/${encodeURIComponent(tenantSlug)}`}>View public boards ↗</a> : null}
+        {tenantSlug ? <a className="nav__link" href={`${publicWebUrl}/${encodeURIComponent(tenantSlug)}`}>Open website ↗</a> : null}
         {tenantSlug ? <StaffNotifications tenantSlug={tenantSlug} /> : null}
         <AuthControl staffMode hideSignedOutTrigger={!tenantSlug} />
       </nav>

@@ -54,7 +54,7 @@ export function WorkspaceEmailTab({ tenant }: { tenant: string }) {
   const toggle = (key: "enabled" | "reply_notifications" | "important_updates" | "digest_enabled" | "broadcast_enabled", label: string) => <label className="manage-row" key={key}><span>{label}</span><input type="checkbox" checked={settings[key]} onChange={(event) => setSettings({ ...settings, [key]: event.target.checked })} /></label>;
   return <div className="grid">
     <section className="panel">
-      <h2 className="section-title">Workspace email</h2>
+      <h2 className="section-title">Email delivery</h2>
       <p className="section-subtitle">Email is provided by the platform. Members choose which messages they receive.</p>
       <form onSubmit={(event) => void save(event)} className="field-grid" style={{ marginTop: "1rem" }}>
         {toggle("enabled", "Enable email for this workspace")}

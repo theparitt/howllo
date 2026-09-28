@@ -125,15 +125,15 @@ export function BrandingTab({ tenant }: { tenant: string }) {
   if (loadError) return <section className="panel"><p className="error-text" role="alert">{loadError}</p></section>;
 
   return <div className="page-stack">
-    <section className="panel">
+    <section className={`panel workspace-publication${isPublished ? " workspace-publication--live" : ""}`}>
       <h2 className="section-title">{isPublished ? "Workspace is live" : "Workspace is a draft"}</h2>
       <p className="section-subtitle">{isPublished ? "Visitors can see your published boards." : "Create a board, set it to published, then publish this workspace."}</p>
-      <button type="button" className="button button--cta" disabled={busy} onClick={() => void togglePublication()} style={{ marginTop: "1rem" }}>{isPublished ? "Unpublish workspace" : "Publish workspace"}</button>
+      <button type="button" className={isPublished ? "ghost-button button--danger" : "button button--cta"} disabled={busy} onClick={() => void togglePublication()} style={{ marginTop: "1rem" }}>{isPublished ? "Unpublish workspace" : "Publish workspace"}</button>
     </section>
     <section className="panel">
       <h2 className="section-title">Visible pages</h2>
       <p className="section-subtitle">Choose what visitors see in this workspace.</p>
-      <form className="manage-fields" style={{ marginTop: "1rem" }} onSubmit={(event) => void savePages(event)}>
+      <form className="manage-fields branding-pages" style={{ marginTop: "1rem" }} onSubmit={(event) => void savePages(event)}>
         <label className="manage-check"><input type="checkbox" checked={showBoards} disabled={busy} onChange={(event) => setShowBoards(event.target.checked)} /> Boards</label>
         <label className="manage-check"><input type="checkbox" checked={showFeed} disabled={busy} onChange={(event) => setShowFeed(event.target.checked)} /> Feed</label>
         <label className="manage-check"><input type="checkbox" checked={showRoadmap} disabled={busy} onChange={(event) => setShowRoadmap(event.target.checked)} /> Roadmap</label>
@@ -142,7 +142,6 @@ export function BrandingTab({ tenant }: { tenant: string }) {
         <p className="section-subtitle">When off, regular posts publish immediately. Suspicious posts still wait for review.</p>
         <div className="manage-row__actions">
           <button className="button button--cta" type="submit" disabled={busy}>{busy ? "Saving…" : "Save settings"}</button>
-          <a className="ghost-button" href={`${(process.env.NEXT_PUBLIC_HOWLLO_PUBLIC_WEB_URL || "http://localhost:7703").replace(/\/$/, "")}/${encodeURIComponent(tenant)}`} target="_blank" rel="noreferrer">View website ↗</a>
         </div>
       </form>
       {pageNotice ? <p className="success-text" role="status">{pageNotice}</p> : null}
@@ -169,6 +168,7 @@ export function BrandingTab({ tenant }: { tenant: string }) {
         key={preset.name} type="button" className="branding-preset" disabled={busy}
         onClick={() => { setAccent(preset.accent); setBackground(preset.background); }}
         aria-label={`Use ${preset.name} theme`}
+        aria-pressed={accent === preset.accent && background === preset.background}
       ><span style={{ background: preset.accent }} />{preset.name}</button>)}</div>
       <label className="manage-label">Accent color
         <div className="branding-color-field"><input type="color" value={COLOR.test(accent) ? accent : "#e0522f"} onChange={(event) => setAccent(event.target.value)} /><input className="manage-input" value={accent} onChange={(event) => setAccent(event.target.value)} maxLength={7} /></div>

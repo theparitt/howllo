@@ -30,7 +30,7 @@ export function ParticipantsTab({ tenant }: { tenant: string }) {
   const safePage = Math.min(page, Math.max(1, Math.ceil(visible.length / LIST_PAGE_SIZE)));
 
   return <section className="panel">
-    <h2 className="section-title">Board members</h2>
+    <h2 className="section-title">People on your boards</h2>
     <p className="section-subtitle">People who joined this workspace through the public board. Restrictions apply to every board in this workspace.</p>
     <ListSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search users by name or email"><select className="manage-input" aria-label="Filter users by status" value={filter} onChange={(event) => { setFilter(event.target.value); setPage(1); }}><option value="all">All statuses</option><option value="active">Active</option><option value="suspended">Suspended</option><option value="banned">Banned</option></select></ListSearch>
     {loading ? <p>Loading…</p> : null}
@@ -50,6 +50,7 @@ function ParticipantRow({ item, tenant, onChanged }: { item: WorkspaceParticipan
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [editing, setEditing] = useState(false);
   const restriction = item.restriction_kind;
   const apply = async () => {
     if (!reason.trim()) { setError("Enter a reason."); return; }
@@ -72,7 +73,7 @@ function ParticipantRow({ item, tenant, onChanged }: { item: WorkspaceParticipan
     finally { setBusy(false); }
   };
 
-  return <div className="manage-row" style={{ alignItems: "flex-start" }}>
+  return <div className="manage-row member-row" style={{ alignItems: "flex-start" }}>
     <div style={{ flex: 1 }}>
       <strong>{item.display_name}</strong>
       <p className="section-subtitle">{item.email || `User ${item.user_id.slice(0, 8)}`}</p>
@@ -80,9 +81,10 @@ function ParticipantRow({ item, tenant, onChanged }: { item: WorkspaceParticipan
         {item.restriction_expires_at ? ` until ${new Date(item.restriction_expires_at).toLocaleDateString()}` : ""}
         {item.restriction_reason ? ` · ${item.restriction_reason}` : ""}
       </p> : <p className="section-subtitle">Active</p>}
+      <button type="button" className="ghost-button button--small" aria-expanded={editing} onClick={() => setEditing((current) => !current)}>{editing ? "Close controls" : "Manage member"}</button>
       {error ? <p className="error-text" role="alert">{error}</p> : null}
     </div>
-    <div className="manage-fields" style={{ width: "min(20rem, 100%)" }}>
+    {editing ? <div className="manage-fields member-row__controls" style={{ width: "min(20rem, 100%)" }}>
       <select className="manage-input" aria-label="Restriction type" value={mode} disabled={busy} onChange={(event) => setMode(event.target.value as "suspended" | "banned")}>
         <option value="suspended">Temporary suspension</option><option value="banned">Ban until lifted</option>
       </select>
@@ -94,6 +96,6 @@ function ParticipantRow({ item, tenant, onChanged }: { item: WorkspaceParticipan
         <button className="button button--cta" type="button" disabled={busy || !reason.trim()} onClick={() => void apply()}>{busy ? "Saving…" : mode === "banned" ? "Ban user" : `Suspend ${days} ${days === 1 ? "day" : "days"}`}</button>
         {restriction ? <button className="ghost-button" type="button" disabled={busy} onClick={() => void lift()}>Lift restriction</button> : null}
       </div>
-    </div>
+    </div> : null}
   </div>;
 }

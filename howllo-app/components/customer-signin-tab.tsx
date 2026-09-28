@@ -105,7 +105,7 @@ export function CustomerSignInTab({ tenant }: { tenant: string }) {
   const callbackUrl = settings.callback_urls[choice] ?? existing?.callback_url ?? "";
   return <div className="stack" style={{ maxWidth: 820 }}>
     <section className="panel stack">
-      <h2>Sign-in methods</h2>
+      <h2>Methods</h2>
       <p className="section-subtitle">Choose how customers sign in to this workspace. Staff continue to use their staff account.</p>
       <label><input type="checkbox" checked={settings.local_enabled} onChange={(event) => setSettings({ ...settings, local_enabled: event.target.checked })} /> Password and recovery code</label>
       <label><input type="checkbox" checked={settings.rooiam_enabled} onChange={(event) => setSettings({ ...settings, rooiam_enabled: event.target.checked })} /> RooIAM</label>
@@ -120,7 +120,7 @@ export function CustomerSignInTab({ tenant }: { tenant: string }) {
       <h2>Social and OpenID Connect</h2>
       <p className="section-subtitle">Use your own app credentials for each provider. Client secrets are stored encrypted and are never shown again.</p>
       {!settings.callback_url_configured ? <p className="notice" role="status">Social sign-in needs a public API URL. Ask the platform administrator to configure it before adding a provider.</p> : null}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{choices.map((item) => <button key={item.key} type="button" className={choice === item.key ? "button button--cta" : "button"} onClick={() => select(item.key)}>{item.label}{settings.providers.some((provider) => provider.key === item.key && provider.enabled) ? " · On" : ""}</button>)}</div>
+      <div className="provider-tabs" role="group" aria-label="Sign-in provider">{choices.map((item) => <button key={item.key} type="button" className={choice === item.key ? "button" : "ghost-button"} aria-pressed={choice === item.key} onClick={() => select(item.key)}>{item.label}{settings.providers.some((provider) => provider.key === item.key && provider.enabled) ? " · On" : ""}</button>)}</div>
       <p className="section-subtitle">{choices.find((item) => item.key === choice)?.hint}</p>
       <label>Button label<input className="field" value={displayName} maxLength={60} onChange={(event) => setDisplayName(event.target.value)} /></label>
       <label>Issuer URL<input className="field" value={issuer} placeholder={choices.find((item) => item.key === choice)?.issuer} onChange={(event) => setIssuer(event.target.value)} /></label>

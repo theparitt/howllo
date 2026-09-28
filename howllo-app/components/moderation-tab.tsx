@@ -142,7 +142,7 @@ export function ModerationTab({ tenant }: { tenant: string }) {
   return <section className="panel moderation-browser" aria-label="Moderation">
     <div className="moderation-browser__top">
       <div>
-        <h2 className="section-title">Posts</h2>
+        <h2 className="section-title">Review and manage posts</h2>
         <p className="section-subtitle">Review submissions and manage posts in this workspace.</p>
       </div>
       <div className="moderation-browser__tabs" role="group" aria-label="Post list">

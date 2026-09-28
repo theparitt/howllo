@@ -214,6 +214,12 @@ export function ManageArea() {
 
   return (
     <div className={`manage-layout${collapsed ? " manage-layout--collapsed" : ""}`}>
+      <label className="manage-mobile-nav">Workspace section
+        <select className="manage-input" value={tab} onChange={(event) => setTab(event.target.value as ManageTab)}>
+          {noBoards ? <option value="boards">Create a board</option> : null}
+          {visibleNav.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+        </select>
+      </label>
       <aside className="manage-sidebar" aria-label="Workspace navigation">
         <div className="manage-sidebar__top"><span className="manage-sidebar__title">Workspace</span><button type="button" className="manage-sidebar__toggle" onClick={toggleSidebar} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}><NavIcon path={collapsed ? "M9 5l7 7-7 7" : "M15 5l-7 7 7 7"} /></button></div>
         {noBoards ? <button type="button" className={`manage-sidebar__create${tab === "boards" ? " manage-sidebar__create--active" : ""}`} aria-label="Create a board" title={collapsed ? "Create a board" : undefined} onClick={() => setTab("boards")}><NavIcon path="M12 5v14M5 12h14" /><span>Create a board</span></button> : null}
@@ -564,12 +570,12 @@ function BoardsTab({ tenant, initialBoards, onBoardsChange }: { tenant: string; 
       <section className="panel">
         <div className="manage-board-heading">
           <div>
-            <h2 className="section-title">{boards.length === 0 ? "Start with a board" : "Your boards"}</h2>
+            <h2 className="section-title">{boards.length === 0 ? "Board details" : "Manage boards"}</h2>
             <p className="section-subtitle">{boards.length === 0 ? "Give your board a name and choose how people will use it." : "Create boards one at a time. Each starts as a draft until you publish it."}</p>
           </div>
           {boards.length > 0 ? <button className="button button--cta" type="button" onClick={() => setCreating((value) => !value)}>{creating ? "Cancel" : "Create board"}</button> : null}
         </div>
-        {creating || boards.length === 0 ? <form className="manage-fields" style={{ marginTop: "1rem" }} onSubmit={(event) => void createBoard(event)}>
+        {creating || boards.length === 0 ? <form className="manage-fields board-create-form" style={{ marginTop: "1rem" }} onSubmit={(event) => void createBoard(event)}>
           <label className="manage-label">Board name<input className="manage-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Product ideas" required /></label>
           <label className="manage-label">URL slug<input className="manage-input" value={slugInput} onChange={(event) => setSlugInput(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} placeholder={generatedSlug || "product-ideas"} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required={!generatedSlug} /></label>
           <label className="manage-label">Description<textarea className="manage-input" rows={2} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
@@ -581,7 +587,7 @@ function BoardsTab({ tenant, initialBoards, onBoardsChange }: { tenant: string; 
       </section>
       {boards.length > 0 ? <section className="dashboard-grid">
         <section className="panel" style={{ alignSelf: "start" }}>
-          <h2 className="section-title">Boards</h2>
+          <h2 className="section-title">Select a board</h2>
           <div className="list-stack" style={{ marginTop: "1rem" }}>
             {boards.map((b) => (
               <button type="button" key={b.id} className={`manage-board-tab${b.id === selected ? " manage-board-tab--active" : ""}`} onClick={() => setSelected(b.id)}>
@@ -876,7 +882,7 @@ const { session_token } = await res.json();
 
   return (
     <section className="panel">
-      <h2 className="section-title">End-user SSO</h2>
+      <h2 className="section-title">Use your own login</h2>
       <p className="section-subtitle" style={{ marginTop: "0.3rem" }}>
         Let your already-signed-in users post &amp; vote without a howllo login. Your backend signs a
         token with the workspace secret; howllo trusts it and mints a session.
@@ -905,12 +911,10 @@ const { session_token } = await res.json();
               <code>{endpoint}</code>
             </div>
           </label>
-          <div className="manage-label">
-            Integration (Node)
-            <pre className="sso-code">
-              <code>{snippet}</code>
-            </pre>
-          </div>
+          <details className="board-extras">
+            <summary>Show integration example</summary>
+            <pre className="sso-code"><code>{snippet}</code></pre>
+          </details>
           <div style={{ display: "flex", gap: "0.6rem" }}>
             <button type="button" className="ghost-button" disabled={busy} onClick={enableOrRotate}>
               Regenerate secret
