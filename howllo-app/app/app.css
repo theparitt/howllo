@@ -555,12 +555,7 @@
 .app-shell--manager .workspace-plugin-card__body { display: grid; align-content: start; gap: 4px; }
 .app-shell--manager .workspace-plugin-card__body .section-subtitle { margin: 0; }
 .app-shell--manager .workspace-plugin-card__footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid #e3e9eb; padding-top: 12px; }
-.app-shell--manager .workspace-plugin-preview { display: grid; align-content: center; gap: 4px; min-height: 95px; padding: 16px; border: 1px solid #e3e9eb; border-radius: 8px; background: #f5f8f9; color: #20313a; }
-.app-shell--manager .workspace-plugin-preview span { color: #526570; font-size: 12px; }
-.app-shell--manager .workspace-plugin-preview--editorial strong { font-family: Georgia, serif; font-size: 19px; }
-.app-shell--manager .workspace-plugin-preview--clean strong { font-family: Arial, "Helvetica Neue", sans-serif; font-size: 17px; }
-.app-shell--manager .workspace-plugin-preview__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.app-shell--manager .workspace-plugin-preview__grid span { min-width: 0; padding: 10px 7px; border: 1px solid #cbd7db; border-radius: 6px; background: #fff; color: #20313a; font-size: 12px; text-align: center; }
+.app-shell--manager .workspace-plugin-card__cover { display: block; width: 100%; height: auto; aspect-ratio: 3 / 1; object-fit: cover; border: 1px solid #e3e9eb; border-radius: 8px; background: #f5f8f9; }
 .app-shell--manager .sso-setup { display: grid; gap: 16px; max-width: 800px; }
 .app-shell--manager .sso-setup__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .app-shell--manager .sso-setup__steps { display: grid; justify-items: start; gap: 16px; padding-top: 16px; border-top: 1px solid #e3e9eb; }

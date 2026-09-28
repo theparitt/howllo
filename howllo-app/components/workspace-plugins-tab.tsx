@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { API_BASE_URL } from "@/lib/config";
+import { pluginCovers } from "../lib/plugin-covers";
 import { readStoredBearerToken } from "@/components/dev-auth-panel";
 
 type Plugin = { id: string; version: string; name: string; description: string; slot: string; stylesheet_path: string; enabled: boolean };
@@ -9,7 +10,6 @@ const slotName: Record<string, string> = {
   "workspace.typography": "Typography",
   "board.directory.layout": "Board directory",
 };
-const previewKind: Record<string, string> = { "editorial-type": "editorial", "clean-type": "clean", "board-grid": "grid" };
 
 export function WorkspacePluginsTab({ tenant }: { tenant: string }) {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
@@ -56,7 +56,7 @@ export function WorkspacePluginsTab({ tenant }: { tenant: string }) {
   return <div className="page-stack workspace-plugin-list">
     <p className="section-subtitle">Optional features supplied by Howllo. One choice can be active in each style slot.</p>
     {loading ? <section className="panel">Loading plugins…</section> : plugins.length === 0 ? <section className="panel"><h2 className="section-title">No plugins available</h2><p className="section-subtitle">Approved workspace plugins will appear here.</p></section> : <div className="workspace-plugin-grid">{plugins.map((plugin) => <section className="panel workspace-plugin-card" key={plugin.id}>
-      {previewKind[plugin.id] ? <div className={`workspace-plugin-preview workspace-plugin-preview--${previewKind[plugin.id]}`} aria-hidden="true">{previewKind[plugin.id] === "grid" ? <div className="workspace-plugin-preview__grid"><span>Ideas</span><span>Bugs</span><span>Updates</span></div> : <><strong>A better place for ideas</strong><span>Tell us what matters to you.</span></>}</div> : null}
+      {pluginCovers[plugin.id] ? <img className="workspace-plugin-card__cover" src={pluginCovers[plugin.id]} alt="" width="1080" height="360" loading="lazy" decoding="async" /> : null}
       <div className="workspace-plugin-card__body"><p className="section-subtitle">{slotName[plugin.slot] ?? plugin.slot} · v{plugin.version}</p><h3 className="section-title">{plugin.name}</h3><p className="section-subtitle">{plugin.description}</p></div>
       <div className="workspace-plugin-card__footer"><span className="member-row__status" data-status={plugin.enabled ? "active" : "off"}>{plugin.enabled ? "Enabled" : "Off"}</span><button type="button" className="ghost-button" disabled={busy !== null} onClick={() => void toggle(plugin)}>{busy === plugin.id ? "Saving…" : plugin.enabled ? "Disable" : "Enable"}</button></div>
     </section>)}</div>}
