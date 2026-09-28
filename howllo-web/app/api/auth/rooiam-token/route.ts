@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCustomerRooiamConfig } from "@/lib/auth-api";
+import { API_BASE_URL } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
@@ -103,8 +104,23 @@ export async function POST(request: NextRequest) {
         502,
       );
     }
+    if (body.tenantSlug) {
+      const sessionResponse = await fetch(`${API_BASE_URL}/api/auth/workspace-session`, {
+        method: "POST",
+        headers: { "content-type": "application/json", Authorization: `Bearer ${payload.access_token}` },
+        body: JSON.stringify({ tenant_slug: body.tenantSlug, refresh_token: payload.refresh_token, expires_in: payload.expires_in }),
+        cache: "no-store",
+        redirect: "manual",
+        signal: AbortSignal.timeout(15000),
+      });
+      const session = await sessionResponse.json().catch(() => ({}));
+      if (!sessionResponse.ok || typeof session.session_token !== "string") {
+        return error(sessionResponse.status === 403 ? "This account cannot join this workspace." : "Could not create a workspace session.", sessionResponse.status === 403 ? 403 : 502);
+      }
+      return NextResponse.json({ session_token: session.session_token }, { headers: { "cache-control": "no-store" } });
+    }
     return NextResponse.json(
-      { access_token: payload.access_token, refresh_token: payload.refresh_token, expires_in: payload.expires_in },
+      { access_token: payload.access_token },
       { headers: { "cache-control": "no-store" } },
     );
   } catch (cause) {

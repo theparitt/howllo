@@ -73,8 +73,9 @@ The RooIAM browser SDK's self-session methods use RooIAM's own first-party
 cookie. Howllo stores the customer's OIDC access and rotating refresh tokens
 encrypted against their Howllo workspace session. Only Howllo's server sends
 the user token to the private bridge. A workspace API key cannot impersonate
-the user. The browser stores only a Howllo workspace session after sign-in;
-the OIDC callback still handles the provider token in memory during exchange.
+the user. Howllo Web exchanges the OIDC code on its server and gives the
+browser only a Howllo workspace session. RooIAM refresh tokens never enter
+browser JavaScript or storage for workspace sign-in.
 
 RooIAM management is **not enabled merely by**
 `HOWLLO_WORKSPACE_AUTH_PROVIDER=rooiam`: that setting selects the staff login

@@ -156,7 +156,7 @@ export function AuthCallback() {
         }),
       });
       const tokenPayload = await tokenResponse.json().catch(() => ({}));
-      if (!tokenResponse.ok || typeof tokenPayload.access_token !== "string") {
+      if (!tokenResponse.ok || (tenantSlug ? typeof tokenPayload.session_token !== "string" : typeof tokenPayload.access_token !== "string")) {
         setError(
           typeof tokenPayload.error_description === "string"
             ? tokenPayload.error_description
@@ -168,13 +168,7 @@ export function AuthCallback() {
       }
 
       if (tenantSlug) {
-        const session = await createWorkspaceSession({
-          tenantSlug,
-          accessToken: tokenPayload.access_token,
-          refreshToken: typeof tokenPayload.refresh_token === "string" ? tokenPayload.refresh_token : undefined,
-          expiresIn: typeof tokenPayload.expires_in === "number" ? tokenPayload.expires_in : undefined,
-        });
-        persistBearerToken(tenantSlug, `Bearer ${session.session_token}`);
+        persistBearerToken(tenantSlug, `Bearer ${tokenPayload.session_token}`);
       } else {
         // Account mode: keep the rooiam token as the account credential for the
         // dashboard (list/create workspaces). Board sessions are minted per
