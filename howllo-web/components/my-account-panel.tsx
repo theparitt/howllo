@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AvatarCropper } from "@/components/avatar-cropper";
 import { EmailPreferences } from "@/components/email-preferences";
+import { ProviderSecurityPanel } from "@/components/provider-security-panel";
 import { clearAllStoredBearerTokens, readAccountToken, readStoredBearerToken } from "@/components/dev-auth-panel";
 import { updateMe, uploadImage } from "@/lib/api";
 import { changeLocalPassword, getLocalAccountStatus, rotateLocalRecoveryCode } from "@/lib/auth-api";
@@ -137,23 +138,13 @@ export function MyAccountPanel({ howlloUser, tenantSlug }: MyAccountPanelProps) 
           <h2 className="section-title">{displayName || "Unnamed user"}</h2>
           <p className="section-subtitle">{howlloUser.email}</p>
         </div>
-        <dl className="detail-list">
-          <div>
-            <dt>Howllo user ID</dt>
-            <dd><code>{howlloUser.id}</code></dd>
-          </div>
-          <div>
-            <dt>Workspace session</dt>
-            <dd>{tenantSlug}</dd>
-          </div>
-        </dl>
       </article>
 
       <div className="grid">
         <article className="panel">
           <h2 className="section-title">Edit profile</h2>
           <p className="section-subtitle" style={{ marginTop: "0.45rem" }}>
-            Your public Howllo profile lives in this app. Your sign-in identity is managed by your login provider.
+            Your name and photo appear beside your posts.
           </p>
           <form className="field-grid" style={{ marginTop: "1rem" }} onSubmit={saveProfile}>
             <label className="field-label">
@@ -195,6 +186,8 @@ export function MyAccountPanel({ howlloUser, tenantSlug }: MyAccountPanelProps) 
             <button className="button" type="button" onClick={() => void navigator.clipboard.writeText(recoveryCode)}>Copy code</button>
           </div> : null}
         </article> : null}
+
+        {!localAccount && howlloUser.rooiam_subject ? <ProviderSecurityPanel tenantSlug={tenantSlug} /> : null}
 
         <EmailPreferences tenantSlug={tenantSlug} />
 

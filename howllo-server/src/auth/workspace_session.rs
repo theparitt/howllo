@@ -19,6 +19,8 @@ const WORKSPACE_SESSION_PREFIX: &str = "howllo_ws_";
 #[derive(Debug, Deserialize)]
 pub struct CreateWorkspaceSessionRequest {
     pub tenant_slug: String,
+    pub refresh_token: Option<String>,
+    pub expires_in: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -149,7 +151,10 @@ pub async fn resolve_workspace_session_from_token(
                 ).await;
                 let active = matches!(&member, Ok(value) if value.get("subject").and_then(|v| v.as_str()) == Some(subject.as_str())
                     && value.get("status").and_then(|v| v.as_str()) == Some("active"));
-                if !active {
+                let provider_session_active = if active {
+                    crate::auth::provider_self::provider_session_active(pool, settings, user.id, tenant_id, &token_hash).await?
+                } else { false };
+                if !provider_session_active {
                     if let Err(error) = member {
                         if !matches!(error, AppError::NotFound | AppError::Forbidden | AppError::Unauthorized) {
                             return Err(error);
@@ -375,16 +380,31 @@ pub async fn create_workspace_session(
     let token_hash = hash_token(&session_token);
     let expires_at = Utc::now() + Duration::days(30);
 
+    let provider_tokens = if verified_rooiam_customer && !is_staff {
+        let refresh = body.refresh_token.as_deref().filter(|value| !value.is_empty() && value.len() <= 8192);
+        let expires = body.expires_in.unwrap_or(3600).clamp(60, 3600);
+        Some((
+            crate::auth::provider_self::encrypt_token(access_token)?,
+            refresh.map(crate::auth::provider_self::encrypt_token).transpose()?,
+            Utc::now() + Duration::seconds(expires),
+            Some(crate::auth::provider_self::token_session_id(access_token).ok_or(AppError::Unauthorized)?),
+        ))
+    } else { None };
     sqlx::query(
         r#"
-        INSERT INTO workspace_sessions (tenant_id, user_id, token_hash, expires_at)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO workspace_sessions (tenant_id, user_id, token_hash, expires_at,
+          provider_access_ciphertext, provider_refresh_ciphertext, provider_access_expires_at, provider_session_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         "#,
     )
     .bind(tenant_id)
     .bind(user.id)
     .bind(token_hash)
     .bind(expires_at)
+    .bind(provider_tokens.as_ref().map(|value| value.0.as_str()))
+    .bind(provider_tokens.as_ref().and_then(|value| value.1.as_deref()))
+    .bind(provider_tokens.as_ref().map(|value| value.2))
+    .bind(provider_tokens.as_ref().and_then(|value| value.3))
     .execute(pool.get_ref())
     .await
     .map_err(|error| {

@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
       );
     }
     return NextResponse.json(
-      { access_token: payload.access_token },
+      { access_token: payload.access_token, refresh_token: payload.refresh_token, expires_in: payload.expires_in },
       { headers: { "cache-control": "no-store" } },
     );
   } catch (cause) {

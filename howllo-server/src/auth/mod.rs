@@ -8,6 +8,7 @@ pub mod local_admin;
 pub mod local_user;
 pub mod oidc;
 pub mod providers;
+pub mod provider_self;
 pub mod rooiam;
 pub mod workspace_session;
 

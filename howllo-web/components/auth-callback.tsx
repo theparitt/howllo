@@ -171,6 +171,8 @@ export function AuthCallback() {
         const session = await createWorkspaceSession({
           tenantSlug,
           accessToken: tokenPayload.access_token,
+          refreshToken: typeof tokenPayload.refresh_token === "string" ? tokenPayload.refresh_token : undefined,
+          expiresIn: typeof tokenPayload.expires_in === "number" ? tokenPayload.expires_in : undefined,
         });
         persistBearerToken(tenantSlug, `Bearer ${session.session_token}`);
       } else {

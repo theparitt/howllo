@@ -54,9 +54,7 @@ export default async function MyAccountPage({ searchParams }: MyAccountPageProps
         <section className="page-head">
           <span className="kicker">My account</span>
           <h1 className="page-title">Profile</h1>
-          <p className="page-lead">
-            RooIAM handles sign-in. Your public Howllo profile for this workspace is stored in Howllo.
-          </p>
+          <p className="page-lead">Your profile, sign-in methods, and devices.</p>
         </section>
 
         <MyAccountPanel howlloUser={me} tenantSlug={tenant} />

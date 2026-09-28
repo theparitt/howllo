@@ -135,15 +135,16 @@ where
             .unwrap_or_else(|| "unknown".to_string());
 
         let local_auth = path.starts_with("/api/auth/local/");
+        let identity_self_service = path.starts_with("/api/me/identity/");
         let should_limit = matches!(method.as_str(), "POST" | "PATCH" | "DELETE")
-            && (is_public_write_path(&path) || local_auth);
+            && (is_public_write_path(&path) || local_auth || identity_self_service);
 
         Box::pin(async move {
             if should_limit {
                 if let Some(settings) = settings.as_ref() {
-                    if settings.rate_limit_enabled || local_auth {
+                    if settings.rate_limit_enabled || local_auth || identity_self_service {
                         let pool = pool.ok_or(AppError::InternalServerError)?;
-                        let limit = if local_auth {
+                        let limit = if local_auth || identity_self_service {
                             10
                         } else {
                             settings.public_write_rate_limit.max(1)
@@ -152,6 +153,8 @@ where
                         // URL cannot reset the IP's one-minute allowance.
                         let scope = if local_auth {
                             format!("local-auth:{method}")
+                        } else if identity_self_service {
+                            format!("identity-self-service:{method}")
                         } else if path.starts_with("/api/boards/") {
                             format!("board-writes:{method}")
                         } else {
@@ -472,6 +475,22 @@ pub mod test_support {
                 revoked_at TIMESTAMPTZ,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 last_used_at TIMESTAMPTZ
+            );
+
+            ALTER TABLE workspace_sessions
+                ADD COLUMN IF NOT EXISTS provider_access_ciphertext TEXT,
+                ADD COLUMN IF NOT EXISTS provider_refresh_ciphertext TEXT,
+                ADD COLUMN IF NOT EXISTS provider_access_expires_at TIMESTAMPTZ,
+                ADD COLUMN IF NOT EXISTS provider_session_id UUID,
+                ADD COLUMN IF NOT EXISTS provider_token_pending_validation BOOLEAN NOT NULL DEFAULT FALSE,
+                ADD COLUMN IF NOT EXISTS provider_verified_at TIMESTAMPTZ;
+
+            CREATE TABLE IF NOT EXISTS public_write_rate_limits (
+                scope TEXT NOT NULL,
+                identity_hash TEXT NOT NULL,
+                window_start TIMESTAMPTZ NOT NULL,
+                attempts INTEGER NOT NULL CHECK (attempts > 0),
+                PRIMARY KEY (scope, identity_hash)
             );
 
             ALTER TABLE posts

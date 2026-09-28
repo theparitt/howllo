@@ -92,6 +92,17 @@ pub(crate) async fn call_bridge(
     query: Option<&[(&str, String)]>,
     body: Option<&Value>,
 ) -> Result<Value, AppError> {
+    call_bridge_as_user(settings, method, path, query, body, None).await
+}
+
+pub(crate) async fn call_bridge_as_user(
+    settings: &Settings,
+    method: reqwest::Method,
+    path: &str,
+    query: Option<&[(&str, String)]>,
+    body: Option<&Value>,
+    user_access_token: Option<&str>,
+) -> Result<Value, AppError> {
     let (base, token, _) = bridge(settings)?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
@@ -101,6 +112,9 @@ pub(crate) async fn call_bridge(
     let mut request = client
         .request(method, format!("{base}{path}"))
         .header("x-howllo-bridge-token", token);
+    if let Some(user_access_token) = user_access_token {
+        request = request.header("x-user-access-token", user_access_token);
+    }
     if let Some(query) = query {
         request = request.query(query);
     }

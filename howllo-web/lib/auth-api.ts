@@ -110,3 +110,19 @@ export async function exchangeSignInCode(code: string): Promise<{ access_token: 
 export async function logoutAccount(token: string): Promise<void> {
   await fetch(`${API_BASE_URL}/api/auth/logout`, { method: "POST", headers: { Authorization: token } });
 }
+
+export async function providerAccountRequest<T>(token: string, path: string, method = "GET", body?: object): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}/api/me/identity/${path}`, {
+    method,
+    headers: { Authorization: token, ...(body ? { "content-type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    if (response.status === 404) throw new Error("Account security is not connected for this workspace. Sign in again if you recently changed providers.");
+    if (response.status === 401) throw new Error("Your sign-in expired. Please sign in again.");
+    if (response.status === 429) throw new Error("Too many requests. Please try again shortly.");
+    throw new Error("Could not update your account security. Please try again.");
+  }
+  return response.json() as Promise<T>;
+}

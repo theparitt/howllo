@@ -70,11 +70,11 @@ its assignable `admin`/`member` roles do not represent Howllo's
 roles and uses RooIAM organization membership as an identity admission signal.
 
 The RooIAM browser SDK's self-session methods use RooIAM's own first-party
-cookie. For Howllo on another origin, Howllo must hold the user's OIDC access
-token server-side and call RooIAM's bearer-token self-session endpoints. The
-workspace API key is only for authorized staff operations. The current
-browser-held widget token flow must be replaced with a server-side session
-before exposing self-service session management as a secure production feature.
+cookie. Howllo stores the customer's OIDC access and rotating refresh tokens
+encrypted against their Howllo workspace session. Only Howllo's server sends
+the user token to the private bridge. A workspace API key cannot impersonate
+the user. The browser stores only a Howllo workspace session after sign-in;
+the OIDC callback still handles the provider token in memory during exchange.
 
 RooIAM management is **not enabled merely by**
 `HOWLLO_WORKSPACE_AUTH_PROVIDER=rooiam`: that setting selects the staff login
@@ -92,10 +92,11 @@ before granting the product role. The inviter sees provider invitation status
 in App → Staff. Standalone workspaces retain Howllo's one-time-code flow.
 Removing an account through App revokes its provider membership and Howllo
 workspace access. Howllo revokes its own access first; if the provider call
-fails, retry the removal in App after the provider recovers. Removals made
-directly in the provider are not yet reconciled
-with existing Howllo sessions. User self-session management remains unfinished;
-these gaps must close before claiming full provider-managed access.
+fails, retry the removal in App after the provider recovers. Howllo checks
+provider membership and the live provider session every two minutes for linked
+sessions. Direct provider removal or session revocation then invalidates the
+linked Howllo session. Older customer sessions without an encrypted provider
+token require fresh sign-in. Provider outages fail closed during verification.
 
 | Capability | Standalone Howllo | Hosted bridge today |
 | --- | --- | --- |
@@ -103,9 +104,14 @@ these gaps must close before claiming full provider-managed access.
 | Staff invitations and role grants | Howllo one-time code and Howllo roles | RooIAM invitation; Howllo grants the requested role after verifying the accepted subject and active membership |
 | Sign-in account directory | Howllo staff/board member lists | Provider directory in App → Staff; workspace owners can remove a provider member and its Howllo workspace access |
 | Staff view of member sessions | Howllo sessions | Optional provider session list; workspace owners can revoke them and linked Howllo workspace sessions |
-| End-user self-session management | Howllo account logout | Pending server-held OIDC access-token flow |
+| End-user self-session management | Howllo account logout | My account lists and revokes the user's provider sessions and matching Howllo sessions |
+| End-user security | Local password and recovery code | My account shows passkeys, linked accounts and MFA through user-scoped APIs |
 
-This is a migration checkpoint, not a claim that RooIAM management is complete.
+Passkey creation runs on `app.rooiam.com/my/security` because WebAuthn requires
+the RooIAM relying-party origin. Howllo can show, rename and remove passkeys.
+Email changes and social account linking use the RooIAM account center for
+their confirmation and redirect flows. Recovery codes are shown once in
+Howllo and never stored or logged.
 
 ## Rollout and migration
 

@@ -685,6 +685,8 @@ export async function getMe(token: string): Promise<CurrentUser> {
 export async function createWorkspaceSession(input: {
   tenantSlug: string;
   accessToken: string;
+  refreshToken?: string;
+  expiresIn?: number;
 }): Promise<{ session_token: string }> {
   const response = await apiFetch(buildUrl("/api/auth/workspace-session"), {
     method: "POST",
@@ -694,6 +696,8 @@ export async function createWorkspaceSession(input: {
     },
     body: JSON.stringify({
       tenant_slug: input.tenantSlug,
+      refresh_token: input.refreshToken,
+      expires_in: input.expiresIn,
     }),
   });
   return unwrap<{ session_token: string }>(response);
